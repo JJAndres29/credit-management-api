@@ -1,0 +1,117 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  SELLER
+}
+
+enum SaleType {
+  CASH
+  CREDIT
+}
+
+enum SaleStatus {
+  PAID
+  PENDING
+  PARTIAL
+}
+
+model User {
+  id        String   @id @default(uuid())
+  name      String
+  email     String   @unique
+  password  String
+  role      Role     @default(SELLER)
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  auditLogs AuditLog[]
+}
+
+model Client {
+  id          String   @id @default(uuid())
+  name        String
+  phone       String
+  email       String?
+  creditLimit Decimal  @db.Decimal(10, 2)
+  balance     Decimal  @default(0) @db.Decimal(10, 2)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  sales     Sale[]
+  payments  Payment[]
+  auditLogs AuditLog[]
+}
+
+model Product {
+  id        String   @id @default(uuid())
+  name      String
+  price     Decimal  @db.Decimal(10, 2)
+  stock     Int      @default(0)
+  imageUrl  String?
+  isActive  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  saleItems SaleItem[]
+}
+
+model Sale {
+  id        String     @id @default(uuid())
+  clientId  String
+  type      SaleType
+  status    SaleStatus @default(PENDING)
+  total     Decimal    @db.Decimal(10, 2)
+  createdAt DateTime   @default(now())
+
+  client   Client     @relation(fields: [clientId], references: [id])
+  items    SaleItem[]
+  payments Payment[]
+}
+
+model SaleItem {
+  id        String  @id @default(uuid())
+  saleId    String
+  productId String
+  quantity  Int
+  unitPrice Decimal @db.Decimal(10, 2)
+  subtotal  Decimal @db.Decimal(10, 2)
+
+  sale    Sale    @relation(fields: [saleId], references: [id])
+  product Product @relation(fields: [productId], references: [id])
+}
+
+model Payment {
+  id        String   @id @default(uuid())
+  clientId  String
+  saleId    String?
+  amount    Decimal  @db.Decimal(10, 2)
+  note      String?
+  createdAt DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id])
+  sale   Sale?  @relation(fields: [saleId], references: [id])
+}
+
+model AuditLog {
+  id        String   @id @default(uuid())
+  clientId  String
+  userId    String
+  action    String
+  before    Decimal  @db.Decimal(10, 2)
+  after     Decimal  @db.Decimal(10, 2)
+  ip        String
+  createdAt DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id])
+  user   User   @relation(fields: [userId], references: [id])
+}

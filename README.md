@@ -1,0 +1,499 @@
+# Credit Management System
+
+> REST API for managing credit clients, sales, and payments for a retail business. Built with Node.js, TypeScript, Express, and PostgreSQL following **Clean Architecture** principles.
+
+---
+
+## Table of Contents
+
+- [Overview](#overview)
+- [Architecture](#architecture)
+- [Tech Stack](#tech-stack)
+- [Project Structure](#project-structure)
+- [Getting Started](#getting-started)
+- [Environment Variables](#environment-variables)
+- [Database Schema](#database-schema)
+- [API Reference](#api-reference)
+- [Security](#security)
+- [Testing](#testing)
+- [Scripts](#scripts)
+- [Roadmap](#roadmap)
+
+---
+
+## Overview
+
+This system allows a retail business to manage credit operations for its clients. Staff members (admins and sellers) interact with the system through a private API. Clients themselves have no system access — they receive account statements externally via WhatsApp and email.
+
+**What it handles:**
+- Staff authentication and role-based authorization
+- Client management with credit limits and balance tracking
+- *(Coming soon)* Cash and credit sales with automatic stock and balance updates
+- *(Coming soon)* Payment registration and sale status tracking
+- *(Coming soon)* Account statement delivery via WhatsApp and email
+- *(Coming soon)* PDF report generation
+
+---
+
+## Architecture
+
+The project follows **Clean Architecture**, organized in three strict layers. Inner layers never depend on outer layers.
+
+```
+┌──────────────────────────────────────────────────────┐
+│                  Presentation Layer                   │
+│      Express Routers · Controllers · Middlewares      │
+├──────────────────────────────────────────────────────┤
+│                    Domain Layer                       │
+│   Entities · Use Cases · DTOs · Interfaces (ports)   │
+├──────────────────────────────────────────────────────┤
+│                Infrastructure Layer                   │
+│     Prisma Datasources · Repository Implementations  │
+│               Service Adapters (JWT…)                │
+└──────────────────────────────────────────────────────┘
+```
+
+**Patterns applied:**
+
+| Pattern | Purpose |
+|---------|---------|
+| **Repository** | Abstracts data access — swapping PostgreSQL requires no domain changes |
+| **Use Case** | Each business action is an isolated, testable class |
+| **Adapter** | External libraries (JWT, email, etc.) implement domain interfaces — replace any library without touching business logic |
+| **DTO** | Input validation happens at the system boundary before reaching use cases |
+| **Dependency Injection** | Constructor-based throughout — no service locator or global state |
+
+---
+
+## Tech Stack
+
+| Concern | Technology |
+|---------|-----------|
+| Runtime | Node.js 20 |
+| Language | TypeScript 5 (strict mode) |
+| Framework | Express 4 |
+| ORM | Prisma 5 |
+| Database | PostgreSQL 16 |
+| Authentication | JWT (`jsonwebtoken`) |
+| Password hashing | `bcryptjs` |
+| Security headers | `helmet` |
+| CORS | `cors` |
+| Rate limiting | `express-rate-limit` |
+| Testing | Jest + ts-jest |
+| Dev server | ts-node-dev |
+| Containerization | Docker Compose (PostgreSQL) |
+
+---
+
+## Project Structure
+
+```
+credit-management-system/
+├── prisma/
+│   ├── schema.prisma              # 8 models: User, Client, Product, Sale, SaleItem, Payment, AuditLog
+│   └── seed.ts                    # Creates default admin user
+├── src/
+│   ├── app.ts                     # Entry point
+│   ├── config/
+│   │   ├── envs.ts                # Validates required env vars at startup
+│   │   ├── prisma.ts              # Prisma client singleton
+│   │   └── regular-exp.ts         # Shared regex patterns (email, strong password)
+│   ├── domain/                    # Pure business logic — no framework dependencies
+│   │   ├── datasources/           # Abstract datasource interfaces
+│   │   ├── dtos/
+│   │   │   ├── auth/              # LoginDto
+│   │   │   ├── clients/           # CreateClientDto, UpdateClientDto
+│   │   │   └── users/             # CreateUserDto, ChangePasswordDto (policy enforced here)
+│   │   ├── entities/              # UserEntity, ClientEntity, ProductEntity, SaleEntity, PaymentEntity
+│   │   ├── errors/                # CustomError with HTTP status factory methods
+│   │   ├── repositories/          # Repository interfaces (ports)
+│   │   ├── services/              # Service interfaces: JwtService, EmailService, PdfService, NotificationService, FileStorageService
+│   │   └── use-cases/
+│   │       ├── auth/              # LoginUseCase, RenewTokenUseCase
+│   │       └── clients/           # CreateClient, GetClients, GetClientById, UpdateClient, DeleteClient
+│   ├── infrastructure/            # Implements domain interfaces (adapters)
+│   │   ├── datasources/           # PrismaAuthDatasource, PrismaClientDatasource
+│   │   ├── repositories/          # AuthRepositoryImpl, ClientRepositoryImpl
+│   │   └── services/              # JwtAdapter
+│   └── presentation/              # HTTP layer
+│       ├── auth/                  # AuthController, AuthRouter
+│       ├── clients/               # ClientController, ClientRouter
+│       ├── middlewares/
+│       │   ├── auth.middleware.ts         # JWT validation + DB user check
+│       │   ├── rbac.middleware.ts         # Role-based access control
+│       │   └── rate-limit.middleware.ts   # Login rate limiter
+│       └── server.ts              # Express app setup (helmet, cors, body limit, routes)
+├── .env.template                  # Environment variables template
+├── docker-compose.yml             # PostgreSQL 16 container
+├── jest.config.js
+├── tsconfig.json
+└── package.json
+```
+
+---
+
+## Getting Started
+
+### Prerequisites
+
+- Node.js 20+
+- Docker and Docker Compose
+- npm
+
+### 1. Clone the repository
+
+```bash
+git clone <repository-url>
+cd credit-management-system
+```
+
+### 2. Install dependencies
+
+```bash
+npm install
+```
+
+### 3. Configure environment variables
+
+```bash
+cp .env.template .env
+```
+
+Open `.env` and set your values. At minimum, generate a strong `JWT_SECRET`:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"
+```
+
+See [Environment Variables](#environment-variables) for the full reference.
+
+### 4. Start the database
+
+```bash
+docker-compose up -d
+```
+
+This starts a PostgreSQL 16 container on port `5433`.
+
+### 5. Run migrations
+
+```bash
+npm run db:migrate
+```
+
+### 6. Seed the default admin user
+
+```bash
+npm run db:seed
+```
+
+| Field | Value |
+|-------|-------|
+| Email | `admin@credit.com` |
+| Password | `Admin1234!` |
+| Role | `ADMIN` |
+
+> Change these credentials immediately in any non-local environment.
+
+### 7. Start the development server
+
+```bash
+npm run dev
+```
+
+API available at: `http://localhost:3000`
+
+---
+
+## Environment Variables
+
+| Variable | Required | Description |
+|----------|----------|-------------|
+| `PORT` | Yes | Server port (e.g. `3000`) |
+| `NODE_ENV` | No | `development` or `production` |
+| `DATABASE_URL` | Yes | PostgreSQL connection string |
+| `JWT_SECRET` | Yes | JWT signing secret — use 64+ random hex chars in production |
+| `JWT_EXPIRES_IN` | Yes | Token TTL (e.g. `7d`, `24h`) |
+| `ALLOWED_ORIGINS` | No | Comma-separated CORS origins. Defaults to `localhost:4200,localhost:5173` |
+| `CLOUDINARY_CLOUD_NAME` | No | Required when enabling image uploads |
+| `CLOUDINARY_API_KEY` | No | Required when enabling image uploads |
+| `CLOUDINARY_API_SECRET` | No | Required when enabling image uploads |
+| `MAILER_EMAIL` | No | Required when enabling email notifications |
+| `MAILER_SECRET_KEY` | No | Required when enabling email notifications |
+| `MAILER_SERVICE` | No | Email provider (default: `gmail`) |
+| `TWILIO_ACCOUNT_SID` | No | Required when enabling WhatsApp notifications |
+| `TWILIO_AUTH_TOKEN` | No | Required when enabling WhatsApp notifications |
+| `TWILIO_WHATSAPP_FROM` | No | Twilio WhatsApp sender number |
+
+---
+
+## Database Schema
+
+```
+User          — System staff with role (ADMIN | SELLER)
+Client        — Credit customers: credit limit, current balance, contact info
+Product       — Inventory: price, stock, optional image
+Sale          — Orders per client: type (CASH | CREDIT), status (PAID | PENDING | PARTIAL)
+SaleItem      — Line items per sale: product, quantity, unit price, subtotal
+Payment       — Payments per client/sale: amount, optional note
+AuditLog      — Immutable log of balance changes: user, IP, before/after values
+```
+
+**Enums:**
+
+| Enum | Values |
+|------|--------|
+| `Role` | `ADMIN`, `SELLER` |
+| `SaleType` | `CASH`, `CREDIT` |
+| `SaleStatus` | `PAID`, `PENDING`, `PARTIAL` |
+
+All entities use **soft deletes** (`isActive` flag) — no data is ever permanently removed.
+
+---
+
+## API Reference
+
+Base URL: `http://localhost:3000/api`
+
+### Health check
+
+```http
+GET /health
+```
+
+**Response `200`:**
+```json
+{ "status": "ok" }
+```
+
+No authentication required.
+
+---
+
+### Authentication
+
+#### POST `/api/auth/login`
+
+Authenticate and receive a JWT.
+
+> Rate limited: **10 requests per 15 minutes per IP**.
+
+**Request body:**
+```json
+{
+  "email": "admin@credit.com",
+  "password": "Admin1234!"
+}
+```
+
+**Response `200`:**
+```json
+{
+  "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...",
+  "user": {
+    "id": "550e8400-e29b-41d4-a716-446655440000",
+    "name": "Administrador",
+    "email": "admin@credit.com",
+    "role": "ADMIN"
+  }
+}
+```
+
+**Response `401`:** `{ "error": "Credenciales inválidas" }` — same message whether email or password is wrong (prevents email enumeration).
+
+**Response `429`:** Rate limit exceeded.
+
+---
+
+#### POST `/api/auth/renew`
+
+Exchange a valid JWT for a new one (extends session).
+
+**Headers:** `Authorization: Bearer <token>`
+
+**Response `200`:** Same structure as login response with a fresh token.
+
+---
+
+### Clients
+
+All client endpoints require `Authorization: Bearer <token>`.
+
+#### GET `/api/clients`
+
+Returns all active clients, sorted by creation date (newest first).
+
+**Response `200`:**
+```json
+[
+  {
+    "id": "uuid",
+    "name": "María García",
+    "phone": "3001234567",
+    "email": "maria@ejemplo.com",
+    "creditLimit": 500000,
+    "balance": 150000,
+    "isActive": true,
+    "createdAt": "2026-04-06T00:00:00.000Z",
+    "updatedAt": "2026-04-06T00:00:00.000Z"
+  }
+]
+```
+
+---
+
+#### GET `/api/clients/:id`
+
+**Response `404`:** Client not found or inactive.
+
+---
+
+#### POST `/api/clients`
+
+Create a new client.
+
+**Request body:**
+```json
+{
+  "name": "María García",
+  "phone": "3001234567",
+  "email": "maria@ejemplo.com",
+  "creditLimit": 500000
+}
+```
+
+| Field | Type | Required | Validation |
+|-------|------|----------|-----------|
+| `name` | string | Yes | Min 2 characters |
+| `phone` | string | Yes | |
+| `email` | string | No | Valid format, must be unique |
+| `creditLimit` | number | Yes | >= 0 |
+
+**Response `201`:** Created client object.
+
+**Response `409`:** Email already registered.
+
+---
+
+#### PUT `/api/clients/:id`
+
+Update one or more fields. At least one field required.
+
+**Request body (all fields optional):**
+```json
+{
+  "name": "María García López",
+  "phone": "3009876543",
+  "email": "nuevo@ejemplo.com",
+  "creditLimit": 750000
+}
+```
+
+---
+
+#### DELETE `/api/clients/:id`
+
+Soft delete — sets `isActive = false`. Client history is preserved.
+
+> **Requires `ADMIN` role.** Returns `403` for `SELLER` accounts.
+
+---
+
+### Error format
+
+All errors follow this consistent structure:
+
+```json
+{ "error": "Descriptive error message" }
+```
+
+| Status | Meaning |
+|--------|---------|
+| `400` | Validation error |
+| `401` | Missing, invalid, or expired token |
+| `403` | Authenticated but insufficient permissions |
+| `404` | Resource not found |
+| `409` | Conflict (e.g. duplicate email) |
+| `429` | Rate limit exceeded |
+| `500` | Internal server error |
+
+---
+
+## Security
+
+### Implemented measures
+
+| Measure | Details |
+|---------|---------|
+| **Password hashing** | bcryptjs, 10 salt rounds |
+| **JWT authentication** | Signed tokens verified on every protected request |
+| **Active user check** | On every request: token validity + user confirmed active in DB |
+| **Anti-enumeration** | Login always returns the same error regardless of whether the email exists |
+| **Role-based access control** | Per-endpoint role enforcement (`ADMIN` / `SELLER`) |
+| **Rate limiting** | Login: max 10 attempts / 15 min per IP |
+| **Security headers** | `helmet` sets `X-Frame-Options`, `Content-Security-Policy`, `X-Content-Type-Options`, `Strict-Transport-Security`, and more |
+| **CORS whitelist** | Configurable via `ALLOWED_ORIGINS` — defaults to localhost dev ports |
+| **Request body size limit** | 10 KB cap — prevents payload-based DoS |
+| **Strong password policy** | Enforced at user creation: min 8 chars + uppercase + lowercase + number + special character |
+| **SQL injection prevention** | Prisma ORM uses parameterized queries exclusively |
+| **No hardcoded secrets** | All sensitive values from environment variables; server refuses to start if any required variable is missing |
+| **Soft deletes** | Data is never permanently deleted — full history preserved |
+
+### Planned
+
+- Refresh token + short-lived access tokens (15 min access / 7 day refresh)
+- Account lockout after N consecutive failed login attempts
+- Structured security event logging (login failures, invalid tokens)
+- Full audit log writes on balance-changing operations
+
+---
+
+## Testing
+
+Tests are written with **Jest + ts-jest** and located alongside the code they test (`*.test.ts`).
+
+```bash
+npm test              # Run all tests
+npm run test:watch    # Watch mode (re-runs on file save)
+```
+
+### Current coverage
+
+| Module | Unit tests |
+|--------|-----------|
+| `LoginUseCase` | Covered — invalid user, inactive user, wrong password, success, token payload, password not exposed |
+| `RenewTokenUseCase` | Covered — invalid user, inactive user, success |
+| Client use cases | Pending |
+| DTOs | Pending |
+
+---
+
+## Scripts
+
+```bash
+npm run dev             # Start dev server with hot reload
+npm run build           # Compile TypeScript → dist/
+npm start               # Run compiled production build
+npm test                # Run test suite once
+npm run test:watch      # Run tests in watch mode
+npm run db:migrate      # Apply pending Prisma migrations
+npm run db:generate     # Regenerate Prisma client after schema changes
+npm run db:studio       # Open Prisma Studio (visual database browser)
+npm run db:seed         # Create default admin user
+```
+
+---
+
+## Roadmap
+
+| Phase | Module | Status |
+|-------|--------|--------|
+| 1 | Security baseline (helmet, cors, rate-limit, RBAC, password policy) | ✅ Done |
+| 2 | User management (CRUD for admins and sellers) | 🔜 Next |
+| 3 | Products (catalog + stock) | Planned |
+| 4 | Sales (cash + credit, stock deduction, balance update) | Planned |
+| 5 | Payments (register payments, update sale status) | Planned |
+| 6 | Audit log (full write implementation) | Planned |
+| 7 | Notifications (WhatsApp via Twilio, email via Nodemailer) | Planned |
+| 8 | PDF reports (account statements) | Planned |
+| 9 | API improvements (pagination, filters, search) | Planned |
