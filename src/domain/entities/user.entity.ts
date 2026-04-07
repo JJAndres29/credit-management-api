@@ -17,6 +17,18 @@ export class UserEntity {
     public readonly updatedAt: Date,
   ) {}
 
+  toJSON() {
+    return {
+      id: this.id,
+      name: this.name,
+      email: this.email,
+      role: this.role,
+      isActive: this.isActive,
+      createdAt: this.createdAt,
+      updatedAt: this.updatedAt,
+    };
+  }
+
   static fromObject(object: Record<string, unknown>): UserEntity {
     const { id, name, email, password, role, isActive, createdAt, updatedAt } = object;
 
