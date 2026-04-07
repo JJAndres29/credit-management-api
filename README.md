@@ -103,24 +103,26 @@ credit-management-system/
 │   │   ├── dtos/
 │   │   │   ├── auth/              # LoginDto
 │   │   │   ├── clients/           # CreateClientDto, UpdateClientDto
-│   │   │   └── users/             # CreateUserDto, ChangePasswordDto (policy enforced here)
+│   │   │   └── users/             # CreateUserDto, UpdateUserDto, ChangePasswordDto (policy enforced here)
 │   │   ├── entities/              # UserEntity, ClientEntity, ProductEntity, SaleEntity, PaymentEntity
 │   │   ├── errors/                # CustomError with HTTP status factory methods
 │   │   ├── repositories/          # Repository interfaces (ports)
 │   │   ├── services/              # Service interfaces: JwtService, EmailService, PdfService, NotificationService, FileStorageService
 │   │   └── use-cases/
 │   │       ├── auth/              # LoginUseCase, RenewTokenUseCase
-│   │       └── clients/           # CreateClient, GetClients, GetClientById, UpdateClient, DeleteClient
+│   │       ├── clients/           # CreateClient, GetClients, GetClientById, UpdateClient, DeleteClient
+│   │       └── users/             # GetUsers, GetUserById, CreateUser, UpdateUser, ToggleUserStatus, ChangePassword
 │   ├── infrastructure/            # Implements domain interfaces (adapters)
-│   │   ├── datasources/           # PrismaAuthDatasource, PrismaClientDatasource
-│   │   ├── repositories/          # AuthRepositoryImpl, ClientRepositoryImpl
+│   │   ├── datasources/           # PrismaAuthDatasource, PrismaClientDatasource, PrismaUserDatasource
+│   │   ├── repositories/          # AuthRepositoryImpl, ClientRepositoryImpl, UserRepositoryImpl
 │   │   └── services/              # JwtAdapter
 │   └── presentation/              # HTTP layer
 │       ├── auth/                  # AuthController, AuthRouter
 │       ├── clients/               # ClientController, ClientRouter
+│       ├── users/                 # UserController, UserRouter
 │       ├── middlewares/
 │       │   ├── auth.middleware.ts         # JWT validation + DB user check
-│       │   ├── rbac.middleware.ts         # Role-based access control
+│       │   ├── rbac.middleware.ts         # Role-based access control (checkRole + isSelfOrAdmin)
 │       │   └── rate-limit.middleware.ts   # Login rate limiter
 │       └── server.ts              # Express app setup (helmet, cors, body limit, routes)
 ├── .env.template                  # Environment variables template
@@ -399,6 +401,128 @@ Soft delete — sets `isActive = false`. Client history is preserved.
 
 ---
 
+### Users
+
+All user endpoints require `Authorization: Bearer <token>`.
+
+> Most endpoints require `ADMIN` role. The only exception is `PATCH /:id/password`, which allows the authenticated user to change their own password.
+
+#### GET `/api/users`
+
+Returns all users (active and inactive), sorted by creation date.
+
+> **Requires `ADMIN` role.**
+
+**Response `200`:**
+```json
+[
+  {
+    "id": "uuid",
+    "name": "Juan Vendedor",
+    "email": "juan@empresa.com",
+    "role": "SELLER",
+    "isActive": true,
+    "createdAt": "2026-04-07T00:00:00.000Z",
+    "updatedAt": "2026-04-07T00:00:00.000Z"
+  }
+]
+```
+
+Password is never included in any response.
+
+---
+
+#### GET `/api/users/:id`
+
+> **Requires `ADMIN` role.**
+
+**Response `404`:** User not found.
+
+---
+
+#### POST `/api/users`
+
+Create a new user (admin or seller).
+
+> **Requires `ADMIN` role.**
+
+**Request body:**
+```json
+{
+  "name": "Juan Vendedor",
+  "email": "juan@empresa.com",
+  "password": "Password123!",
+  "role": "SELLER"
+}
+```
+
+| Field | Type | Required | Validation |
+|-------|------|----------|-----------|
+| `name` | string | Yes | Min 2 characters |
+| `email` | string | Yes | Valid format, must be unique |
+| `password` | string | Yes | Min 8 chars, uppercase, lowercase, number, special character |
+| `role` | string | No | `ADMIN` or `SELLER` (defaults to `SELLER`) |
+
+**Response `201`:** Created user object (no password).
+
+**Response `409`:** Email already registered.
+
+---
+
+#### PUT `/api/users/:id`
+
+Update one or more fields. At least one field required. Password changes use a dedicated endpoint.
+
+> **Requires `ADMIN` role.**
+
+**Request body (all fields optional):**
+```json
+{
+  "name": "Juan Vendedor Actualizado",
+  "email": "nuevo@empresa.com",
+  "role": "ADMIN"
+}
+```
+
+---
+
+#### PATCH `/api/users/:id/status`
+
+Activate or deactivate a user. Deactivated users are immediately blocked from all endpoints.
+
+> **Requires `ADMIN` role.**
+
+**Request body:**
+```json
+{ "isActive": false }
+```
+
+**Response `400`:** User is already in the requested state.
+
+---
+
+#### PATCH `/api/users/:id/password`
+
+Change a user's password.
+
+> **Allowed for:** the authenticated user changing their own password, or any `ADMIN` changing anyone's password.
+
+**Request body:**
+```json
+{
+  "currentPassword": "Password123!",
+  "newPassword": "NuevoPassword456@"
+}
+```
+
+**Response `200`:** `{ "message": "Contraseña actualizada correctamente" }`
+
+**Response `401`:** Current password is incorrect.
+
+**Response `400`:** New password is the same as the current one, or does not meet the password policy.
+
+---
+
 ### Error format
 
 All errors follow this consistent structure:
@@ -463,6 +587,7 @@ npm run test:watch    # Watch mode (re-runs on file save)
 |--------|-----------|
 | `LoginUseCase` | Covered — invalid user, inactive user, wrong password, success, token payload, password not exposed |
 | `RenewTokenUseCase` | Covered — invalid user, inactive user, success |
+| User use cases | Pending |
 | Client use cases | Pending |
 | DTOs | Pending |
 
@@ -489,8 +614,8 @@ npm run db:seed         # Create default admin user
 | Phase | Module | Status |
 |-------|--------|--------|
 | 1 | Security baseline (helmet, cors, rate-limit, RBAC, password policy) | ✅ Done |
-| 2 | User management (CRUD for admins and sellers) | 🔜 Next |
-| 3 | Products (catalog + stock) | Planned |
+| 2 | User management (CRUD for admins and sellers) | ✅ Done |
+| 3 | Products (catalog + stock) | 🔜 Next |
 | 4 | Sales (cash + credit, stock deduction, balance update) | Planned |
 | 5 | Payments (register payments, update sale status) | Planned |
 | 6 | Audit log (full write implementation) | Planned |
