@@ -28,6 +28,7 @@ This system allows a retail business to manage credit operations for its clients
 **What it handles:**
 - Staff authentication and role-based authorization
 - Client management with credit limits and balance tracking
+- Product catalog management with stock control and multi-image uploads via Cloudinary
 - *(Coming soon)* Cash and credit sales with automatic stock and balance updates
 - *(Coming soon)* Payment registration and sale status tracking
 - *(Coming soon)* Account statement delivery via WhatsApp and email
@@ -49,7 +50,7 @@ The project follows **Clean Architecture**, organized in three strict layers. In
 ├──────────────────────────────────────────────────────┤
 │                Infrastructure Layer                   │
 │     Prisma Datasources · Repository Implementations  │
-│               Service Adapters (JWT…)                │
+│         Service Adapters (JWT · Cloudinary)          │
 └──────────────────────────────────────────────────────┘
 ```
 
@@ -59,7 +60,7 @@ The project follows **Clean Architecture**, organized in three strict layers. In
 |---------|---------|
 | **Repository** | Abstracts data access — swapping PostgreSQL requires no domain changes |
 | **Use Case** | Each business action is an isolated, testable class |
-| **Adapter** | External libraries (JWT, email, etc.) implement domain interfaces — replace any library without touching business logic |
+| **Adapter** | External libraries (JWT, Cloudinary, etc.) implement domain interfaces — replace any library without touching business logic |
 | **DTO** | Input validation happens at the system boundary before reaching use cases |
 | **Dependency Injection** | Constructor-based throughout — no service locator or global state |
 
@@ -76,6 +77,8 @@ The project follows **Clean Architecture**, organized in three strict layers. In
 | Database | PostgreSQL 16 |
 | Authentication | JWT (`jsonwebtoken`) |
 | Password hashing | `bcryptjs` |
+| File uploads | `multer` (memory storage) |
+| Image hosting | Cloudinary (`cloudinary` v2) |
 | Security headers | `helmet` |
 | CORS | `cors` |
 | Rate limiting | `express-rate-limit` |
@@ -90,7 +93,7 @@ The project follows **Clean Architecture**, organized in three strict layers. In
 ```
 credit-management-system/
 ├── prisma/
-│   ├── schema.prisma              # 8 models: User, Client, Product, Sale, SaleItem, Payment, AuditLog
+│   ├── schema.prisma              # 9 models: User, Client, Product, ProductImage, Sale, SaleItem, Payment, AuditLog
 │   └── seed.ts                    # Creates default admin user
 ├── src/
 │   ├── app.ts                     # Entry point
@@ -103,27 +106,31 @@ credit-management-system/
 │   │   ├── dtos/
 │   │   │   ├── auth/              # LoginDto
 │   │   │   ├── clients/           # CreateClientDto, UpdateClientDto
+│   │   │   ├── products/          # CreateProductDto, UpdateProductDto, AdjustStockDto
 │   │   │   └── users/             # CreateUserDto, UpdateUserDto, ChangePasswordDto (policy enforced here)
-│   │   ├── entities/              # UserEntity, ClientEntity, ProductEntity, SaleEntity, PaymentEntity
+│   │   ├── entities/              # UserEntity, ClientEntity, ProductEntity, ProductImageEntity, SaleEntity, PaymentEntity
 │   │   ├── errors/                # CustomError with HTTP status factory methods
 │   │   ├── repositories/          # Repository interfaces (ports)
-│   │   ├── services/              # Service interfaces: JwtService, EmailService, PdfService, NotificationService, FileStorageService
+│   │   ├── services/              # Service interfaces: JwtService, FileStorageService (UploadResult), EmailService, PdfService, NotificationService
 │   │   └── use-cases/
 │   │       ├── auth/              # LoginUseCase, RenewTokenUseCase
 │   │       ├── clients/           # CreateClient, GetClients, GetClientById, UpdateClient, DeleteClient
+│   │       ├── products/          # GetProducts, GetProductById, CreateProduct, UpdateProduct, AdjustStock, DeleteProduct, UploadProductImages, DeleteProductImage
 │   │       └── users/             # GetUsers, GetUserById, CreateUser, UpdateUser, ToggleUserStatus, ChangePassword
 │   ├── infrastructure/            # Implements domain interfaces (adapters)
-│   │   ├── datasources/           # PrismaAuthDatasource, PrismaClientDatasource, PrismaUserDatasource
-│   │   ├── repositories/          # AuthRepositoryImpl, ClientRepositoryImpl, UserRepositoryImpl
-│   │   └── services/              # JwtAdapter
+│   │   ├── datasources/           # PrismaAuthDatasource, PrismaClientDatasource, PrismaProductDatasource, PrismaUserDatasource
+│   │   ├── repositories/          # AuthRepositoryImpl, ClientRepositoryImpl, ProductRepositoryImpl, UserRepositoryImpl
+│   │   └── services/              # JwtAdapter, CloudinaryAdapter
 │   └── presentation/              # HTTP layer
 │       ├── auth/                  # AuthController, AuthRouter
 │       ├── clients/               # ClientController, ClientRouter
+│       ├── products/              # ProductController, ProductRouter
 │       ├── users/                 # UserController, UserRouter
 │       ├── middlewares/
 │       │   ├── auth.middleware.ts         # JWT validation + DB user check
-│       │   ├── rbac.middleware.ts         # Role-based access control (checkRole + isSelfOrAdmin)
-│       │   └── rate-limit.middleware.ts   # Login rate limiter
+│       │   ├── rbac.middleware.ts         # Role-based access control (checkRole)
+│       │   ├── rate-limit.middleware.ts   # Login rate limiter
+│       │   └── upload.middleware.ts       # Multer: memory storage, file type + size validation
 │       └── server.ts              # Express app setup (helmet, cors, body limit, routes)
 ├── .env.template                  # Environment variables template
 ├── docker-compose.yml             # PostgreSQL 16 container
@@ -217,15 +224,17 @@ API available at: `http://localhost:3000`
 | `JWT_SECRET` | Yes | JWT signing secret — use 64+ random hex chars in production |
 | `JWT_EXPIRES_IN` | Yes | Token TTL (e.g. `7d`, `24h`) |
 | `ALLOWED_ORIGINS` | No | Comma-separated CORS origins. Defaults to `localhost:4200,localhost:5173` |
-| `CLOUDINARY_CLOUD_NAME` | No | Required when enabling image uploads |
-| `CLOUDINARY_API_KEY` | No | Required when enabling image uploads |
-| `CLOUDINARY_API_SECRET` | No | Required when enabling image uploads |
+| `CLOUDINARY_CLOUD_NAME` | Yes* | Required for product image uploads |
+| `CLOUDINARY_API_KEY` | Yes* | Required for product image uploads |
+| `CLOUDINARY_API_SECRET` | Yes* | Required for product image uploads |
 | `MAILER_EMAIL` | No | Required when enabling email notifications |
 | `MAILER_SECRET_KEY` | No | Required when enabling email notifications |
 | `MAILER_SERVICE` | No | Email provider (default: `gmail`) |
 | `TWILIO_ACCOUNT_SID` | No | Required when enabling WhatsApp notifications |
 | `TWILIO_AUTH_TOKEN` | No | Required when enabling WhatsApp notifications |
 | `TWILIO_WHATSAPP_FROM` | No | Twilio WhatsApp sender number |
+
+> \* Required if you use the `POST /api/products/:id/images` endpoint.
 
 ---
 
@@ -234,7 +243,8 @@ API available at: `http://localhost:3000`
 ```
 User          — System staff with role (ADMIN | SELLER)
 Client        — Credit customers: credit limit, current balance, contact info
-Product       — Inventory: price, stock, optional image
+Product       — Inventory items: name, price, stock count
+ProductImage  — Product photos: Cloudinary URL, publicId, display order (one product → many images)
 Sale          — Orders per client: type (CASH | CREDIT), status (PAID | PENDING | PARTIAL)
 SaleItem      — Line items per sale: product, quantity, unit price, subtotal
 Payment       — Payments per client/sale: amount, optional note
@@ -250,6 +260,10 @@ AuditLog      — Immutable log of balance changes: user, IP, before/after value
 | `SaleStatus` | `PAID`, `PENDING`, `PARTIAL` |
 
 All entities use **soft deletes** (`isActive` flag) — no data is ever permanently removed.
+
+**ProductImage relation:**
+
+`ProductImage` stores each photo separately, linked to its product by `productId`. The `order` field controls display priority (0 = cover/primary image). Uploading multiple images in a single request assigns sequential `order` values starting after the last existing image.
 
 ---
 
@@ -314,6 +328,186 @@ Exchange a valid JWT for a new one (extends session).
 **Headers:** `Authorization: Bearer <token>`
 
 **Response `200`:** Same structure as login response with a fresh token.
+
+---
+
+### Products
+
+All product endpoints require `Authorization: Bearer <token>`.
+
+> Endpoints that modify data (`POST`, `PUT`, `PATCH`, `DELETE`) require `ADMIN` role. `GET` endpoints are available to any authenticated user.
+
+#### GET `/api/products`
+
+Returns all active products with their images, sorted by creation date (newest first).
+
+**Response `200`:**
+```json
+[
+  {
+    "id": "uuid",
+    "name": "Camisa Azul",
+    "price": 45000,
+    "stock": 100,
+    "images": [
+      {
+        "id": "uuid",
+        "productId": "uuid",
+        "url": "https://res.cloudinary.com/...",
+        "publicId": "products/abc123",
+        "order": 0,
+        "createdAt": "2026-04-07T00:00:00.000Z"
+      }
+    ],
+    "isActive": true,
+    "createdAt": "2026-04-07T00:00:00.000Z",
+    "updatedAt": "2026-04-07T00:00:00.000Z"
+  }
+]
+```
+
+---
+
+#### GET `/api/products/:id`
+
+Returns a single active product with its images.
+
+**Response `404`:** Product not found or inactive.
+
+---
+
+#### POST `/api/products`
+
+Create a new product. Images are added separately via `POST /:id/images`.
+
+> **Requires `ADMIN` role.**
+
+**Request body:**
+```json
+{
+  "name": "Camisa Azul",
+  "price": 45000,
+  "stock": 100
+}
+```
+
+| Field | Type | Required | Validation |
+|-------|------|----------|-----------|
+| `name` | string | Yes | Min 2 characters |
+| `price` | number | Yes | Greater than 0 |
+| `stock` | number | No | Integer >= 0, defaults to `0` |
+
+**Response `201`:** Created product object with empty `images` array.
+
+---
+
+#### PUT `/api/products/:id`
+
+Update product name and/or price. At least one field required. Use dedicated endpoints for stock (`PATCH /:id/stock`) and images (`POST /:id/images`).
+
+> **Requires `ADMIN` role.**
+
+**Request body (all fields optional):**
+```json
+{
+  "name": "Camisa Azul Premium",
+  "price": 55000
+}
+```
+
+**Response `404`:** Product not found or inactive.
+
+---
+
+#### PATCH `/api/products/:id/stock`
+
+Adjust stock by a positive or negative integer. The use case validates the resulting stock never goes below 0.
+
+> **Requires `ADMIN` role.**
+
+**Request body:**
+```json
+{ "quantity": -10 }
+```
+
+| Field | Type | Validation |
+|-------|------|-----------|
+| `quantity` | integer | Non-zero. Positive to add, negative to subtract |
+
+**Response `400`:** Insufficient stock (would result in negative stock).
+
+**Response `404`:** Product not found or inactive.
+
+---
+
+#### POST `/api/products/:id/images`
+
+Upload one or more images for a product. Images are stored in Cloudinary and referenced in the `ProductImage` table. Each request can include up to **5 files**. Multiple calls accumulate — existing images are preserved.
+
+> **Requires `ADMIN` role.**
+
+**Request:** `multipart/form-data`
+
+| Field | Type | Details |
+|-------|------|---------|
+| `images` | file(s) | 1–5 files. Accepted formats: **JPG, PNG, WebP**. Max size per file: **5 MB** |
+
+**Response `200`:** Updated product object with all images (including newly uploaded ones), sorted by `order` ascending.
+
+**Response `400`:** No files sent, invalid format, or file exceeds 5 MB.
+
+**Response `404`:** Product not found or inactive.
+
+**Example response:**
+```json
+{
+  "id": "uuid",
+  "name": "Camisa Azul",
+  "price": 45000,
+  "stock": 100,
+  "images": [
+    {
+      "id": "uuid",
+      "productId": "uuid",
+      "url": "https://res.cloudinary.com/demo/image/upload/products/abc.jpg",
+      "publicId": "products/abc",
+      "order": 0,
+      "createdAt": "2026-04-07T00:00:00.000Z"
+    },
+    {
+      "id": "uuid",
+      "productId": "uuid",
+      "url": "https://res.cloudinary.com/demo/image/upload/products/def.jpg",
+      "publicId": "products/def",
+      "order": 1,
+      "createdAt": "2026-04-07T00:00:00.000Z"
+    }
+  ],
+  "isActive": true,
+  "createdAt": "2026-04-07T00:00:00.000Z",
+  "updatedAt": "2026-04-07T00:00:00.000Z"
+}
+```
+
+---
+
+#### DELETE `/api/products/:id/images/:imageId`
+
+Delete a specific image. The file is permanently removed from Cloudinary before the database record is deleted. If Cloudinary deletion fails, the database record is not touched.
+
+> **Requires `ADMIN` role.**
+
+**Response `200`:** Updated product object without the deleted image.
+
+**Response `404`:** Product not found, or image does not belong to this product.
+
+---
+
+#### DELETE `/api/products/:id`
+
+Soft delete — sets `isActive = false`. The product (and its images) remain in the database and are preserved for historical sale records.
+
+> **Requires `ADMIN` role.**
 
 ---
 
@@ -562,6 +756,9 @@ All errors follow this consistent structure:
 | **SQL injection prevention** | Prisma ORM uses parameterized queries exclusively |
 | **No hardcoded secrets** | All sensitive values from environment variables; server refuses to start if any required variable is missing |
 | **Soft deletes** | Data is never permanently deleted — full history preserved |
+| **File upload validation** | Multer enforces allowed MIME types (JPG, PNG, WebP), 5 MB per-file limit, and max 5 files per request — malformed or oversized uploads are rejected before reaching business logic |
+| **Cloudinary-side storage** | Uploaded images never touch the server disk — processed in memory and streamed to Cloudinary, eliminating local file exposure |
+| **Image ownership check** | `DELETE /products/:id/images/:imageId` verifies the image belongs to the specified product before deletion |
 
 ### Planned
 
@@ -589,6 +786,7 @@ npm run test:watch    # Watch mode (re-runs on file save)
 | `RenewTokenUseCase` | Covered — invalid user, inactive user, success |
 | User use cases | Pending |
 | Client use cases | Pending |
+| Product use cases | Pending |
 | DTOs | Pending |
 
 ---
@@ -615,8 +813,8 @@ npm run db:seed         # Create default admin user
 |-------|--------|--------|
 | 1 | Security baseline (helmet, cors, rate-limit, RBAC, password policy) | ✅ Done |
 | 2 | User management (CRUD for admins and sellers) | ✅ Done |
-| 3 | Products (catalog + stock) | 🔜 Next |
-| 4 | Sales (cash + credit, stock deduction, balance update) | Planned |
+| 3 | Products (catalog, stock control, multi-image upload via Cloudinary) | ✅ Done |
+| 4 | Sales (cash + credit, stock deduction, balance update) | 🔜 Next |
 | 5 | Payments (register payments, update sale status) | Planned |
 | 6 | Audit log (full write implementation) | Planned |
 | 7 | Notifications (WhatsApp via Twilio, email via Nodemailer) | Planned |

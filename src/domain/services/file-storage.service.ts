@@ -1,4 +1,9 @@
+export interface UploadResult {
+  url: string;
+  publicId: string;
+}
+
 export interface FileStorageService {
-  uploadFile(filePath: string, folder?: string): Promise<string>;
+  uploadBuffer(buffer: Buffer, mimetype: string, folder?: string): Promise<UploadResult>;
   deleteFile(publicId: string): Promise<boolean>;
 }
