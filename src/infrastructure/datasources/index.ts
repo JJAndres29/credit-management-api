@@ -3,3 +3,4 @@ export { PrismaClientDatasource } from './prisma-client.datasource';
 export { PrismaProductDatasource } from './prisma-product.datasource';
 export { PrismaUserDatasource } from './prisma-user.datasource';
 export { PrismaSaleDatasource } from './prisma-sale.datasource';
+export { PrismaPaymentDatasource } from './prisma-payment.datasource';
