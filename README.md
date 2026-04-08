@@ -33,7 +33,7 @@ This system allows a retail business to manage credit operations for its clients
 - **Differential pricing by sale type** — cash and credit sales apply different prices via a pluggable Pricing Domain Service (Strategy Pattern). Prices are always computed server-side; clients cannot supply them
 - Payment registration with automatic sale status update (PENDING → PARTIAL → PAID) and client balance reduction (atomic transaction)
 - Immutable audit log of every balance-changing operation (credit sales and payments), written atomically inside each transaction
-- *(Coming soon)* Account statement delivery via WhatsApp and email
+- **Automatic notifications** — WhatsApp (via Twilio) and email (via Nodemailer/Gmail) sent after every payment and credit sale. Notifications are optional and best-effort: if the provider fails or credentials are missing, the financial operation is not affected
 - *(Coming soon)* PDF report generation
 
 ---
@@ -62,11 +62,12 @@ The project follows **Clean Architecture**, organized in three strict layers. In
 |---------|---------|
 | **Repository** | Abstracts data access — swapping PostgreSQL requires no domain changes |
 | **Use Case** | Each business action is an isolated, testable class |
-| **Adapter** | External libraries (JWT, Cloudinary, etc.) implement domain interfaces — replace any library without touching business logic |
+| **Adapter** | External libraries (JWT, Cloudinary, Twilio, Nodemailer) implement domain interfaces — replace any library without touching business logic |
 | **DTO** | Input validation happens at the system boundary before reaching use cases |
 | **Dependency Injection** | Constructor-based throughout — no service locator or global state |
 | **Strategy (Pricing)** | Pricing rules are interchangeable strategies. Adding a new pricing rule = one new class, no existing code touched |
 | **Domain Service (Pricing)** | `PricingService` lives in the domain layer — pure business logic, no framework or DB dependencies, fully unit-testable |
+| **Domain Events** | Use cases emit events after committing transactions. Subscribers handle side effects (notifications) asynchronously — financial operations never wait for or fail because of notifications |
 
 ---
 
@@ -249,28 +250,31 @@ API available at: `http://localhost:3000`
 | `CLOUDINARY_CLOUD_NAME` | Yes* | Required for product image uploads |
 | `CLOUDINARY_API_KEY` | Yes* | Required for product image uploads |
 | `CLOUDINARY_API_SECRET` | Yes* | Required for product image uploads |
-| `MAILER_EMAIL` | No | Required when enabling email notifications |
-| `MAILER_SECRET_KEY` | No | Required when enabling email notifications |
+| `MAILER_EMAIL` | No† | Gmail address used as the sender: `youraddress@gmail.com` |
+| `MAILER_SECRET_KEY` | No† | Gmail App Password (16 chars). Generate at: Google Account → Security → 2-Step Verification → App passwords. **Not your Gmail password** |
 | `MAILER_SERVICE` | No | Email provider (default: `gmail`) |
-| `TWILIO_ACCOUNT_SID` | No | Required when enabling WhatsApp notifications |
-| `TWILIO_AUTH_TOKEN` | No | Required when enabling WhatsApp notifications |
-| `TWILIO_WHATSAPP_FROM` | No | Twilio WhatsApp sender number |
+| `TWILIO_ACCOUNT_SID` | No‡ | Twilio Account SID — found at console.twilio.com → Dashboard. Starts with `AC...` |
+| `TWILIO_AUTH_TOKEN` | No‡ | Twilio Auth Token — same page, click the eye icon to reveal |
+| `TWILIO_WHATSAPP_FROM` | No‡ | WhatsApp Sandbox sender number, format: `whatsapp:+14155238886` (shown in Twilio → Messaging → Try it out → Send a WhatsApp message) |
 
 > \* Required if you use the `POST /api/products/:id/images` endpoint.
+> † Both `MAILER_EMAIL` and `MAILER_SECRET_KEY` must be set together to enable email notifications. If either is missing, the server starts normally with a warning and emails are skipped.
+> ‡ All three Twilio variables must be set together to enable WhatsApp notifications. Same behavior — missing vars = warning + feature disabled, no crash.
 
 ---
 
 ## Database Schema
 
 ```
-User          — System staff with role (ADMIN | SELLER)
-Client        — Credit customers: credit limit, current balance, contact info
-Product       — Inventory items: name, price (base price), stock count
-ProductImage  — Product photos: Cloudinary URL, publicId, display order (one product → many images)
-Sale          — Orders per client: type (CASH | CREDIT), status (PAID | PENDING | PARTIAL)
-SaleItem      — Line items per sale: product, quantity, basePrice (snapshot), unitPrice (final charged), subtotal, appliedRule
-Payment       — Payments per client/sale: amount, optional note
-AuditLog      — Immutable log of balance changes: user, IP, before/after values
+User             — System staff with role (ADMIN | SELLER)
+Client           — Credit customers: credit limit, current balance, contact info
+Product          — Inventory items: name, price (base price), stock count
+ProductImage     — Product photos: Cloudinary URL, publicId, display order (one product → many images)
+Sale             — Orders per client: type (CASH | CREDIT), status (PAID | PENDING | PARTIAL)
+SaleItem         — Line items per sale: product, quantity, basePrice (snapshot), unitPrice (final charged), subtotal, appliedRule
+Payment          — Payments per client/sale: amount, optional note
+AuditLog         — Immutable log of balance changes: user, IP, before/after values
+NotificationLog  — Log of every notification attempt: channel (WHATSAPP|EMAIL), event, status (SENT|FAILED), errorMessage
 ```
 
 **`SaleItem` pricing fields:**
@@ -1033,7 +1037,7 @@ npm run db:seed         # Create default admin user
 | 5 | Payments (register payments, update sale status, reduce client balance) | ✅ Done |
 | 6 | Audit log (atomic writes on balance changes + read API) | ✅ Done |
 | 7 | Pricing Domain Service (Strategy Pattern — differential pricing by sale type) | ✅ Done |
-| 8 | Notifications (WhatsApp via Twilio, email via Nodemailer) | Planned |
+| 8 | Notifications (WhatsApp via Twilio + email via Nodemailer, Domain Events pattern) | ✅ Done |
 | 9 | PDF reports (account statements) | Planned |
 | 10 | API improvements (pagination, filters, search) | Planned |
 
@@ -1071,3 +1075,64 @@ const pricingService = new PricingService([
 ```
 
 No other files need to change.
+
+---
+
+## Notification System
+
+After every payment and every credit sale, the system automatically sends a WhatsApp message and an email to the client. Notifications are **decoupled from the financial transaction** using the Domain Events pattern.
+
+### How it works
+
+1. `CreatePaymentUseCase` / `CreateSaleUseCase` execute the atomic DB transaction (payment/sale + balance + audit log)
+2. After the transaction commits, the use case emits a domain event via `EventEmitterPort`
+3. The corresponding subscriber receives the event asynchronously
+4. The subscriber applies a **throttle** (max 3 notifications per client per hour) to prevent accidental message floods
+5. WhatsApp and email are sent in parallel via `Promise.allSettled` — one channel can fail without affecting the other
+6. Every attempt (success or failure) is persisted to the `NotificationLog` table
+
+The HTTP response is already returned at step 2. Notifications never block the API response and never roll back the transaction.
+
+### Security
+
+| Concern | Implementation |
+|---------|---------------|
+| **WhatsApp content** | Messages confirm a movement occurred and redirect to email for details — no balance or debt amount exposed (stolen phone scenario) |
+| **Email content** | Full detail: amount, new balance, note, date, reference ID |
+| **Throttle** | In-memory cap of 3 notifications per client per hour — prevents Twilio charges from runaway loops |
+| **NotificationLog** | Every attempt is recorded with channel, event, status (SENT/FAILED), and error message |
+| **Graceful degradation** | Missing env vars → server starts normally, feature disabled with a console warning |
+
+### Channels
+
+| Channel | Triggered by | Content |
+|---------|-------------|---------|
+| WhatsApp | Payment registered | Confirms amount received, redirects to email |
+| Email | Payment registered | Amount, new balance, note, date, reference |
+| WhatsApp | Credit sale created | Confirms sale amount, redirects to email |
+| Email | Credit sale created | Total, new balance, date, sale reference |
+
+### Enabling notifications
+
+Set the following in `.env` (see [Environment Variables](#environment-variables) for details):
+
+```env
+# WhatsApp (Twilio Sandbox)
+TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
+TWILIO_AUTH_TOKEN=your_auth_token
+TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
+
+# Email (Gmail + App Password)
+MAILER_EMAIL=youraddress@gmail.com
+MAILER_SECRET_KEY=abcd efgh ijkl mnop
+MAILER_SERVICE=gmail
+```
+
+Both services are independent — you can enable only WhatsApp, only email, or both.
+
+### Checking notification logs
+
+```bash
+npm run db:studio   # Open Prisma Studio → NotificationLog table
+```
+

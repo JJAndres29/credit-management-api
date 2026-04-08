@@ -5,6 +5,7 @@ import { SaleRepository } from '../../repositories';
 import { ClientRepository } from '../../repositories';
 import { ProductRepository } from '../../repositories';
 import { PricingService } from '../../services/pricing';
+import { EventEmitterPort, CREDIT_SALE_CREATED } from '../../events';
 
 export class CreateSaleUseCase {
   constructor(
@@ -17,6 +18,11 @@ export class CreateSaleUseCase {
      * y para que el composition root controle qué strategies están activas.
      */
     private readonly pricingService: PricingService,
+    /**
+     * Opcional: si no se inyecta (e.g. en tests), las notificaciones se omiten
+     * sin romper la lógica de negocio ni los tests existentes.
+     */
+    private readonly eventEmitter?: EventEmitterPort,
   ) {}
 
   async execute(dto: CreateSaleDto, userId: string, ip: string): Promise<SaleEntity> {
@@ -93,7 +99,7 @@ export class CreateSaleUseCase {
     //    misma transacción atómica — si la venta falla, el log también se revierte.
     const balanceBefore = Number(client.balance);
 
-    return this.saleRepository.create({
+    const sale = await this.saleRepository.create({
       clientId: dto.clientId,
       type: dto.type,
       total,
@@ -109,5 +115,19 @@ export class CreateSaleUseCase {
             }
           : undefined,
     });
+
+    // 6. Emitir evento solo para ventas CREDIT (generan deuda → cliente debe saber).
+    //    Se emite DESPUÉS de que la transacción se commitea.
+    //    La notificación es best-effort — si falla, la venta ya está registrada.
+    if (dto.type === SaleType.CREDIT) {
+      this.eventEmitter?.emit(CREDIT_SALE_CREATED, {
+        saleId: sale.id,
+        clientId: dto.clientId,
+        total,
+        newBalance: balanceBefore + total,
+      });
+    }
+
+    return sale;
   }
 }
