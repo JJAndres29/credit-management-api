@@ -15,8 +15,15 @@ export class SaleItemEntity {
     public readonly saleId: string,
     public readonly productId: string,
     public readonly quantity: number,
+    /** Precio base del producto al momento de la venta (snapshot de Product.price) */
+    public readonly basePrice: number | null,
     public readonly unitPrice: number,
     public readonly subtotal: number,
+    /**
+     * Regla de pricing aplicada. Ej: "CASH_BASE" | "CREDIT_SURCHARGE_15PCT".
+     * Null en ventas creadas antes de la implementación del Pricing Domain Service.
+     */
+    public readonly appliedRule: string | null,
   ) {}
 }
 
@@ -39,6 +46,22 @@ export class SaleEntity {
     if (!type) throw new Error('Sale type is required');
     if (total === undefined) throw new Error('Sale total is required');
 
+    const mappedItems: SaleItemEntity[] = Array.isArray(items)
+      ? (items as Record<string, unknown>[]).map(
+          (item) =>
+            new SaleItemEntity(
+              item.id as string,
+              item.saleId as string,
+              item.productId as string,
+              Number(item.quantity),
+              item.basePrice != null ? Number(item.basePrice) : null,
+              Number(item.unitPrice),
+              Number(item.subtotal),
+              (item.appliedRule as string | null) ?? null,
+            ),
+        )
+      : [];
+
     return new SaleEntity(
       id as string,
       clientId as string,
@@ -46,7 +69,7 @@ export class SaleEntity {
       (status as SaleStatus) ?? SaleStatus.PENDING,
       Number(total),
       (createdAt as Date) ?? new Date(),
-      (items as SaleItemEntity[]) ?? [],
+      mappedItems,
     );
   }
 }

@@ -30,6 +30,7 @@ This system allows a retail business to manage credit operations for its clients
 - Client management with credit limits and balance tracking
 - Product catalog management with stock control and multi-image uploads via Cloudinary
 - Cash and credit sales with automatic stock deduction and client balance update (atomic transaction)
+- **Differential pricing by sale type** — cash and credit sales apply different prices via a pluggable Pricing Domain Service (Strategy Pattern). Prices are always computed server-side; clients cannot supply them
 - Payment registration with automatic sale status update (PENDING → PARTIAL → PAID) and client balance reduction (atomic transaction)
 - Immutable audit log of every balance-changing operation (credit sales and payments), written atomically inside each transaction
 - *(Coming soon)* Account statement delivery via WhatsApp and email
@@ -64,6 +65,8 @@ The project follows **Clean Architecture**, organized in three strict layers. In
 | **Adapter** | External libraries (JWT, Cloudinary, etc.) implement domain interfaces — replace any library without touching business logic |
 | **DTO** | Input validation happens at the system boundary before reaching use cases |
 | **Dependency Injection** | Constructor-based throughout — no service locator or global state |
+| **Strategy (Pricing)** | Pricing rules are interchangeable strategies. Adding a new pricing rule = one new class, no existing code touched |
+| **Domain Service (Pricing)** | `PricingService` lives in the domain layer — pure business logic, no framework or DB dependencies, fully unit-testable |
 
 ---
 
@@ -114,7 +117,16 @@ credit-management-system/
 │   │   ├── entities/              # UserEntity, ClientEntity, ProductEntity, ProductImageEntity, SaleEntity, SaleItemEntity, PaymentEntity
 │   │   ├── errors/                # CustomError with HTTP status factory methods
 │   │   ├── repositories/          # Repository interfaces (ports)
-│   │   ├── services/              # Service interfaces: JwtService, FileStorageService, EmailService, PdfService, NotificationService
+│   │   ├── services/
+│   │   │   ├── pricing/           # Pricing Domain Service (Strategy Pattern)
+│   │   │   │   ├── pricing-context.ts          # Input value object
+│   │   │   │   ├── pricing-result.ts           # Output value object
+│   │   │   │   ├── pricing-strategy.interface.ts
+│   │   │   │   ├── pricing.service.ts          # Orchestrator — selects highest-priority matching strategy
+│   │   │   │   └── strategies/
+│   │   │   │       ├── cash-pricing.strategy.ts     # CASH → base price, no surcharge
+│   │   │   │       └── credit-pricing.strategy.ts   # CREDIT → base price + CREDIT_SURCHARGE_PERCENT%
+│   │   │   └── ...                # JwtService, EmailService, NotificationService, PdfService, FileStorageService
 │   │   └── use-cases/
 │   │       ├── auth/              # LoginUseCase, RenewTokenUseCase
 │   │       ├── clients/           # CreateClient, GetClients, GetClientById, UpdateClient, DeleteClient
@@ -233,6 +245,7 @@ API available at: `http://localhost:3000`
 | `JWT_SECRET` | Yes | JWT signing secret — use 64+ random hex chars in production |
 | `JWT_EXPIRES_IN` | Yes | Token TTL (e.g. `7d`, `24h`) |
 | `ALLOWED_ORIGINS` | No | Comma-separated CORS origins. Defaults to `localhost:4200,localhost:5173` |
+| `CREDIT_SURCHARGE_PERCENT` | No | Surcharge % applied to credit sales. Default: `0`. Example: `15` adds 15% to the base product price on all CREDIT sales |
 | `CLOUDINARY_CLOUD_NAME` | Yes* | Required for product image uploads |
 | `CLOUDINARY_API_KEY` | Yes* | Required for product image uploads |
 | `CLOUDINARY_API_SECRET` | Yes* | Required for product image uploads |
@@ -252,13 +265,21 @@ API available at: `http://localhost:3000`
 ```
 User          — System staff with role (ADMIN | SELLER)
 Client        — Credit customers: credit limit, current balance, contact info
-Product       — Inventory items: name, price, stock count
+Product       — Inventory items: name, price (base price), stock count
 ProductImage  — Product photos: Cloudinary URL, publicId, display order (one product → many images)
 Sale          — Orders per client: type (CASH | CREDIT), status (PAID | PENDING | PARTIAL)
-SaleItem      — Line items per sale: product, quantity, unit price, subtotal
+SaleItem      — Line items per sale: product, quantity, basePrice (snapshot), unitPrice (final charged), subtotal, appliedRule
 Payment       — Payments per client/sale: amount, optional note
 AuditLog      — Immutable log of balance changes: user, IP, before/after values
 ```
+
+**`SaleItem` pricing fields:**
+
+| Field | Description |
+|-------|-------------|
+| `basePrice` | Snapshot of `Product.price` at the time of the sale — immutable, for audit purposes |
+| `unitPrice` | Final price charged per unit (may include a credit surcharge) |
+| `appliedRule` | Pricing rule applied — e.g. `"CASH_BASE"`, `"CREDIT_SURCHARGE_15PCT"`. Null on sales created before the Pricing Domain Service |
 
 **Enums:**
 
@@ -645,11 +666,15 @@ Create a new sale. Prices are always taken from the current product catalog — 
 
 **Business rules applied:**
 - Stock is verified before creating the sale — insufficient stock returns `400`
-- For `CREDIT` sales: `client.creditLimit - client.balance >= total`, otherwise `400`
+- **Prices are always computed server-side by the Pricing Domain Service** — the client never supplies unit prices
+  - `CASH` sales apply the base product price (`CASH_BASE` rule)
+  - `CREDIT` sales apply a configurable surcharge (`CREDIT_SURCHARGE_{N}PCT` rule, set via `CREDIT_SURCHARGE_PERCENT` env var)
+- For `CREDIT` sales: `client.creditLimit - client.balance >= total` (computed with the surcharge-adjusted total), otherwise `400`
 - All operations (stock deduction, balance update, sale + items creation) run in a **single atomic database transaction**
 - `CASH` sales are created with status `PAID`. `CREDIT` sales start as `PENDING`
+- Each `SaleItem` records `basePrice`, `unitPrice`, and `appliedRule` for full pricing traceability
 
-**Response `201`:** Created sale object with items.
+**Response `201`:** Created sale object with items. Each item includes `basePrice`, `unitPrice`, and `appliedRule`.
 
 **Response `400`:** Validation error, insufficient stock, or insufficient credit.
 
@@ -971,6 +996,7 @@ npm run test:watch    # Watch mode (re-runs on file save)
 |--------|-----------|
 | `LoginUseCase` | Covered — invalid user, inactive user, wrong password, success, token payload, password not exposed |
 | `RenewTokenUseCase` | Covered — invalid user, inactive user, success |
+| Pricing strategies | Pending (high priority — pure domain logic, no mocks needed) |
 | User use cases | Pending |
 | Client use cases | Pending |
 | Product use cases | Pending |
@@ -1006,6 +1032,42 @@ npm run db:seed         # Create default admin user
 | 4 | Sales (cash + credit, stock deduction, balance update) | ✅ Done |
 | 5 | Payments (register payments, update sale status, reduce client balance) | ✅ Done |
 | 6 | Audit log (atomic writes on balance changes + read API) | ✅ Done |
-| 7 | Notifications (WhatsApp via Twilio, email via Nodemailer) | Planned |
-| 8 | PDF reports (account statements) | Planned |
-| 9 | API improvements (pagination, filters, search) | Planned |
+| 7 | Pricing Domain Service (Strategy Pattern — differential pricing by sale type) | ✅ Done |
+| 8 | Notifications (WhatsApp via Twilio, email via Nodemailer) | Planned |
+| 9 | PDF reports (account statements) | Planned |
+| 10 | API improvements (pagination, filters, search) | Planned |
+
+---
+
+## Pricing System
+
+The system uses a **Pricing Domain Service** with the **Strategy Pattern** to calculate prices at sale time.
+
+### How it works
+
+1. When a sale is created, `CreateSaleUseCase` calls `PricingService.calculate(context)` for each item
+2. `PricingService` selects the highest-priority `PricingStrategy` that matches the context
+3. The selected strategy computes `basePrice`, `unitPrice`, `surchargeAmount`, and `appliedRule`
+4. The use case uses `unitPrice` for totals and credit limit checks
+5. All three values are persisted in `SaleItem` for permanent audit traceability
+
+### Active strategies
+
+| Strategy | Rule name | Applies to | Priority |
+|----------|-----------|-----------|----------|
+| `CashPricingStrategy` | `CASH_BASE` | All `CASH` sales | 10 |
+| `CreditPricingStrategy` | `CREDIT_SURCHARGE_{N}PCT` | All `CREDIT` sales | 10 |
+
+### Adding a new pricing rule
+
+Create a class implementing `PricingStrategy`, set `priority >= 20` to override base rules, and register it in `sale.router.ts`:
+
+```typescript
+const pricingService = new PricingService([
+  new CashPricingStrategy(),
+  new CreditPricingStrategy(envs.creditSurchargePercent),
+  new WholesaleClientStrategy(), // new — priority 20, overrides base when applicable
+]);
+```
+
+No other files need to change.

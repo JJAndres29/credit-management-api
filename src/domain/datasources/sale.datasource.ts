@@ -16,8 +16,13 @@ export interface SaleCreateData {
   items: {
     productId: string;
     quantity: number;
+    /** Precio base del producto (Product.price) al momento de la venta */
+    basePrice: number;
+    /** Precio final cobrado (puede incluir recargo de crédito) */
     unitPrice: number;
     subtotal: number;
+    /** Regla de pricing aplicada. Ej: "CASH_BASE" | "CREDIT_SURCHARGE_15PCT" */
+    appliedRule: string;
   }[];
   auditLog?: AuditLogData;
 }

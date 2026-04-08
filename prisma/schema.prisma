@@ -90,12 +90,14 @@ model Sale {
 }
 
 model SaleItem {
-  id        String  @id @default(uuid())
-  saleId    String
-  productId String
-  quantity  Int
-  unitPrice Decimal @db.Decimal(10, 2)
-  subtotal  Decimal @db.Decimal(10, 2)
+  id          String   @id @default(uuid())
+  saleId      String
+  productId   String
+  quantity    Int
+  basePrice   Decimal? @db.Decimal(10, 2) // Precio base del producto al momento de la venta (snapshot)
+  unitPrice   Decimal  @db.Decimal(10, 2) // Precio final aplicado (puede incluir recargo de crédito)
+  subtotal    Decimal  @db.Decimal(10, 2)
+  appliedRule String?                     // Regla de pricing aplicada: "CASH_BASE" | "CREDIT_SURCHARGE_15PCT" | etc.
 
   sale    Sale    @relation(fields: [saleId], references: [id])
   product Product @relation(fields: [productId], references: [id])

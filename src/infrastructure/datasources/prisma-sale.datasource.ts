@@ -93,8 +93,10 @@ export class PrismaSaleDatasource implements SaleDatasource {
             create: data.items.map((item) => ({
               productId: item.productId,
               quantity: item.quantity,
+              basePrice: item.basePrice,
               unitPrice: item.unitPrice,
               subtotal: item.subtotal,
+              appliedRule: item.appliedRule,
             })),
           },
         },
