@@ -4,6 +4,7 @@ import { AuthRouter } from './auth/auth.router';
 import { ClientRouter } from './clients/client.router';
 import { ProductRouter } from './products/product.router';
 import { UserRouter } from './users/user.router';
+import { SaleRouter } from './sales/sale.router';
 import helmet from 'helmet';
 import cors from 'cors';
 
@@ -34,6 +35,7 @@ export class Server {
     this.app.use('/api/clients', ClientRouter.routes);
     this.app.use('/api/products', ProductRouter.routes);
     this.app.use('/api/users', UserRouter.routes);
+    this.app.use('/api/sales', SaleRouter.routes);
 
     this.app.get('/health', (_req: Request, res: Response) => {
       res.json({ status: 'ok' });
