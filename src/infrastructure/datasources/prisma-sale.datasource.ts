@@ -58,12 +58,27 @@ export class PrismaSaleDatasource implements SaleDatasource {
         });
       }
 
-      // 2. Si es venta a crédito, incrementar el balance del cliente
+      // 2. Si es venta a crédito, incrementar el balance del cliente y registrar en auditoría
       if (!isCashSale) {
         await tx.client.update({
           where: { id: data.clientId },
           data: { balance: { increment: data.total } },
         });
+
+        // Escribir el log dentro de la misma transacción garantiza que si algo falla
+        // (ej. creación de la venta), el registro de auditoría también se revierte.
+        if (data.auditLog) {
+          await tx.auditLog.create({
+            data: {
+              clientId: data.clientId,
+              userId: data.auditLog.userId,
+              action: data.auditLog.action,
+              before: data.auditLog.before,
+              after: data.auditLog.after,
+              ip: data.auditLog.ip,
+            },
+          });
+        }
       }
 
       // 3. Crear la venta con sus ítems

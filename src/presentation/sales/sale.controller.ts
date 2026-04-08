@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { CustomError } from '../../domain/errors';
+import { UserEntity } from '../../domain/entities';
 import { CreateSaleDto } from '../../domain/dtos/sales';
 import { CreateSaleUseCase } from '../../domain/use-cases/sales/create-sale.use-case';
 import { GetSalesUseCase } from '../../domain/use-cases/sales/get-sales.use-case';
@@ -49,8 +50,11 @@ export class SaleController {
       return;
     }
 
+    const user = (req as Request & { user: UserEntity }).user;
+    const ip = req.ip ?? req.socket.remoteAddress ?? 'unknown';
+
     try {
-      const sale = await this.createSaleUseCase.execute(dto!);
+      const sale = await this.createSaleUseCase.execute(dto!, user.id, ip);
       res.status(201).json(sale);
     } catch (err) {
       this.handleError(err, res);

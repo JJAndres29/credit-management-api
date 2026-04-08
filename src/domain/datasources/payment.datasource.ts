@@ -1,9 +1,12 @@
 import { PaymentEntity } from '../entities';
+import { AuditLogData } from './audit-log.datasource';
 
 /**
  * Datos ya validados y enriquecidos que llegan desde el use case.
  * saleTotal se incluye cuando hay saleId para que la transacción atómica
  * pueda calcular el nuevo estado de la venta sin salir de la transacción.
+ *
+ * `auditLog` siempre está presente en pagos porque todos modifican el balance.
  */
 export interface PaymentCreateData {
   clientId: string;
@@ -12,6 +15,7 @@ export interface PaymentCreateData {
   note: string | null;
   /** Total de la venta, requerido cuando saleId está presente */
   saleTotal?: number;
+  auditLog: AuditLogData;
 }
 
 export interface PaymentDatasource {

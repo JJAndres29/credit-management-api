@@ -4,3 +4,4 @@ export { ProductRepositoryImpl } from './product.repository.impl';
 export { UserRepositoryImpl } from './user.repository.impl';
 export { SaleRepositoryImpl } from './sale.repository.impl';
 export { PaymentRepositoryImpl } from './payment.repository.impl';
+export { AuditLogRepositoryImpl } from './audit-log.repository.impl';

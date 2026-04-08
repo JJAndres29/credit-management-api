@@ -31,6 +31,7 @@ This system allows a retail business to manage credit operations for its clients
 - Product catalog management with stock control and multi-image uploads via Cloudinary
 - Cash and credit sales with automatic stock deduction and client balance update (atomic transaction)
 - Payment registration with automatic sale status update (PENDING → PARTIAL → PAID) and client balance reduction (atomic transaction)
+- Immutable audit log of every balance-changing operation (credit sales and payments), written atomically inside each transaction
 - *(Coming soon)* Account statement delivery via WhatsApp and email
 - *(Coming soon)* PDF report generation
 
@@ -117,16 +118,18 @@ credit-management-system/
 │   │   └── use-cases/
 │   │       ├── auth/              # LoginUseCase, RenewTokenUseCase
 │   │       ├── clients/           # CreateClient, GetClients, GetClientById, UpdateClient, DeleteClient
+│   │       ├── audit-logs/        # GetAuditLogs, GetAuditLogsByClient
 │   │       ├── payments/          # CreatePayment, GetPayments, GetPaymentById, GetPaymentsByClient, GetPaymentsBySale
 │   │       ├── products/          # GetProducts, GetProductById, CreateProduct, UpdateProduct, AdjustStock, DeleteProduct, UploadProductImages, DeleteProductImage
 │   │       ├── sales/             # CreateSale, GetSales, GetSaleById, GetSalesByClient
 │   │       └── users/             # GetUsers, GetUserById, CreateUser, UpdateUser, ToggleUserStatus, ChangePassword
 │   ├── infrastructure/            # Implements domain interfaces (adapters)
-│   │   ├── datasources/           # PrismaAuthDatasource, PrismaClientDatasource, PrismaProductDatasource, PrismaUserDatasource, PrismaSaleDatasource, PrismaPaymentDatasource
-│   │   ├── repositories/          # AuthRepositoryImpl, ClientRepositoryImpl, ProductRepositoryImpl, UserRepositoryImpl, SaleRepositoryImpl, PaymentRepositoryImpl
+│   │   ├── datasources/           # PrismaAuthDatasource, PrismaClientDatasource, PrismaProductDatasource, PrismaUserDatasource, PrismaSaleDatasource, PrismaPaymentDatasource, PrismaAuditLogDatasource
+│   │   ├── repositories/          # AuthRepositoryImpl, ClientRepositoryImpl, ProductRepositoryImpl, UserRepositoryImpl, SaleRepositoryImpl, PaymentRepositoryImpl, AuditLogRepositoryImpl
 │   │   └── services/              # JwtAdapter, CloudinaryAdapter
 │   └── presentation/              # HTTP layer
 │       ├── auth/                  # AuthController, AuthRouter
+│       ├── audit-logs/            # AuditLogController, AuditLogRouter
 │       ├── clients/               # ClientController, ClientRouter
 │       ├── payments/              # PaymentController, PaymentRouter
 │       ├── products/              # ProductController, ProductRouter
@@ -733,6 +736,49 @@ Register a payment from a client. Optionally links the payment to a specific sal
 
 ---
 
+### Audit Logs
+
+All audit log endpoints require `Authorization: Bearer <token>` and **`ADMIN` role**.
+
+Audit log entries are created automatically inside the atomic transactions of credit sales and payments — there is no public creation endpoint. The log records every client balance change with who triggered it, from which IP, and the before/after values.
+
+#### GET `/api/audit-logs`
+
+Returns all audit log entries, sorted by creation date (newest first).
+
+> **Requires `ADMIN` role.**
+
+**Response `200`:**
+```json
+[
+  {
+    "id": "uuid",
+    "clientId": "uuid",
+    "userId": "uuid",
+    "action": "PAYMENT",
+    "before": 150000,
+    "after": 100000,
+    "ip": "::1",
+    "createdAt": "2026-04-08T00:00:00.000Z"
+  }
+]
+```
+
+| `action` value | Meaning |
+|----------------|---------|
+| `CREDIT_SALE` | Client balance increased — a credit sale was registered |
+| `PAYMENT` | Client balance decreased — a payment was registered |
+
+---
+
+#### GET `/api/audit-logs/client/:clientId`
+
+Returns all audit log entries for a specific client. Returns `404` if the client does not exist.
+
+> **Requires `ADMIN` role.**
+
+---
+
 ### Users
 
 All user endpoints require `Authorization: Bearer <token>`.
@@ -900,12 +946,13 @@ All errors follow this consistent structure:
 | **Cross-client payment prevention** | `POST /payments` validates that the provided `saleId` belongs to the same `clientId` in the request body — prevents a malicious actor from linking a payment to another client's sale |
 | **Payment overpayment protection** | Amount is validated against both the client's total balance and the specific sale's remaining balance before the transaction executes |
 
+| **Immutable audit log** | Every credit sale and payment writes an `AuditLog` entry inside the same atomic transaction — records `userId`, `clientId`, `action`, `before`/`after` balance, and request IP. If the operation rolls back, the log entry rolls back too |
+
 ### Planned
 
 - Refresh token + short-lived access tokens (15 min access / 7 day refresh)
 - Account lockout after N consecutive failed login attempts
 - Structured security event logging (login failures, invalid tokens)
-- Full audit log writes on balance-changing operations
 
 ---
 
@@ -958,7 +1005,7 @@ npm run db:seed         # Create default admin user
 | 3 | Products (catalog, stock control, multi-image upload via Cloudinary) | ✅ Done |
 | 4 | Sales (cash + credit, stock deduction, balance update) | ✅ Done |
 | 5 | Payments (register payments, update sale status, reduce client balance) | ✅ Done |
-| 6 | Audit log (full write implementation) | Planned |
+| 6 | Audit log (atomic writes on balance changes + read API) | ✅ Done |
 | 7 | Notifications (WhatsApp via Twilio, email via Nodemailer) | Planned |
 | 8 | PDF reports (account statements) | Planned |
 | 9 | API improvements (pagination, filters, search) | Planned |
