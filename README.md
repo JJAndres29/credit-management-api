@@ -30,7 +30,7 @@ This system allows a retail business to manage credit operations for its clients
 - Client management with credit limits and balance tracking
 - Product catalog management with stock control and multi-image uploads via Cloudinary
 - Cash and credit sales with automatic stock deduction and client balance update (atomic transaction)
-- *(Coming soon)* Payment registration and sale status tracking
+- Payment registration with automatic sale status update (PENDING → PARTIAL → PAID) and client balance reduction (atomic transaction)
 - *(Coming soon)* Account statement delivery via WhatsApp and email
 - *(Coming soon)* PDF report generation
 
@@ -106,26 +106,29 @@ credit-management-system/
 │   │   ├── dtos/
 │   │   │   ├── auth/              # LoginDto
 │   │   │   ├── clients/           # CreateClientDto, UpdateClientDto
+│   │   │   ├── payments/          # CreatePaymentDto
 │   │   │   ├── products/          # CreateProductDto, UpdateProductDto, AdjustStockDto
 │   │   │   ├── sales/             # CreateSaleDto (items array, type CASH|CREDIT)
-│   │   │   └── users/             # CreateUserDto, UpdateUserDto, ChangePasswordDto (policy enforced here)
+│   │   │   └── users/             # CreateUserDto, UpdateUserDto, ChangePasswordDto
 │   │   ├── entities/              # UserEntity, ClientEntity, ProductEntity, ProductImageEntity, SaleEntity, SaleItemEntity, PaymentEntity
 │   │   ├── errors/                # CustomError with HTTP status factory methods
 │   │   ├── repositories/          # Repository interfaces (ports)
-│   │   ├── services/              # Service interfaces: JwtService, FileStorageService (UploadResult), EmailService, PdfService, NotificationService
+│   │   ├── services/              # Service interfaces: JwtService, FileStorageService, EmailService, PdfService, NotificationService
 │   │   └── use-cases/
 │   │       ├── auth/              # LoginUseCase, RenewTokenUseCase
 │   │       ├── clients/           # CreateClient, GetClients, GetClientById, UpdateClient, DeleteClient
+│   │       ├── payments/          # CreatePayment, GetPayments, GetPaymentById, GetPaymentsByClient, GetPaymentsBySale
 │   │       ├── products/          # GetProducts, GetProductById, CreateProduct, UpdateProduct, AdjustStock, DeleteProduct, UploadProductImages, DeleteProductImage
 │   │       ├── sales/             # CreateSale, GetSales, GetSaleById, GetSalesByClient
 │   │       └── users/             # GetUsers, GetUserById, CreateUser, UpdateUser, ToggleUserStatus, ChangePassword
 │   ├── infrastructure/            # Implements domain interfaces (adapters)
-│   │   ├── datasources/           # PrismaAuthDatasource, PrismaClientDatasource, PrismaProductDatasource, PrismaUserDatasource, PrismaSaleDatasource
-│   │   ├── repositories/          # AuthRepositoryImpl, ClientRepositoryImpl, ProductRepositoryImpl, UserRepositoryImpl, SaleRepositoryImpl
+│   │   ├── datasources/           # PrismaAuthDatasource, PrismaClientDatasource, PrismaProductDatasource, PrismaUserDatasource, PrismaSaleDatasource, PrismaPaymentDatasource
+│   │   ├── repositories/          # AuthRepositoryImpl, ClientRepositoryImpl, ProductRepositoryImpl, UserRepositoryImpl, SaleRepositoryImpl, PaymentRepositoryImpl
 │   │   └── services/              # JwtAdapter, CloudinaryAdapter
 │   └── presentation/              # HTTP layer
 │       ├── auth/                  # AuthController, AuthRouter
 │       ├── clients/               # ClientController, ClientRouter
+│       ├── payments/              # PaymentController, PaymentRouter
 │       ├── products/              # ProductController, ProductRouter
 │       ├── sales/                 # SaleController, SaleRouter
 │       ├── users/                 # UserController, UserRouter
@@ -461,37 +464,6 @@ Upload one or more images for a product. Images are stored in Cloudinary and ref
 
 **Response `404`:** Product not found or inactive.
 
-**Example response:**
-```json
-{
-  "id": "uuid",
-  "name": "Camisa Azul",
-  "price": 45000,
-  "stock": 100,
-  "images": [
-    {
-      "id": "uuid",
-      "productId": "uuid",
-      "url": "https://res.cloudinary.com/demo/image/upload/products/abc.jpg",
-      "publicId": "products/abc",
-      "order": 0,
-      "createdAt": "2026-04-07T00:00:00.000Z"
-    },
-    {
-      "id": "uuid",
-      "productId": "uuid",
-      "url": "https://res.cloudinary.com/demo/image/upload/products/def.jpg",
-      "publicId": "products/def",
-      "order": 1,
-      "createdAt": "2026-04-07T00:00:00.000Z"
-    }
-  ],
-  "isActive": true,
-  "createdAt": "2026-04-07T00:00:00.000Z",
-  "updatedAt": "2026-04-07T00:00:00.000Z"
-}
-```
-
 ---
 
 #### DELETE `/api/products/:id/images/:imageId`
@@ -682,6 +654,85 @@ Create a new sale. Prices are always taken from the current product catalog — 
 
 ---
 
+### Payments
+
+All payment endpoints require `Authorization: Bearer <token>`. Any authenticated user (ADMIN or SELLER) can register and view payments.
+
+#### GET `/api/payments`
+
+Returns all payments, sorted by creation date (newest first).
+
+**Response `200`:**
+```json
+[
+  {
+    "id": "uuid",
+    "clientId": "uuid",
+    "saleId": "uuid",
+    "amount": 50000,
+    "note": "Abono parcial",
+    "createdAt": "2026-04-08T00:00:00.000Z"
+  }
+]
+```
+
+---
+
+#### GET `/api/payments/client/:clientId`
+
+Returns all payments for a specific client, sorted by creation date (newest first). Returns `404` if the client does not exist.
+
+---
+
+#### GET `/api/payments/sale/:saleId`
+
+Returns all payments associated with a specific sale. Returns `404` if the sale does not exist.
+
+---
+
+#### GET `/api/payments/:id`
+
+Returns a single payment. Returns `404` if not found.
+
+---
+
+#### POST `/api/payments`
+
+Register a payment from a client. Optionally links the payment to a specific sale, which triggers an automatic sale status update.
+
+**Request body:**
+```json
+{
+  "clientId": "uuid",
+  "amount": 50000,
+  "saleId": "uuid",
+  "note": "Abono parcial"
+}
+```
+
+| Field | Type | Required | Validation |
+|-------|------|----------|-----------|
+| `clientId` | string | Yes | Client must exist and be active |
+| `amount` | number | Yes | Greater than 0, max 2 decimal places |
+| `saleId` | string | No | If provided, sale must exist, belong to the client, and not be `PAID` |
+| `note` | string | No | Max 500 characters |
+
+**Business rules applied:**
+- `amount` cannot exceed the client's current `balance` (prevents overpayment)
+- If `saleId` is provided: the sale must belong to the same `clientId` (prevents cross-client manipulation), and `amount` cannot exceed the remaining unpaid amount on that sale
+- All operations (payment creation, client balance decrement, sale status update) run in a **single atomic database transaction**
+- Sale status is computed inside the transaction by summing all payments for that sale: if `totalPaid >= sale.total` → `PAID`, otherwise → `PARTIAL`
+
+**Response `201`:** Created payment object.
+
+**Response `400`:** Validation error, amount exceeds client balance, sale already paid, or amount exceeds sale's remaining balance.
+
+**Response `403`:** Sale does not belong to the specified client.
+
+**Response `404`:** Client or sale not found.
+
+---
+
 ### Users
 
 All user endpoints require `Authorization: Bearer <token>`.
@@ -846,6 +897,8 @@ All errors follow this consistent structure:
 | **File upload validation** | Multer enforces allowed MIME types (JPG, PNG, WebP), 5 MB per-file limit, and max 5 files per request — malformed or oversized uploads are rejected before reaching business logic |
 | **Cloudinary-side storage** | Uploaded images never touch the server disk — processed in memory and streamed to Cloudinary, eliminating local file exposure |
 | **Image ownership check** | `DELETE /products/:id/images/:imageId` verifies the image belongs to the specified product before deletion |
+| **Cross-client payment prevention** | `POST /payments` validates that the provided `saleId` belongs to the same `clientId` in the request body — prevents a malicious actor from linking a payment to another client's sale |
+| **Payment overpayment protection** | Amount is validated against both the client's total balance and the specific sale's remaining balance before the transaction executes |
 
 ### Planned
 
@@ -874,6 +927,8 @@ npm run test:watch    # Watch mode (re-runs on file save)
 | User use cases | Pending |
 | Client use cases | Pending |
 | Product use cases | Pending |
+| Sales use cases | Pending |
+| Payments use cases | Pending |
 | DTOs | Pending |
 
 ---
@@ -902,7 +957,7 @@ npm run db:seed         # Create default admin user
 | 2 | User management (CRUD for admins and sellers) | ✅ Done |
 | 3 | Products (catalog, stock control, multi-image upload via Cloudinary) | ✅ Done |
 | 4 | Sales (cash + credit, stock deduction, balance update) | ✅ Done |
-| 5 | Payments (register payments, update sale status) | Planned |
+| 5 | Payments (register payments, update sale status, reduce client balance) | ✅ Done |
 | 6 | Audit log (full write implementation) | Planned |
 | 7 | Notifications (WhatsApp via Twilio, email via Nodemailer) | Planned |
 | 8 | PDF reports (account statements) | Planned |

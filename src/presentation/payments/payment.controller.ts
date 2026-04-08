@@ -1,0 +1,78 @@
+import { Request, Response } from 'express';
+import { CustomError } from '../../domain/errors';
+import { CreatePaymentDto } from '../../domain/dtos/payments';
+import { CreatePaymentUseCase } from '../../domain/use-cases/payments/create-payment.use-case';
+import { GetPaymentsUseCase } from '../../domain/use-cases/payments/get-payments.use-case';
+import { GetPaymentByIdUseCase } from '../../domain/use-cases/payments/get-payment-by-id.use-case';
+import { GetPaymentsByClientUseCase } from '../../domain/use-cases/payments/get-payments-by-client.use-case';
+import { GetPaymentsBySaleUseCase } from '../../domain/use-cases/payments/get-payments-by-sale.use-case';
+
+export class PaymentController {
+  constructor(
+    private readonly createPaymentUseCase: CreatePaymentUseCase,
+    private readonly getPaymentsUseCase: GetPaymentsUseCase,
+    private readonly getPaymentByIdUseCase: GetPaymentByIdUseCase,
+    private readonly getPaymentsByClientUseCase: GetPaymentsByClientUseCase,
+    private readonly getPaymentsBySaleUseCase: GetPaymentsBySaleUseCase,
+  ) {}
+
+  getAll = async (_req: Request, res: Response): Promise<void> => {
+    try {
+      const payments = await this.getPaymentsUseCase.execute();
+      res.json(payments);
+    } catch (err) {
+      this.handleError(err, res);
+    }
+  };
+
+  getById = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const payment = await this.getPaymentByIdUseCase.execute(req.params.id);
+      res.json(payment);
+    } catch (err) {
+      this.handleError(err, res);
+    }
+  };
+
+  getByClient = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const payments = await this.getPaymentsByClientUseCase.execute(req.params.clientId);
+      res.json(payments);
+    } catch (err) {
+      this.handleError(err, res);
+    }
+  };
+
+  getBySale = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const payments = await this.getPaymentsBySaleUseCase.execute(req.params.saleId);
+      res.json(payments);
+    } catch (err) {
+      this.handleError(err, res);
+    }
+  };
+
+  create = async (req: Request, res: Response): Promise<void> => {
+    const [error, dto] = CreatePaymentDto.create(req.body as Record<string, unknown>);
+
+    if (error) {
+      res.status(400).json({ error });
+      return;
+    }
+
+    try {
+      const payment = await this.createPaymentUseCase.execute(dto!);
+      res.status(201).json(payment);
+    } catch (err) {
+      this.handleError(err, res);
+    }
+  };
+
+  private handleError(error: unknown, res: Response): void {
+    if (error instanceof CustomError) {
+      res.status(error.statusCode).json({ error: error.message });
+      return;
+    }
+    res.status(500).json({ error: 'Internal server error' });
+  }
+}
