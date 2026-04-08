@@ -29,7 +29,7 @@ This system allows a retail business to manage credit operations for its clients
 - Staff authentication and role-based authorization
 - Client management with credit limits and balance tracking
 - Product catalog management with stock control and multi-image uploads via Cloudinary
-- *(Coming soon)* Cash and credit sales with automatic stock and balance updates
+- Cash and credit sales with automatic stock deduction and client balance update (atomic transaction)
 - *(Coming soon)* Payment registration and sale status tracking
 - *(Coming soon)* Account statement delivery via WhatsApp and email
 - *(Coming soon)* PDF report generation
@@ -107,8 +107,9 @@ credit-management-system/
 │   │   │   ├── auth/              # LoginDto
 │   │   │   ├── clients/           # CreateClientDto, UpdateClientDto
 │   │   │   ├── products/          # CreateProductDto, UpdateProductDto, AdjustStockDto
+│   │   │   ├── sales/             # CreateSaleDto (items array, type CASH|CREDIT)
 │   │   │   └── users/             # CreateUserDto, UpdateUserDto, ChangePasswordDto (policy enforced here)
-│   │   ├── entities/              # UserEntity, ClientEntity, ProductEntity, ProductImageEntity, SaleEntity, PaymentEntity
+│   │   ├── entities/              # UserEntity, ClientEntity, ProductEntity, ProductImageEntity, SaleEntity, SaleItemEntity, PaymentEntity
 │   │   ├── errors/                # CustomError with HTTP status factory methods
 │   │   ├── repositories/          # Repository interfaces (ports)
 │   │   ├── services/              # Service interfaces: JwtService, FileStorageService (UploadResult), EmailService, PdfService, NotificationService
@@ -116,15 +117,17 @@ credit-management-system/
 │   │       ├── auth/              # LoginUseCase, RenewTokenUseCase
 │   │       ├── clients/           # CreateClient, GetClients, GetClientById, UpdateClient, DeleteClient
 │   │       ├── products/          # GetProducts, GetProductById, CreateProduct, UpdateProduct, AdjustStock, DeleteProduct, UploadProductImages, DeleteProductImage
+│   │       ├── sales/             # CreateSale, GetSales, GetSaleById, GetSalesByClient
 │   │       └── users/             # GetUsers, GetUserById, CreateUser, UpdateUser, ToggleUserStatus, ChangePassword
 │   ├── infrastructure/            # Implements domain interfaces (adapters)
-│   │   ├── datasources/           # PrismaAuthDatasource, PrismaClientDatasource, PrismaProductDatasource, PrismaUserDatasource
-│   │   ├── repositories/          # AuthRepositoryImpl, ClientRepositoryImpl, ProductRepositoryImpl, UserRepositoryImpl
+│   │   ├── datasources/           # PrismaAuthDatasource, PrismaClientDatasource, PrismaProductDatasource, PrismaUserDatasource, PrismaSaleDatasource
+│   │   ├── repositories/          # AuthRepositoryImpl, ClientRepositoryImpl, ProductRepositoryImpl, UserRepositoryImpl, SaleRepositoryImpl
 │   │   └── services/              # JwtAdapter, CloudinaryAdapter
 │   └── presentation/              # HTTP layer
 │       ├── auth/                  # AuthController, AuthRouter
 │       ├── clients/               # ClientController, ClientRouter
 │       ├── products/              # ProductController, ProductRouter
+│       ├── sales/                 # SaleController, SaleRouter
 │       ├── users/                 # UserController, UserRouter
 │       ├── middlewares/
 │       │   ├── auth.middleware.ts         # JWT validation + DB user check
@@ -595,6 +598,90 @@ Soft delete — sets `isActive = false`. Client history is preserved.
 
 ---
 
+### Sales
+
+All sales endpoints require `Authorization: Bearer <token>`. Any authenticated user (ADMIN or SELLER) can create and view sales.
+
+#### GET `/api/sales`
+
+Returns all sales with their line items, sorted by creation date (newest first).
+
+**Response `200`:**
+```json
+[
+  {
+    "id": "uuid",
+    "clientId": "uuid",
+    "type": "CREDIT",
+    "status": "PENDING",
+    "total": 135000,
+    "createdAt": "2026-04-08T00:00:00.000Z",
+    "items": [
+      {
+        "id": "uuid",
+        "saleId": "uuid",
+        "productId": "uuid",
+        "quantity": 3,
+        "unitPrice": 45000,
+        "subtotal": 135000
+      }
+    ]
+  }
+]
+```
+
+---
+
+#### GET `/api/sales/client/:clientId`
+
+Returns all sales for a specific client, sorted by creation date (newest first). Returns `404` if the client does not exist or is inactive.
+
+---
+
+#### GET `/api/sales/:id`
+
+Returns a single sale with its line items. Returns `404` if not found.
+
+---
+
+#### POST `/api/sales`
+
+Create a new sale. Prices are always taken from the current product catalog — client cannot supply prices.
+
+**Request body:**
+```json
+{
+  "clientId": "uuid",
+  "type": "CREDIT",
+  "items": [
+    { "productId": "uuid", "quantity": 3 },
+    { "productId": "uuid", "quantity": 1 }
+  ]
+}
+```
+
+| Field | Type | Required | Validation |
+|-------|------|----------|-----------|
+| `clientId` | string | Yes | Client must exist and be active |
+| `type` | string | Yes | `CASH` or `CREDIT` |
+| `items` | array | Yes | Min 1 item. No duplicate `productId` values |
+| `items[].productId` | string | Yes | Product must exist, be active, and have sufficient stock |
+| `items[].quantity` | integer | Yes | Positive integer |
+
+**Business rules applied:**
+- Stock is verified before creating the sale — insufficient stock returns `400`
+- For `CREDIT` sales: `client.creditLimit - client.balance >= total`, otherwise `400`
+- All operations (stock deduction, balance update, sale + items creation) run in a **single atomic database transaction**
+- `CASH` sales are created with status `PAID`. `CREDIT` sales start as `PENDING`
+
+**Response `201`:** Created sale object with items.
+
+**Response `400`:** Validation error, insufficient stock, or insufficient credit.
+
+**Response `404`:** Client or any product not found.
+
+---
+
 ### Users
 
 All user endpoints require `Authorization: Bearer <token>`.
@@ -814,7 +901,7 @@ npm run db:seed         # Create default admin user
 | 1 | Security baseline (helmet, cors, rate-limit, RBAC, password policy) | ✅ Done |
 | 2 | User management (CRUD for admins and sellers) | ✅ Done |
 | 3 | Products (catalog, stock control, multi-image upload via Cloudinary) | ✅ Done |
-| 4 | Sales (cash + credit, stock deduction, balance update) | 🔜 Next |
+| 4 | Sales (cash + credit, stock deduction, balance update) | ✅ Done |
 | 5 | Payments (register payments, update sale status) | Planned |
 | 6 | Audit log (full write implementation) | Planned |
 | 7 | Notifications (WhatsApp via Twilio, email via Nodemailer) | Planned |
