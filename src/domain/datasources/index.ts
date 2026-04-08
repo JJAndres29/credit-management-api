@@ -6,3 +6,5 @@ export { SaleDatasource } from './sale.datasource';
 export type { SaleCreateData } from './sale.datasource';
 export { PaymentDatasource } from './payment.datasource';
 export type { PaymentCreateData } from './payment.datasource';
+export { AuditLogDatasource } from './audit-log.datasource';
+export type { AuditLogData } from './audit-log.datasource';

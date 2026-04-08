@@ -1,5 +1,5 @@
 import { CustomError } from '../../errors';
-import { SaleEntity, SaleType } from '../../entities';
+import { SaleEntity, SaleType, AuditAction } from '../../entities';
 import { CreateSaleDto } from '../../dtos/sales';
 import { SaleRepository } from '../../repositories';
 import { ClientRepository } from '../../repositories';
@@ -12,7 +12,7 @@ export class CreateSaleUseCase {
     private readonly productRepository: ProductRepository,
   ) {}
 
-  async execute(dto: CreateSaleDto): Promise<SaleEntity> {
+  async execute(dto: CreateSaleDto, userId: string, ip: string): Promise<SaleEntity> {
     // 1. Verificar que el cliente existe y está activo
     const client = await this.clientRepository.findById(dto.clientId);
     if (!client) throw CustomError.notFound(`Cliente con ID ${dto.clientId} no encontrado`);
@@ -68,12 +68,26 @@ export class CreateSaleUseCase {
     }
 
     // 5. Persistir: la transacción en el datasource se encarga de crear la venta,
-    //    sus ítems, descontar stock y actualizar el balance del cliente (si es crédito)
+    //    sus ítems, descontar stock y actualizar el balance del cliente (si es crédito).
+    //    Para ventas CREDIT se incluye el audit log para que quede dentro de la
+    //    misma transacción atómica — si la venta falla, el log también se revierte.
+    const balanceBefore = Number(client.balance);
+
     return this.saleRepository.create({
       clientId: dto.clientId,
       type: dto.type,
       total,
       items: enrichedItems,
+      auditLog:
+        dto.type === SaleType.CREDIT
+          ? {
+              userId,
+              action: AuditAction.CREDIT_SALE,
+              before: balanceBefore,
+              after: balanceBefore + total,
+              ip,
+            }
+          : undefined,
     });
   }
 }

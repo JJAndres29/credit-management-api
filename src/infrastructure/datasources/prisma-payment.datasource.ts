@@ -63,7 +63,20 @@ export class PrismaPaymentDatasource implements PaymentDatasource {
         data: { balance: { decrement: data.amount } },
       });
 
-      // 3. Si el pago está asociado a una venta, recalcular su estado
+      // 3. Registrar en auditoría dentro de la misma transacción.
+      // Si cualquier paso posterior falla, este log también se revierte.
+      await tx.auditLog.create({
+        data: {
+          clientId: data.clientId,
+          userId: data.auditLog.userId,
+          action: data.auditLog.action,
+          before: data.auditLog.before,
+          after: data.auditLog.after,
+          ip: data.auditLog.ip,
+        },
+      });
+
+      // 4. Si el pago está asociado a una venta, recalcular su estado
       if (data.saleId && data.saleTotal !== undefined) {
         // Sumamos todos los pagos previos de esta venta (ya guardados en BD)
         // más el pago que acabamos de crear

@@ -1,9 +1,13 @@
 import { SaleEntity, SaleType } from '../entities';
+import { AuditLogData } from './audit-log.datasource';
 
 /**
  * Datos ya validados y enriquecidos que llegan desde el use case.
  * Los precios unitarios vienen de los productos actuales (calculados en el use case),
  * no del cliente, para evitar manipulación de precios desde el frontend.
+ *
+ * `auditLog` solo se incluye en ventas CREDIT porque son las únicas que modifican
+ * el balance del cliente. Las ventas CASH no generan cambio de balance.
  */
 export interface SaleCreateData {
   clientId: string;
@@ -15,6 +19,7 @@ export interface SaleCreateData {
     unitPrice: number;
     subtotal: number;
   }[];
+  auditLog?: AuditLogData;
 }
 
 export interface SaleDatasource {

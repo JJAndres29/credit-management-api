@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { CustomError } from '../../domain/errors';
+import { UserEntity } from '../../domain/entities';
 import { CreatePaymentDto } from '../../domain/dtos/payments';
 import { CreatePaymentUseCase } from '../../domain/use-cases/payments/create-payment.use-case';
 import { GetPaymentsUseCase } from '../../domain/use-cases/payments/get-payments.use-case';
@@ -60,8 +61,11 @@ export class PaymentController {
       return;
     }
 
+    const user = (req as Request & { user: UserEntity }).user;
+    const ip = req.ip ?? req.socket.remoteAddress ?? 'unknown';
+
     try {
-      const payment = await this.createPaymentUseCase.execute(dto!);
+      const payment = await this.createPaymentUseCase.execute(dto!, user.id, ip);
       res.status(201).json(payment);
     } catch (err) {
       this.handleError(err, res);

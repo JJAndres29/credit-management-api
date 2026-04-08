@@ -1,5 +1,5 @@
 import { CustomError } from '../../errors';
-import { PaymentEntity, SaleStatus } from '../../entities';
+import { PaymentEntity, SaleStatus, AuditAction } from '../../entities';
 import { CreatePaymentDto } from '../../dtos/payments';
 import { PaymentRepository } from '../../repositories';
 import { ClientRepository } from '../../repositories';
@@ -12,7 +12,7 @@ export class CreatePaymentUseCase {
     private readonly saleRepository: SaleRepository,
   ) {}
 
-  async execute(dto: CreatePaymentDto): Promise<PaymentEntity> {
+  async execute(dto: CreatePaymentDto, userId: string, ip: string): Promise<PaymentEntity> {
     // 1. Verificar que el cliente existe y está activo
     const client = await this.clientRepository.findById(dto.clientId);
     if (!client) throw CustomError.notFound(`Cliente con ID ${dto.clientId} no encontrado`);
@@ -63,14 +63,21 @@ export class CreatePaymentUseCase {
     }
 
     // 4. Persistir: la transacción atómica en el datasource se encarga de:
-    //    crear el pago, decrementar el balance del cliente y (si hay saleId)
-    //    actualizar el estado de la venta
+    //    crear el pago, decrementar el balance del cliente, escribir el audit log
+    //    y (si hay saleId) actualizar el estado de la venta.
     return this.paymentRepository.create({
       clientId: dto.clientId,
       saleId: dto.saleId,
       amount: dto.amount,
       note: dto.note,
       saleTotal,
+      auditLog: {
+        userId,
+        action: AuditAction.PAYMENT,
+        before: clientBalance,
+        after: clientBalance - dto.amount,
+        ip,
+      },
     });
   }
 }
