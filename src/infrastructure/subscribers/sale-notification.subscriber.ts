@@ -1,0 +1,165 @@
+import { EventEmitterPort, CREDIT_SALE_CREATED, CreditSaleCreatedData } from '../../domain/events';
+import { NotificationService } from '../../domain/services/notification.service';
+import { EmailService } from '../../domain/services/email.service';
+import { ClientRepository } from '../../domain/repositories';
+import { prisma } from '../../config/prisma';
+
+/**
+ * Escucha el evento CreditSaleCreated y orquesta las notificaciones.
+ *
+ * Solo se emite para ventas CREDIT — las ventas CASH se pagan al contado
+ * y no generan deuda, por lo que no requieren notificación de saldo.
+ *
+ * Misma lógica de throttle, sendAndLog y seguridad que PaymentNotificationSubscriber.
+ */
+export class SaleNotificationSubscriber {
+  constructor(
+    private readonly eventEmitter: EventEmitterPort,
+    private readonly clientRepository: ClientRepository,
+    private readonly whatsAppService: NotificationService | null,
+    private readonly emailService: EmailService | null,
+  ) {
+    this.eventEmitter.on(CREDIT_SALE_CREATED, this.handle);
+  }
+
+  private handle = async (data: unknown): Promise<void> => {
+    try {
+      const { saleId, clientId, total, newBalance } = data as CreditSaleCreatedData;
+
+      const client = await this.clientRepository.findById(clientId);
+      if (!client) return;
+
+      const formattedTotal = this.formatCurrency(total);
+      const formattedBalance = this.formatCurrency(newBalance);
+      const date = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' });
+
+      // WhatsApp — sin saldo
+      const whatsAppMsg =
+        `Hola ${client.name}, se registró una compra a crédito por ${formattedTotal}. ` +
+        `Para ver el detalle completo de su cuenta, revise el correo electrónico registrado.`;
+
+      // Email — detalle completo
+      const emailHtml = this.buildSaleEmailHtml({
+        clientName: client.name,
+        total: formattedTotal,
+        newBalance: formattedBalance,
+        date,
+        saleId,
+      });
+
+      const tasks: Promise<void>[] = [];
+
+      if (this.whatsAppService && client.phone) {
+        tasks.push(
+          this.sendAndLog({
+            clientId,
+            channel: 'WHATSAPP',
+            event: 'CREDIT_SALE_CREATED',
+            send: () => this.whatsAppService!.sendWhatsApp(client.phone, whatsAppMsg),
+          }),
+        );
+      }
+
+      if (this.emailService && client.email) {
+        tasks.push(
+          this.sendAndLog({
+            clientId,
+            channel: 'EMAIL',
+            event: 'CREDIT_SALE_CREATED',
+            send: () =>
+              this.emailService!.sendEmail({
+                to: client.email!,
+                subject: `Compra a crédito registrada — ${formattedTotal}`,
+                htmlBody: emailHtml,
+              }),
+          }),
+        );
+      }
+
+      await Promise.allSettled(tasks);
+    } catch (error) {
+      console.error('[SaleNotificationSubscriber] Error inesperado:', error);
+    }
+  };
+
+  private async sendAndLog(params: {
+    clientId: string;
+    channel: string;
+    event: string;
+    send: () => Promise<boolean>;
+  }): Promise<void> {
+    let status = 'SENT';
+    let errorMessage: string | undefined;
+
+    try {
+      const ok = await params.send();
+      if (!ok) {
+        status = 'FAILED';
+        errorMessage = 'El servicio retornó false sin lanzar excepción';
+      }
+    } catch (err) {
+      status = 'FAILED';
+      errorMessage = err instanceof Error ? err.message : String(err);
+    }
+
+    await prisma.notificationLog.create({
+      data: {
+        clientId: params.clientId,
+        channel: params.channel,
+        event: params.event,
+        status,
+        errorMessage,
+      },
+    });
+
+    if (status === 'SENT') {
+      console.log(
+        `[Notification] ${params.channel} CREDIT_SALE_CREATED → cliente ${params.clientId} ✓`,
+      );
+    } else {
+      console.warn(
+        `[Notification] ${params.channel} CREDIT_SALE_CREATED → cliente ${params.clientId} ✗ — ${errorMessage}`,
+      );
+    }
+  }
+
+  private formatCurrency(amount: number): string {
+    return new Intl.NumberFormat('es-CO', { style: 'currency', currency: 'COP', minimumFractionDigits: 0 }).format(
+      amount,
+    );
+  }
+
+  private buildSaleEmailHtml(params: {
+    clientName: string;
+    total: string;
+    newBalance: string;
+    date: string;
+    saleId: string;
+  }): string {
+    return `
+      <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 24px;">
+        <h2 style="color: #1d4e89;">Compra a crédito registrada</h2>
+        <p>Hola <strong>${params.clientName}</strong>,</p>
+        <p>Se ha registrado la siguiente compra a crédito en su cuenta:</p>
+        <table style="width: 100%; border-collapse: collapse; margin: 16px 0;">
+          <tr style="background: #f4f4f4;">
+            <td style="padding: 10px; border: 1px solid #ddd;"><strong>Total de la compra</strong></td>
+            <td style="padding: 10px; border: 1px solid #ddd;">${params.total}</td>
+          </tr>
+          <tr>
+            <td style="padding: 10px; border: 1px solid #ddd;"><strong>Saldo actual</strong></td>
+            <td style="padding: 10px; border: 1px solid #ddd;">${params.newBalance}</td>
+          </tr>
+          <tr style="background: #f4f4f4;">
+            <td style="padding: 10px; border: 1px solid #ddd;"><strong>Fecha</strong></td>
+            <td style="padding: 10px; border: 1px solid #ddd;">${params.date}</td>
+          </tr>
+        </table>
+        <p style="color: #666; font-size: 12px;">Referencia de venta: ${params.saleId}</p>
+        <p style="color: #666; font-size: 12px;">
+          Si tiene alguna duda, comuníquese con nosotros.
+        </p>
+      </div>
+    `;
+  }
+}

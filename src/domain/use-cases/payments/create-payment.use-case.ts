@@ -4,12 +4,18 @@ import { CreatePaymentDto } from '../../dtos/payments';
 import { PaymentRepository } from '../../repositories';
 import { ClientRepository } from '../../repositories';
 import { SaleRepository } from '../../repositories';
+import { EventEmitterPort, PAYMENT_REGISTERED } from '../../events';
 
 export class CreatePaymentUseCase {
   constructor(
     private readonly paymentRepository: PaymentRepository,
     private readonly clientRepository: ClientRepository,
     private readonly saleRepository: SaleRepository,
+    /**
+     * Opcional: si no se inyecta (e.g. en tests), las notificaciones se omiten
+     * sin romper la lógica de negocio ni los tests existentes.
+     */
+    private readonly eventEmitter?: EventEmitterPort,
   ) {}
 
   async execute(dto: CreatePaymentDto, userId: string, ip: string): Promise<PaymentEntity> {
@@ -65,7 +71,7 @@ export class CreatePaymentUseCase {
     // 4. Persistir: la transacción atómica en el datasource se encarga de:
     //    crear el pago, decrementar el balance del cliente, escribir el audit log
     //    y (si hay saleId) actualizar el estado de la venta.
-    return this.paymentRepository.create({
+    const payment = await this.paymentRepository.create({
       clientId: dto.clientId,
       saleId: dto.saleId,
       amount: dto.amount,
@@ -79,5 +85,17 @@ export class CreatePaymentUseCase {
         ip,
       },
     });
+
+    // 5. Emitir evento DESPUÉS de que la transacción se commitea.
+    //    La notificación es best-effort — si falla, el pago ya está registrado.
+    this.eventEmitter?.emit(PAYMENT_REGISTERED, {
+      paymentId: payment.id,
+      clientId: dto.clientId,
+      amount: dto.amount,
+      newBalance: clientBalance - dto.amount,
+      note: dto.note,
+    });
+
+    return payment;
   }
 }

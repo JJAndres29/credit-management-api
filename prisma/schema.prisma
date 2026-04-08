@@ -47,9 +47,10 @@ model Client {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  sales     Sale[]
-  payments  Payment[]
-  auditLogs AuditLog[]
+  sales             Sale[]
+  payments          Payment[]
+  auditLogs         AuditLog[]
+  notificationLogs  NotificationLog[]
 }
 
 model Product {
@@ -127,4 +128,16 @@ model AuditLog {
 
   client Client @relation(fields: [clientId], references: [id])
   user   User   @relation(fields: [userId], references: [id])
+}
+
+model NotificationLog {
+  id           String   @id @default(uuid())
+  clientId     String
+  channel      String   // "WHATSAPP" | "EMAIL"
+  event        String   // "PAYMENT_REGISTERED" | "CREDIT_SALE_CREATED"
+  status       String   // "SENT" | "FAILED"
+  errorMessage String?
+  sentAt       DateTime @default(now())
+
+  client Client @relation(fields: [clientId], references: [id])
 }

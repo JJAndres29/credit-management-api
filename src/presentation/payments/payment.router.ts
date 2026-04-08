@@ -16,7 +16,9 @@ import { PrismaSaleDatasource } from '../../infrastructure/datasources';
 import { AuthRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaAuthDatasource } from '../../infrastructure/datasources';
 import { AuthMiddleware } from '../middlewares';
-import { JwtAdapter } from '../../infrastructure/services';
+import { JwtAdapter, TwilioWhatsAppService, NodemailerEmailService } from '../../infrastructure/services';
+import { globalEventEmitter } from '../../infrastructure/events';
+import { PaymentNotificationSubscriber } from '../../infrastructure/subscribers';
 
 export class PaymentRouter {
   static get routes(): Router {
@@ -27,8 +29,16 @@ export class PaymentRouter {
     const clientRepository = new ClientRepositoryImpl(new PrismaClientDatasource());
     const saleRepository = new SaleRepositoryImpl(new PrismaSaleDatasource());
 
+    // Servicios de notificación — se deshabilitan automáticamente si faltan las env vars
+    const whatsAppService = new TwilioWhatsAppService();
+    const emailService = new NodemailerEmailService();
+
+    // Subscriber: escucha PaymentRegistered y envía WhatsApp + Email.
+    // Se construye aquí (composition root) y se auto-registra en el globalEventEmitter.
+    new PaymentNotificationSubscriber(globalEventEmitter, clientRepository, whatsAppService, emailService);
+
     const controller = new PaymentController(
-      new CreatePaymentUseCase(paymentRepository, clientRepository, saleRepository),
+      new CreatePaymentUseCase(paymentRepository, clientRepository, saleRepository, globalEventEmitter),
       new GetPaymentsUseCase(paymentRepository),
       new GetPaymentByIdUseCase(paymentRepository),
       new GetPaymentsByClientUseCase(paymentRepository, clientRepository),

@@ -10,9 +10,11 @@ import { PrismaProductDatasource } from '../../infrastructure/datasources';
 import { AuthRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaAuthDatasource } from '../../infrastructure/datasources';
 import { AuthMiddleware } from '../middlewares';
-import { JwtAdapter } from '../../infrastructure/services';
+import { JwtAdapter, TwilioWhatsAppService, NodemailerEmailService } from '../../infrastructure/services';
 import { PricingService, CashPricingStrategy, CreditPricingStrategy } from '../../domain/services/pricing';
 import { envs } from '../../config/envs';
+import { globalEventEmitter } from '../../infrastructure/events';
+import { SaleNotificationSubscriber } from '../../infrastructure/subscribers';
 
 export class SaleRouter {
   static get routes(): Router {
@@ -39,8 +41,16 @@ export class SaleRouter {
       new CreditPricingStrategy(envs.creditSurchargePercent),
     ]);
 
+    // Servicios de notificación — se deshabilitan automáticamente si faltan las env vars
+    const whatsAppService = new TwilioWhatsAppService();
+    const emailService = new NodemailerEmailService();
+
+    // Subscriber: escucha CreditSaleCreated y envía WhatsApp + Email.
+    // Se construye aquí (composition root) y se auto-registra en el globalEventEmitter.
+    new SaleNotificationSubscriber(globalEventEmitter, clientRepository, whatsAppService, emailService);
+
     const controller = new SaleController(
-      new CreateSaleUseCase(saleRepository, clientRepository, productRepository, pricingService),
+      new CreateSaleUseCase(saleRepository, clientRepository, productRepository, pricingService, globalEventEmitter),
       new GetSalesUseCase(saleRepository),
       new GetSaleByIdUseCase(saleRepository),
       new GetSalesByClientUseCase(saleRepository, clientRepository),
