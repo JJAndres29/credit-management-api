@@ -4,12 +4,19 @@ import { CreateSaleDto } from '../../dtos/sales';
 import { SaleRepository } from '../../repositories';
 import { ClientRepository } from '../../repositories';
 import { ProductRepository } from '../../repositories';
+import { PricingService } from '../../services/pricing';
 
 export class CreateSaleUseCase {
   constructor(
     private readonly saleRepository: SaleRepository,
     private readonly clientRepository: ClientRepository,
     private readonly productRepository: ProductRepository,
+    /**
+     * PricingService determina qué precio aplicar según el contexto de la venta.
+     * Se inyecta como dependencia para que el use case sea testeable de forma aislada
+     * y para que el composition root controle qué strategies están activas.
+     */
+    private readonly pricingService: PricingService,
   ) {}
 
   async execute(dto: CreateSaleDto, userId: string, ip: string): Promise<SaleEntity> {
@@ -17,12 +24,14 @@ export class CreateSaleUseCase {
     const client = await this.clientRepository.findById(dto.clientId);
     if (!client) throw CustomError.notFound(`Cliente con ID ${dto.clientId} no encontrado`);
 
-    // 2. Validar cada producto: existe, está activo y tiene stock suficiente
+    // 2. Validar cada producto y calcular precio con la strategy correspondiente
     const enrichedItems: {
       productId: string;
       quantity: number;
+      basePrice: number;
       unitPrice: number;
       subtotal: number;
+      appliedRule: string;
     }[] = [];
 
     for (const item of dto.items) {
@@ -42,21 +51,32 @@ export class CreateSaleUseCase {
         );
       }
 
-      const unitPrice = Number(product.price);
-      const subtotal = unitPrice * item.quantity;
+      // El PricingService selecciona automáticamente la strategy correcta según
+      // el tipo de venta (CASH → CashPricingStrategy, CREDIT → CreditPricingStrategy).
+      // El use case no sabe cómo se calcula el precio — esa responsabilidad es del servicio.
+      const pricing = this.pricingService.calculate({
+        product,
+        saleType: dto.type,
+        client,
+        quantity: item.quantity,
+        saleDate: new Date(),
+      });
 
       enrichedItems.push({
         productId: item.productId,
         quantity: item.quantity,
-        unitPrice,
-        subtotal,
+        basePrice: pricing.basePrice,
+        unitPrice: pricing.unitPrice,
+        subtotal: pricing.unitPrice * item.quantity,
+        appliedRule: pricing.appliedRule,
       });
     }
 
-    // 3. Calcular el total de la venta
+    // 3. Calcular el total de la venta con los precios ya aplicados
     const total = enrichedItems.reduce((sum, item) => sum + item.subtotal, 0);
 
     // 4. Para ventas a crédito: verificar que el cliente tiene crédito disponible
+    //    La verificación usa el total con recargo, que es el que se registrará como deuda
     if (dto.type === SaleType.CREDIT) {
       const creditAvailable = Number(client.creditLimit) - Number(client.balance);
 
