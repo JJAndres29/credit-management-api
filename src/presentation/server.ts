@@ -7,6 +7,7 @@ import { UserRouter } from './users/user.router';
 import { SaleRouter } from './sales/sale.router';
 import { PaymentRouter } from './payments/payment.router';
 import { AuditLogRouter } from './audit-logs/audit-log.router';
+import { ReportRouter } from './reports/report.router';
 import helmet from 'helmet';
 import cors from 'cors';
 
@@ -40,6 +41,7 @@ export class Server {
     this.app.use('/api/sales', SaleRouter.routes);
     this.app.use('/api/payments', PaymentRouter.routes);
     this.app.use('/api/audit-logs', AuditLogRouter.routes);
+    this.app.use('/api/reports', ReportRouter.routes);
 
     this.app.get('/health', (_req: Request, res: Response) => {
       res.json({ status: 'ok' });
