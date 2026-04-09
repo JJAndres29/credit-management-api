@@ -16,9 +16,12 @@ import { PrismaSaleDatasource } from '../../infrastructure/datasources';
 import { AuthRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaAuthDatasource } from '../../infrastructure/datasources';
 import { AuthMiddleware } from '../middlewares';
-import { JwtAdapter, TwilioWhatsAppService, NodemailerEmailService } from '../../infrastructure/services';
+import { JwtAdapter, TwilioWhatsAppService, NodemailerEmailService, PdfkitPdfService } from '../../infrastructure/services';
 import { globalEventEmitter } from '../../infrastructure/events';
 import { PaymentNotificationSubscriber } from '../../infrastructure/subscribers';
+import { GenerateAccountStatementUseCase } from '../../domain/use-cases/reports';
+import { ProductRepositoryImpl } from '../../infrastructure/repositories';
+import { PrismaProductDatasource } from '../../infrastructure/datasources';
 
 export class PaymentRouter {
   static get routes(): Router {
@@ -33,9 +36,25 @@ export class PaymentRouter {
     const whatsAppService = new TwilioWhatsAppService();
     const emailService = new NodemailerEmailService();
 
-    // Subscriber: escucha PaymentRegistered y envía WhatsApp + Email.
+    // Use case de PDF para adjuntarlo al email de notificación de pago
+    const productRepository = new ProductRepositoryImpl(new PrismaProductDatasource());
+    const accountStatementUseCase = new GenerateAccountStatementUseCase(
+      clientRepository,
+      saleRepository,
+      paymentRepository,
+      productRepository,
+      new PdfkitPdfService(),
+    );
+
+    // Subscriber: escucha PaymentRegistered y envía WhatsApp + Email (con PDF adjunto).
     // Se construye aquí (composition root) y se auto-registra en el globalEventEmitter.
-    new PaymentNotificationSubscriber(globalEventEmitter, clientRepository, whatsAppService, emailService);
+    new PaymentNotificationSubscriber(
+      globalEventEmitter,
+      clientRepository,
+      whatsAppService,
+      emailService,
+      accountStatementUseCase,
+    );
 
     const controller = new PaymentController(
       new CreatePaymentUseCase(paymentRepository, clientRepository, saleRepository, globalEventEmitter),

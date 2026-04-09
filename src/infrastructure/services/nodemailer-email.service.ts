@@ -1,6 +1,6 @@
 import nodemailer, { Transporter } from 'nodemailer';
 import { envs } from '../../config/envs';
-import { EmailService, SendEmailOptions } from '../../domain/services/email.service';
+import { EmailAttachment, EmailService, SendEmailOptions } from '../../domain/services/email.service';
 
 /**
  * Adapter de Nodemailer para envío de emails.
@@ -50,12 +50,17 @@ export class NodemailerEmailService implements EmailService {
     if (!this.enabled || !this.transporter) return false;
 
     try {
+      const attachments = options.attachments?.map((att: EmailAttachment) => ({
+        filename: att.filename,
+        ...(att.content ? { content: att.content, contentType: att.contentType } : { path: att.path }),
+      }));
+
       await this.transporter.sendMail({
         from: this.from,
         to: Array.isArray(options.to) ? options.to.join(',') : options.to,
         subject: options.subject,
         html: options.htmlBody,
-        attachments: options.attachments,
+        attachments,
       });
       return true;
     } catch (error) {

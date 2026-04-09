@@ -18,6 +18,9 @@
 - [Testing](#testing)
 - [Scripts](#scripts)
 - [Roadmap](#roadmap)
+- [Pricing System](#pricing-system)
+- [Notification System](#notification-system)
+- [PDF Report System](#pdf-report-system)
 
 ---
 
@@ -33,8 +36,8 @@ This system allows a retail business to manage credit operations for its clients
 - **Differential pricing by sale type** — cash and credit sales apply different prices via a pluggable Pricing Domain Service (Strategy Pattern). Prices are always computed server-side; clients cannot supply them
 - Payment registration with automatic sale status update (PENDING → PARTIAL → PAID) and client balance reduction (atomic transaction)
 - Immutable audit log of every balance-changing operation (credit sales and payments), written atomically inside each transaction
-- **Automatic notifications** — WhatsApp (via Twilio) and email (via Nodemailer/Gmail) sent after every payment and credit sale. Notifications are optional and best-effort: if the provider fails or credentials are missing, the financial operation is not affected
-- *(Coming soon)* PDF report generation
+- **Automatic notifications** — WhatsApp (via Twilio) and email (via Nodemailer/Gmail) sent after every payment and credit sale. Payment emails include the full account statement as a PDF attachment. Notifications are optional and best-effort: if the provider fails or credentials are missing, the financial operation is not affected
+- **PDF account statements** — On-demand PDF generation for any client via `GET /api/reports/account-statement/:clientId`. The PDF is generated in memory and streamed directly to the browser — nothing is ever saved to disk
 
 ---
 
@@ -68,6 +71,7 @@ The project follows **Clean Architecture**, organized in three strict layers. In
 | **Strategy (Pricing)** | Pricing rules are interchangeable strategies. Adding a new pricing rule = one new class, no existing code touched |
 | **Domain Service (Pricing)** | `PricingService` lives in the domain layer — pure business logic, no framework or DB dependencies, fully unit-testable |
 | **Domain Events** | Use cases emit events after committing transactions. Subscribers handle side effects (notifications) asynchronously — financial operations never wait for or fail because of notifications |
+| **Domain Service (PDF)** | `PdfService` interface lives in the domain layer. `PdfkitPdfService` in infrastructure is the only file that knows about PDFKit. Replacing the PDF library requires changing only one file |
 
 ---
 
@@ -88,6 +92,7 @@ The project follows **Clean Architecture**, organized in three strict layers. In
 | CORS | `cors` |
 | Rate limiting | `express-rate-limit` |
 | Testing | Jest + ts-jest |
+| PDF generation | PDFKit |
 | Dev server | ts-node-dev |
 | Containerization | Docker Compose (PostgreSQL) |
 
@@ -134,18 +139,20 @@ credit-management-system/
 │   │       ├── audit-logs/        # GetAuditLogs, GetAuditLogsByClient
 │   │       ├── payments/          # CreatePayment, GetPayments, GetPaymentById, GetPaymentsByClient, GetPaymentsBySale
 │   │       ├── products/          # GetProducts, GetProductById, CreateProduct, UpdateProduct, AdjustStock, DeleteProduct, UploadProductImages, DeleteProductImage
+│   │       ├── reports/           # GenerateAccountStatement
 │   │       ├── sales/             # CreateSale, GetSales, GetSaleById, GetSalesByClient
 │   │       └── users/             # GetUsers, GetUserById, CreateUser, UpdateUser, ToggleUserStatus, ChangePassword
 │   ├── infrastructure/            # Implements domain interfaces (adapters)
 │   │   ├── datasources/           # PrismaAuthDatasource, PrismaClientDatasource, PrismaProductDatasource, PrismaUserDatasource, PrismaSaleDatasource, PrismaPaymentDatasource, PrismaAuditLogDatasource
 │   │   ├── repositories/          # AuthRepositoryImpl, ClientRepositoryImpl, ProductRepositoryImpl, UserRepositoryImpl, SaleRepositoryImpl, PaymentRepositoryImpl, AuditLogRepositoryImpl
-│   │   └── services/              # JwtAdapter, CloudinaryAdapter
+│   │   └── services/              # JwtAdapter, CloudinaryAdapter, TwilioWhatsAppService, NodemailerEmailService, PdfkitPdfService
 │   └── presentation/              # HTTP layer
 │       ├── auth/                  # AuthController, AuthRouter
 │       ├── audit-logs/            # AuditLogController, AuditLogRouter
 │       ├── clients/               # ClientController, ClientRouter
 │       ├── payments/              # PaymentController, PaymentRouter
 │       ├── products/              # ProductController, ProductRouter
+│       ├── reports/               # ReportController, ReportRouter
 │       ├── sales/                 # SaleController, SaleRouter
 │       ├── users/                 # UserController, UserRouter
 │       ├── middlewares/
@@ -930,6 +937,40 @@ Change a user's password.
 
 ---
 
+### Reports
+
+All report endpoints require `Authorization: Bearer <token>` and **`ADMIN` role**.
+
+#### GET `/api/reports/account-statement/:clientId`
+
+Generates and downloads the full account statement for a client as a PDF file.
+
+> **Requires `ADMIN` role.**
+
+**Response `200`:** Binary PDF file.
+
+| Header | Value |
+|--------|-------|
+| `Content-Type` | `application/pdf` |
+| `Content-Disposition` | `attachment; filename="estado-cuenta-{clientId}.pdf"` |
+
+**PDF contents:**
+1. **Header** — Business name, generation date and time, name of the user who generated it
+2. **Client info** — Name, phone, email, client ID
+3. **Credit usage bar** — Visual bar with percentage used: green (<50%), amber (50–80%), red (>80%). Shows debt, available credit, and limit
+4. **Sales table** — Each sale shows ID, date, type (Contado/Crédito), status (color-coded), and total. Sub-rows list each line item: product name, quantity, unit price, subtotal
+5. **Payments table** — Each payment shows ID, date, amount, note, and associated sale ID
+6. **Financial summary** — Three cards: total sales, total paid, current balance
+7. **Footer** — Exact generation timestamp, marked "Confidencial"
+
+**Automatic page breaks:** The generator checks available vertical space before each section and adds a new page if needed — tables are never cut mid-row.
+
+**Response `403`:** Not authenticated or not ADMIN.
+
+**Response `404`:** Client not found.
+
+---
+
 ### Error format
 
 All errors follow this consistent structure:
@@ -1038,7 +1079,7 @@ npm run db:seed         # Create default admin user
 | 6 | Audit log (atomic writes on balance changes + read API) | ✅ Done |
 | 7 | Pricing Domain Service (Strategy Pattern — differential pricing by sale type) | ✅ Done |
 | 8 | Notifications (WhatsApp via Twilio + email via Nodemailer, Domain Events pattern) | ✅ Done |
-| 9 | PDF reports (account statements) | Planned |
+| 9 | PDF reports (on-demand account statements + auto-attach on payment emails) | ✅ Done |
 | 10 | API improvements (pagination, filters, search) | Planned |
 
 ---
@@ -1108,9 +1149,11 @@ The HTTP response is already returned at step 2. Notifications never block the A
 | Channel | Triggered by | Content |
 |---------|-------------|---------|
 | WhatsApp | Payment registered | Confirms amount received, redirects to email |
-| Email | Payment registered | Amount, new balance, note, date, reference |
+| Email | Payment registered | Amount, new balance, note, date, reference + **PDF account statement attached** |
 | WhatsApp | Credit sale created | Confirms sale amount, redirects to email |
 | Email | Credit sale created | Total, new balance, date, sale reference |
+
+> **PDF attachment on payment emails:** When a payment is registered, the system automatically generates the client's full account statement as a PDF (in memory) and attaches it to the email. If PDF generation fails, the email is still sent without the attachment — the notification is never blocked by a PDF error.
 
 ### Enabling notifications
 
@@ -1135,4 +1178,47 @@ Both services are independent — you can enable only WhatsApp, only email, or b
 ```bash
 npm run db:studio   # Open Prisma Studio → NotificationLog table
 ```
+
+---
+
+## PDF Report System
+
+The PDF report module generates account statements fully in memory using **PDFKit**. The domain layer defines a `PdfService` interface — the presentation and domain layers are completely unaware of PDFKit. If the PDF library needs to change, only `src/infrastructure/services/pdfkit-pdf.service.ts` needs to be rewritten.
+
+### Two ways to get a PDF
+
+**1. On-demand via API (admin panel / staff use)**
+
+```http
+GET /api/reports/account-statement/:clientId
+Authorization: Bearer <admin-token>
+```
+
+The browser or API client receives the PDF as a binary download. No file is ever saved to the server.
+
+**2. Automatic attachment on payment emails (client-facing)**
+
+When `POST /api/payments` registers a payment, the `PaymentNotificationSubscriber` automatically:
+1. Generates the account statement PDF for that client (using the same use case as the endpoint)
+2. Attaches it to the confirmation email as `estado-cuenta-{clientId}.pdf`
+3. If PDF generation fails — the email still sends without attachment
+
+### Architecture
+
+```
+GET /api/reports/account-statement/:clientId
+  └── ReportController
+        └── GenerateAccountStatementUseCase
+              ├── ClientRepository.findById()
+              ├── SaleRepository.findByClientId()    ─┐ parallel
+              ├── PaymentRepository.findByClientId() ─┘
+              ├── ProductRepository.findById() ×N    (deduplicated, parallel)
+              └── PdfService.generateAccountStatement(data)
+                    └── PdfkitPdfService             (only file that knows about PDFKit)
+                          └── Buffer → HTTP response / email attachment
+```
+
+### Extending the PDF
+
+To add new sections to the PDF, edit only `src/infrastructure/services/pdfkit-pdf.service.ts`. The interface in `src/domain/services/pdf.service.ts` only changes if the data contract changes (e.g. adding a new field to `AccountStatementData`).
 

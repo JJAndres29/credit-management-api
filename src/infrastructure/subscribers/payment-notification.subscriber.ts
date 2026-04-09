@@ -2,6 +2,7 @@ import { EventEmitterPort, PAYMENT_REGISTERED, PaymentRegisteredData } from '../
 import { NotificationService } from '../../domain/services/notification.service';
 import { EmailService } from '../../domain/services/email.service';
 import { ClientRepository } from '../../domain/repositories';
+import { GenerateAccountStatementUseCase } from '../../domain/use-cases/reports';
 import { prisma } from '../../config/prisma';
 
 /**
@@ -47,6 +48,11 @@ export class PaymentNotificationSubscriber {
     private readonly clientRepository: ClientRepository,
     private readonly whatsAppService: NotificationService | null,
     private readonly emailService: EmailService | null,
+    /**
+     * Opcional: si se inyecta, el estado de cuenta en PDF se adjunta al email.
+     * Si no se inyecta, el email se envía sin adjunto (comportamiento anterior).
+     */
+    private readonly accountStatementUseCase?: GenerateAccountStatementUseCase,
   ) {
     this.eventEmitter.on(PAYMENT_REGISTERED, this.handle);
   }
@@ -84,6 +90,17 @@ export class PaymentNotificationSubscriber {
         paymentId,
       });
 
+      // Generar PDF del estado de cuenta si el use case está disponible.
+      // Si falla, se continúa sin adjunto — la notificación no se cancela.
+      let pdfBuffer: Buffer | undefined;
+      if (this.accountStatementUseCase) {
+        try {
+          pdfBuffer = await this.accountStatementUseCase.execute(clientId, 'Sistema');
+        } catch (pdfError) {
+          console.warn('[PaymentNotificationSubscriber] No se pudo generar el PDF adjunto:', pdfError);
+        }
+      }
+
       const tasks: Promise<void>[] = [];
 
       if (this.whatsAppService && client.phone) {
@@ -108,6 +125,15 @@ export class PaymentNotificationSubscriber {
                 to: client.email!,
                 subject: `Abono recibido — ${formattedAmount}`,
                 htmlBody: emailHtml,
+                attachments: pdfBuffer
+                  ? [
+                      {
+                        filename: `estado-cuenta-${clientId.slice(0, 8)}.pdf`,
+                        content: pdfBuffer,
+                        contentType: 'application/pdf',
+                      },
+                    ]
+                  : undefined,
               }),
           }),
         );
