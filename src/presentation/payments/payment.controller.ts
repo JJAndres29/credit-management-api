@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
 import { CustomError } from '../../domain/errors';
 import { UserEntity } from '../../domain/entities';
-import { CreatePaymentDto } from '../../domain/dtos/payments';
+import { CreatePaymentDto, FilterPaymentsDto } from '../../domain/dtos/payments';
+import { PaginationDto } from '../../domain/dtos/shared';
 import { CreatePaymentUseCase } from '../../domain/use-cases/payments/create-payment.use-case';
 import { GetPaymentsUseCase } from '../../domain/use-cases/payments/get-payments.use-case';
 import { GetPaymentByIdUseCase } from '../../domain/use-cases/payments/get-payment-by-id.use-case';
@@ -17,10 +18,16 @@ export class PaymentController {
     private readonly getPaymentsBySaleUseCase: GetPaymentsBySaleUseCase,
   ) {}
 
-  getAll = async (_req: Request, res: Response): Promise<void> => {
+  getAll = async (req: Request, res: Response): Promise<void> => {
+    const [pError, pagination] = PaginationDto.create(req.query as Record<string, unknown>);
+    if (pError) { res.status(400).json({ error: pError }); return; }
+
+    const [fError, filters] = FilterPaymentsDto.create(req.query as Record<string, unknown>);
+    if (fError) { res.status(400).json({ error: fError }); return; }
+
     try {
-      const payments = await this.getPaymentsUseCase.execute();
-      res.json(payments);
+      const result = await this.getPaymentsUseCase.execute(pagination!, filters!);
+      res.json(result);
     } catch (err) {
       this.handleError(err, res);
     }

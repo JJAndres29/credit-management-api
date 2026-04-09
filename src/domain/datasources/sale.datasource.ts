@@ -1,5 +1,8 @@
 import { SaleEntity, SaleType } from '../entities';
 import { AuditLogData } from './audit-log.datasource';
+import { FilterSalesDto } from '../dtos/sales';
+import { PaginationDto } from '../dtos/shared';
+import { PaginatedResult } from '../types/paginated.type';
 
 /**
  * Datos ya validados y enriquecidos que llegan desde el use case.
@@ -28,7 +31,7 @@ export interface SaleCreateData {
 }
 
 export interface SaleDatasource {
-  findAll(): Promise<SaleEntity[]>;
+  findAll(pagination: PaginationDto, filters: FilterSalesDto): Promise<PaginatedResult<SaleEntity>>;
   findById(id: string): Promise<SaleEntity | null>;
   findByClientId(clientId: string): Promise<SaleEntity[]>;
   /**

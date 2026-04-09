@@ -1,12 +1,15 @@
 import { SaleDatasource, SaleCreateData } from '../../domain/datasources/sale.datasource';
 import { SaleRepository } from '../../domain/repositories';
 import { SaleEntity } from '../../domain/entities';
+import { FilterSalesDto } from '../../domain/dtos/sales';
+import { PaginationDto } from '../../domain/dtos/shared';
+import { PaginatedResult } from '../../domain/types/paginated.type';
 
 export class SaleRepositoryImpl implements SaleRepository {
   constructor(private readonly datasource: SaleDatasource) {}
 
-  findAll(): Promise<SaleEntity[]> {
-    return this.datasource.findAll();
+  findAll(pagination: PaginationDto, filters: FilterSalesDto): Promise<PaginatedResult<SaleEntity>> {
+    return this.datasource.findAll(pagination, filters);
   }
 
   findById(id: string): Promise<SaleEntity | null> {

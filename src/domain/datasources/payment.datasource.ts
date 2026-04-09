@@ -1,5 +1,8 @@
 import { PaymentEntity } from '../entities';
 import { AuditLogData } from './audit-log.datasource';
+import { FilterPaymentsDto } from '../dtos/payments';
+import { PaginationDto } from '../dtos/shared';
+import { PaginatedResult } from '../types/paginated.type';
 
 /**
  * Datos ya validados y enriquecidos que llegan desde el use case.
@@ -19,7 +22,7 @@ export interface PaymentCreateData {
 }
 
 export interface PaymentDatasource {
-  findAll(): Promise<PaymentEntity[]>;
+  findAll(pagination: PaginationDto, filters: FilterPaymentsDto): Promise<PaginatedResult<PaymentEntity>>;
   findById(id: string): Promise<PaymentEntity | null>;
   findByClientId(clientId: string): Promise<PaymentEntity[]>;
   findBySaleId(saleId: string): Promise<PaymentEntity[]>;

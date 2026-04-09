@@ -1,8 +1,11 @@
 import { PaymentEntity } from '../entities';
 import { PaymentCreateData } from '../datasources/payment.datasource';
+import { FilterPaymentsDto } from '../dtos/payments';
+import { PaginationDto } from '../dtos/shared';
+import { PaginatedResult } from '../types/paginated.type';
 
 export interface PaymentRepository {
-  findAll(): Promise<PaymentEntity[]>;
+  findAll(pagination: PaginationDto, filters: FilterPaymentsDto): Promise<PaginatedResult<PaymentEntity>>;
   findById(id: string): Promise<PaymentEntity | null>;
   findByClientId(clientId: string): Promise<PaymentEntity[]>;
   findBySaleId(saleId: string): Promise<PaymentEntity[]>;

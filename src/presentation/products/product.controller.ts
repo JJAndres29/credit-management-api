@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { CustomError } from '../../domain/errors';
-import { CreateProductDto, UpdateProductDto, AdjustStockDto } from '../../domain/dtos/products';
+import { CreateProductDto, UpdateProductDto, AdjustStockDto, FilterProductsDto } from '../../domain/dtos/products';
+import { PaginationDto } from '../../domain/dtos/shared';
 import { GetProductsUseCase } from '../../domain/use-cases/products/get-products.use-case';
 import { GetProductByIdUseCase } from '../../domain/use-cases/products/get-product-by-id.use-case';
 import { CreateProductUseCase } from '../../domain/use-cases/products/create-product.use-case';
@@ -22,10 +23,16 @@ export class ProductController {
     private readonly deleteProductImageUseCase: DeleteProductImageUseCase,
   ) {}
 
-  getAll = async (_req: Request, res: Response): Promise<void> => {
+  getAll = async (req: Request, res: Response): Promise<void> => {
+    const [pError, pagination] = PaginationDto.create(req.query as Record<string, unknown>);
+    if (pError) { res.status(400).json({ error: pError }); return; }
+
+    const [fError, filters] = FilterProductsDto.create(req.query as Record<string, unknown>);
+    if (fError) { res.status(400).json({ error: fError }); return; }
+
     try {
-      const products = await this.getProductsUseCase.execute();
-      res.json(products);
+      const result = await this.getProductsUseCase.execute(pagination!, filters!);
+      res.json(result);
     } catch (err) {
       this.handleError(err, res);
     }

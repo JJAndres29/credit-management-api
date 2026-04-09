@@ -1,19 +1,52 @@
 import { prisma } from '../../config/prisma';
 import { PaymentDatasource, PaymentCreateData } from '../../domain/datasources/payment.datasource';
-import { PaymentEntity } from '../../domain/entities';
-import { SaleStatus } from '../../domain/entities';
+import { PaymentEntity, SaleStatus } from '../../domain/entities';
+import { FilterPaymentsDto } from '../../domain/dtos/payments';
+import { PaginationDto } from '../../domain/dtos/shared';
+import { PaginatedResult } from '../../domain/types/paginated.type';
 
 function mapToEntity(payment: Record<string, unknown>): PaymentEntity {
   return PaymentEntity.fromObject(payment);
 }
 
-export class PrismaPaymentDatasource implements PaymentDatasource {
-  async findAll(): Promise<PaymentEntity[]> {
-    const payments = await prisma.payment.findMany({
-      orderBy: { createdAt: 'desc' },
-    });
+function buildWhere(filters: FilterPaymentsDto) {
+  return {
+    ...(filters.clientId && { clientId: filters.clientId }),
+    ...(filters.saleId && { saleId: filters.saleId }),
+    ...((filters.dateFrom || filters.dateTo) && {
+      createdAt: {
+        ...(filters.dateFrom && { gte: filters.dateFrom }),
+        ...(filters.dateTo && { lte: filters.dateTo }),
+      },
+    }),
+  };
+}
 
-    return payments.map((p) => mapToEntity(p as unknown as Record<string, unknown>));
+export class PrismaPaymentDatasource implements PaymentDatasource {
+  async findAll(pagination: PaginationDto, filters: FilterPaymentsDto): Promise<PaginatedResult<PaymentEntity>> {
+    const where = buildWhere(filters);
+
+    const [payments, total] = await Promise.all([
+      prisma.payment.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        skip: pagination.skip,
+        take: pagination.limit,
+      }),
+      prisma.payment.count({ where }),
+    ]);
+
+    return {
+      data: payments.map((p) => mapToEntity(p as unknown as Record<string, unknown>)),
+      pagination: {
+        total,
+        page: pagination.page,
+        limit: pagination.limit,
+        totalPages: Math.ceil(total / pagination.limit),
+        hasNextPage: pagination.page * pagination.limit < total,
+        hasPrevPage: pagination.page > 1,
+      },
+    };
   }
 
   async findById(id: string): Promise<PaymentEntity | null> {

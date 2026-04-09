@@ -1,7 +1,8 @@
 import { Request, Response } from 'express';
 import { CustomError } from '../../domain/errors';
 import { UserEntity } from '../../domain/entities';
-import { CreateSaleDto } from '../../domain/dtos/sales';
+import { CreateSaleDto, FilterSalesDto } from '../../domain/dtos/sales';
+import { PaginationDto } from '../../domain/dtos/shared';
 import { CreateSaleUseCase } from '../../domain/use-cases/sales/create-sale.use-case';
 import { GetSalesUseCase } from '../../domain/use-cases/sales/get-sales.use-case';
 import { GetSaleByIdUseCase } from '../../domain/use-cases/sales/get-sale-by-id.use-case';
@@ -15,10 +16,16 @@ export class SaleController {
     private readonly getSalesByClientUseCase: GetSalesByClientUseCase,
   ) {}
 
-  getAll = async (_req: Request, res: Response): Promise<void> => {
+  getAll = async (req: Request, res: Response): Promise<void> => {
+    const [pError, pagination] = PaginationDto.create(req.query as Record<string, unknown>);
+    if (pError) { res.status(400).json({ error: pError }); return; }
+
+    const [fError, filters] = FilterSalesDto.create(req.query as Record<string, unknown>);
+    if (fError) { res.status(400).json({ error: fError }); return; }
+
     try {
-      const sales = await this.getSalesUseCase.execute();
-      res.json(sales);
+      const result = await this.getSalesUseCase.execute(pagination!, filters!);
+      res.json(result);
     } catch (err) {
       this.handleError(err, res);
     }

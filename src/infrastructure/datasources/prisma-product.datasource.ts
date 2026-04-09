@@ -1,8 +1,10 @@
 import { prisma } from '../../config/prisma';
 import { ProductDatasource } from '../../domain/datasources';
 import { ProductEntity } from '../../domain/entities';
-import { CreateProductDto, UpdateProductDto } from '../../domain/dtos/products';
+import { CreateProductDto, UpdateProductDto, FilterProductsDto } from '../../domain/dtos/products';
 import { UploadResult } from '../../domain/services/file-storage.service';
+import { PaginationDto } from '../../domain/dtos/shared';
+import { PaginatedResult } from '../../domain/types/paginated.type';
 
 const includeImages = {
   images: {
@@ -10,15 +12,51 @@ const includeImages = {
   },
 };
 
-export class PrismaProductDatasource implements ProductDatasource {
-  async findAll(): Promise<ProductEntity[]> {
-    const products = await prisma.product.findMany({
-      where: { isActive: true },
-      orderBy: { createdAt: 'desc' },
-      include: includeImages,
-    });
+function buildWhere(filters: FilterProductsDto) {
+  const priceFilter: Record<string, unknown> = {};
+  if (filters.minPrice !== undefined) priceFilter.gte = filters.minPrice;
+  if (filters.maxPrice !== undefined) priceFilter.lte = filters.maxPrice;
 
-    return products.map((p) => ProductEntity.fromObject(p as unknown as Record<string, unknown>));
+  const stockFilter: Record<string, unknown> = {};
+  if (filters.minStock !== undefined) stockFilter.gte = filters.minStock;
+  if (filters.maxStock !== undefined) stockFilter.lte = filters.maxStock;
+
+  return {
+    isActive: true,
+    ...(filters.search && {
+      name: { contains: filters.search, mode: 'insensitive' as const },
+    }),
+    ...(Object.keys(priceFilter).length > 0 && { price: priceFilter }),
+    ...(Object.keys(stockFilter).length > 0 && { stock: stockFilter }),
+  };
+}
+
+export class PrismaProductDatasource implements ProductDatasource {
+  async findAll(pagination: PaginationDto, filters: FilterProductsDto): Promise<PaginatedResult<ProductEntity>> {
+    const where = buildWhere(filters);
+
+    const [products, total] = await Promise.all([
+      prisma.product.findMany({
+        where,
+        orderBy: { createdAt: 'desc' },
+        include: includeImages,
+        skip: pagination.skip,
+        take: pagination.limit,
+      }),
+      prisma.product.count({ where }),
+    ]);
+
+    return {
+      data: products.map((p) => ProductEntity.fromObject(p as unknown as Record<string, unknown>)),
+      pagination: {
+        total,
+        page: pagination.page,
+        limit: pagination.limit,
+        totalPages: Math.ceil(total / pagination.limit),
+        hasNextPage: pagination.page * pagination.limit < total,
+        hasPrevPage: pagination.page > 1,
+      },
+    };
   }
 
   async findById(id: string): Promise<ProductEntity | null> {
