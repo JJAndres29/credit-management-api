@@ -3,3 +3,4 @@ export { CloudinaryAdapter } from './cloudinary.adapter';
 export { TwilioWhatsAppService } from './twilio-whatsapp.service';
 export { NodemailerEmailService } from './nodemailer-email.service';
 export { PdfkitPdfService } from './pdfkit-pdf.service';
+export { PinoLoggerService, globalLogger } from './pino-logger.service';

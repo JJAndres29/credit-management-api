@@ -1,5 +1,6 @@
 import express, { Application, NextFunction, Request, Response } from 'express';
 import { CustomError } from '../domain/errors';
+import { LoggerService } from '../domain/services/logger.service';
 import { AuthRouter } from './auth/auth.router';
 import { ClientRouter } from './clients/client.router';
 import { ProductRouter } from './products/product.router';
@@ -8,17 +9,22 @@ import { SaleRouter } from './sales/sale.router';
 import { PaymentRouter } from './payments/payment.router';
 import { AuditLogRouter } from './audit-logs/audit-log.router';
 import { ReportRouter } from './reports/report.router';
+import { HealthRouter } from './health/health.router';
 import helmet from 'helmet';
 import cors from 'cors';
 
 interface ServerOptions {
   port: number;
+  logger?: LoggerService;
 }
 
 export class Server {
   private readonly app: Application = express();
+  private readonly logger?: LoggerService;
 
-  constructor(private readonly options: ServerOptions) {}
+  constructor(private readonly options: ServerOptions) {
+    this.logger = options.logger;
+  }
 
   start(): void {
 
@@ -34,6 +40,8 @@ export class Server {
     this.app.use(express.json({ limit: '10kb' }) );
     this.app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
+    this.app.use('/health', HealthRouter.routes(this.logger));
+
     this.app.use('/api/auth', AuthRouter.routes);
     this.app.use('/api/clients', ClientRouter.routes);
     this.app.use('/api/products', ProductRouter.routes);
@@ -43,28 +51,23 @@ export class Server {
     this.app.use('/api/audit-logs', AuditLogRouter.routes);
     this.app.use('/api/reports', ReportRouter.routes);
 
-    this.app.get('/health', (_req: Request, res: Response) => {
-      res.json({ status: 'ok' });
-    });
-
     this.app.use(this.handleError);
 
     this.app.listen(this.options.port, () => {
-      console.log(`Server running on port ${this.options.port}`);
+      this.logger?.info(`Server running on port ${this.options.port}`, { port: this.options.port });
     });
   }
 
   private getAllowedOrigins(): string[] {
     const origins = process.env.ALLOWED_ORIGINS ?? '';
-    
+
     if (!origins) {
-      console.warn('⚠️  ALLOWED_ORIGINS no configurado — solo localhost permitido');
+      this.logger?.warn('ALLOWED_ORIGINS no configurado — solo localhost permitido');
       return ['http://localhost:4200', 'http://localhost:5173'];
     }
 
     return origins.split(',').map(o => o.trim());
   }
-
 
   private handleError = (err: unknown, _req: Request, res: Response, _next: NextFunction): void => {
     if (err instanceof CustomError) {
@@ -72,7 +75,7 @@ export class Server {
       return;
     }
 
-    console.error('[Unhandled error]', err);
+    this.logger?.error('[Unhandled error]', err);
     res.status(500).json({ error: 'Internal server error' });
   };
 }

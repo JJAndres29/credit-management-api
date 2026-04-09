@@ -94,8 +94,9 @@ The project follows **Clean Architecture**, organized in three strict layers. In
 | Rate limiting | `express-rate-limit` |
 | Testing | Jest + ts-jest |
 | PDF generation | PDFKit |
+| Logging | `pino` (JSON structured, ISO timestamps) |
 | Dev server | ts-node-dev |
-| Containerization | Docker Compose (PostgreSQL) |
+| Containerization | Docker (multi-stage, Node 20 Alpine) + Docker Compose (PostgreSQL) |
 
 ---
 
@@ -150,13 +151,14 @@ credit-management-system/
 │   ├── infrastructure/            # Implements domain interfaces (adapters)
 │   │   ├── datasources/           # PrismaAuthDatasource, PrismaClientDatasource, PrismaProductDatasource, PrismaUserDatasource, PrismaSaleDatasource, PrismaPaymentDatasource, PrismaAuditLogDatasource
 │   │   ├── repositories/          # AuthRepositoryImpl, ClientRepositoryImpl, ProductRepositoryImpl, UserRepositoryImpl, SaleRepositoryImpl, PaymentRepositoryImpl, AuditLogRepositoryImpl
-│   │   └── services/              # JwtAdapter, CloudinaryAdapter, TwilioWhatsAppService, NodemailerEmailService, PdfkitPdfService
+│   │   └── services/              # JwtAdapter, CloudinaryAdapter, TwilioWhatsAppService, NodemailerEmailService, PdfkitPdfService, PinoLoggerService
 │   └── presentation/              # HTTP layer
 │       ├── auth/                  # AuthController, AuthRouter
 │       ├── audit-logs/            # AuditLogController, AuditLogRouter
 │       ├── clients/               # ClientController, ClientRouter
 │       ├── payments/              # PaymentController, PaymentRouter
 │       ├── products/              # ProductController, ProductRouter
+│       ├── health/                # HealthRouter (GET /health — public, Prisma SELECT 1)
 │       ├── reports/               # ReportController, ReportRouter
 │       ├── sales/                 # SaleController, SaleRouter
 │       ├── users/                 # UserController, UserRouter
@@ -167,6 +169,8 @@ credit-management-system/
 │       │   └── upload.middleware.ts       # Multer: memory storage, file type + size validation
 │       └── server.ts              # Express app setup (helmet, cors, body limit, routes)
 ├── .env.template                  # Environment variables template
+├── Dockerfile                     # Multi-stage build (builder + production, Node 20 Alpine)
+├── .dockerignore
 ├── docker-compose.yml             # PostgreSQL 16 container
 ├── jest.config.js
 ├── tsconfig.json
