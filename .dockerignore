@@ -1,0 +1,30 @@
+# Dependencias locales — se reinstalan en el builder stage
+node_modules
+
+# Artefactos de compilación previos — el builder genera los suyos
+dist
+
+# Archivos de entorno — nunca deben entrar a la imagen
+.env
+.env.*
+!.env.example
+
+# Herramientas de desarrollo
+*.log
+npm-debug.log*
+
+# Cobertura de tests y reportes
+coverage
+.nyc_output
+
+# Metadatos de IDEs y SO
+.git
+.gitignore
+.DS_Store
+Thumbs.db
+.vscode
+.idea
+
+# Documentación (no necesaria en runtime)
+README.md
+CLAUDE.md
