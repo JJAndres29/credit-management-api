@@ -1,12 +1,15 @@
 import { PaymentRepository } from '../../domain/repositories';
 import { PaymentDatasource, PaymentCreateData } from '../../domain/datasources/payment.datasource';
 import { PaymentEntity } from '../../domain/entities';
+import { FilterPaymentsDto } from '../../domain/dtos/payments';
+import { PaginationDto } from '../../domain/dtos/shared';
+import { PaginatedResult } from '../../domain/types/paginated.type';
 
 export class PaymentRepositoryImpl implements PaymentRepository {
   constructor(private readonly datasource: PaymentDatasource) {}
 
-  findAll(): Promise<PaymentEntity[]> {
-    return this.datasource.findAll();
+  findAll(pagination: PaginationDto, filters: FilterPaymentsDto): Promise<PaginatedResult<PaymentEntity>> {
+    return this.datasource.findAll(pagination, filters);
   }
 
   findById(id: string): Promise<PaymentEntity | null> {

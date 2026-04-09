@@ -18,6 +18,7 @@
 - [Testing](#testing)
 - [Scripts](#scripts)
 - [Roadmap](#roadmap)
+- [Pagination & Filtering](#pagination--filtering)
 - [Pricing System](#pricing-system)
 - [Notification System](#notification-system)
 - [PDF Report System](#pdf-report-system)
@@ -113,12 +114,16 @@ credit-management-system/
 │   │   └── regular-exp.ts         # Shared regex patterns (email, strong password)
 │   ├── domain/                    # Pure business logic — no framework dependencies
 │   │   ├── datasources/           # Abstract datasource interfaces
+│   │   ├── types/
+│   │   │   └── paginated.type.ts  # PaginatedResult<T> generic — returned by all paginated endpoints
 │   │   ├── dtos/
 │   │   │   ├── auth/              # LoginDto
-│   │   │   ├── clients/           # CreateClientDto, UpdateClientDto
-│   │   │   ├── payments/          # CreatePaymentDto
-│   │   │   ├── products/          # CreateProductDto, UpdateProductDto, AdjustStockDto
-│   │   │   ├── sales/             # CreateSaleDto (items array, type CASH|CREDIT)
+│   │   │   ├── clients/           # CreateClientDto, UpdateClientDto, FilterClientsDto
+│   │   │   ├── payments/          # CreatePaymentDto, FilterPaymentsDto
+│   │   │   ├── products/          # CreateProductDto, UpdateProductDto, AdjustStockDto, FilterProductsDto
+│   │   │   ├── sales/             # CreateSaleDto, FilterSalesDto
+│   │   │   ├── shared/            # PaginationDto (page, limit, skip getter)
+│   │   │   ├── audit-logs/        # FilterAuditLogsDto
 │   │   │   └── users/             # CreateUserDto, UpdateUserDto, ChangePasswordDto
 │   │   ├── entities/              # UserEntity, ClientEntity, ProductEntity, ProductImageEntity, SaleEntity, SaleItemEntity, PaymentEntity
 │   │   ├── errors/                # CustomError with HTTP status factory methods
@@ -380,31 +385,53 @@ All product endpoints require `Authorization: Bearer <token>`.
 
 #### GET `/api/products`
 
-Returns all active products with their images, sorted by creation date (newest first).
+Returns active products with their images, sorted by creation date (newest first). Supports pagination and filters.
+
+**Query parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `page` | integer | Page number (default: `1`) |
+| `limit` | integer | Items per page (default: `20`, max: `100`) |
+| `search` | string | Filter by product name (case-insensitive) |
+| `minPrice` | number | Minimum price |
+| `maxPrice` | number | Maximum price |
+| `minStock` | integer | Minimum stock |
+| `maxStock` | integer | Maximum stock |
 
 **Response `200`:**
 ```json
-[
-  {
-    "id": "uuid",
-    "name": "Camisa Azul",
-    "price": 45000,
-    "stock": 100,
-    "images": [
-      {
-        "id": "uuid",
-        "productId": "uuid",
-        "url": "https://res.cloudinary.com/...",
-        "publicId": "products/abc123",
-        "order": 0,
-        "createdAt": "2026-04-07T00:00:00.000Z"
-      }
-    ],
-    "isActive": true,
-    "createdAt": "2026-04-07T00:00:00.000Z",
-    "updatedAt": "2026-04-07T00:00:00.000Z"
+{
+  "data": [
+    {
+      "id": "uuid",
+      "name": "Camisa Azul",
+      "price": 45000,
+      "stock": 100,
+      "images": [
+        {
+          "id": "uuid",
+          "productId": "uuid",
+          "url": "https://res.cloudinary.com/...",
+          "publicId": "products/abc123",
+          "order": 0,
+          "createdAt": "2026-04-07T00:00:00.000Z"
+        }
+      ],
+      "isActive": true,
+      "createdAt": "2026-04-07T00:00:00.000Z",
+      "updatedAt": "2026-04-07T00:00:00.000Z"
+    }
+  ],
+  "pagination": {
+    "total": 42,
+    "page": 1,
+    "limit": 20,
+    "totalPages": 3,
+    "hasNextPage": true,
+    "hasPrevPage": false
   }
-]
+}
 ```
 
 ---
@@ -527,23 +554,44 @@ All client endpoints require `Authorization: Bearer <token>`.
 
 #### GET `/api/clients`
 
-Returns all active clients, sorted by creation date (newest first).
+Returns active clients, sorted by creation date (newest first). Supports pagination and filters.
+
+**Query parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `page` | integer | Page number (default: `1`) |
+| `limit` | integer | Items per page (default: `20`, max: `100`) |
+| `search` | string | Filter by name, phone, or email (case-insensitive) |
+| `minBalance` | number | Minimum balance |
+| `maxBalance` | number | Maximum balance |
+| `hasDebt` | boolean | `true` = clients with balance > 0; `false` = clients with balance = 0 |
 
 **Response `200`:**
 ```json
-[
-  {
-    "id": "uuid",
-    "name": "María García",
-    "phone": "3001234567",
-    "email": "maria@ejemplo.com",
-    "creditLimit": 500000,
-    "balance": 150000,
-    "isActive": true,
-    "createdAt": "2026-04-06T00:00:00.000Z",
-    "updatedAt": "2026-04-06T00:00:00.000Z"
+{
+  "data": [
+    {
+      "id": "uuid",
+      "name": "María García",
+      "phone": "3001234567",
+      "email": "maria@ejemplo.com",
+      "creditLimit": 500000,
+      "balance": 150000,
+      "isActive": true,
+      "createdAt": "2026-04-06T00:00:00.000Z",
+      "updatedAt": "2026-04-06T00:00:00.000Z"
+    }
+  ],
+  "pagination": {
+    "total": 18,
+    "page": 1,
+    "limit": 20,
+    "totalPages": 1,
+    "hasNextPage": false,
+    "hasPrevPage": false
   }
-]
+}
 ```
 
 ---
@@ -611,30 +659,52 @@ All sales endpoints require `Authorization: Bearer <token>`. Any authenticated u
 
 #### GET `/api/sales`
 
-Returns all sales with their line items, sorted by creation date (newest first).
+Returns sales with their line items, sorted by creation date (newest first). Supports pagination and filters.
+
+**Query parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `page` | integer | Page number (default: `1`) |
+| `limit` | integer | Items per page (default: `20`, max: `100`) |
+| `clientId` | string | Filter by client ID |
+| `type` | string | `CASH` or `CREDIT` |
+| `status` | string | `PAID`, `PENDING`, or `PARTIAL` |
+| `dateFrom` | string | ISO 8601 date — start of range (inclusive) |
+| `dateTo` | string | ISO 8601 date — end of range (inclusive, adjusted to 23:59:59) |
 
 **Response `200`:**
 ```json
-[
-  {
-    "id": "uuid",
-    "clientId": "uuid",
-    "type": "CREDIT",
-    "status": "PENDING",
-    "total": 135000,
-    "createdAt": "2026-04-08T00:00:00.000Z",
-    "items": [
-      {
-        "id": "uuid",
-        "saleId": "uuid",
-        "productId": "uuid",
-        "quantity": 3,
-        "unitPrice": 45000,
-        "subtotal": 135000
-      }
-    ]
+{
+  "data": [
+    {
+      "id": "uuid",
+      "clientId": "uuid",
+      "type": "CREDIT",
+      "status": "PENDING",
+      "total": 135000,
+      "createdAt": "2026-04-08T00:00:00.000Z",
+      "items": [
+        {
+          "id": "uuid",
+          "saleId": "uuid",
+          "productId": "uuid",
+          "quantity": 3,
+          "unitPrice": 45000,
+          "subtotal": 135000
+        }
+      ]
+    }
+  ],
+  "pagination": {
+    "total": 63,
+    "page": 1,
+    "limit": 20,
+    "totalPages": 4,
+    "hasNextPage": true,
+    "hasPrevPage": false
   }
-]
+}
 ```
 
 ---
@@ -699,20 +769,41 @@ All payment endpoints require `Authorization: Bearer <token>`. Any authenticated
 
 #### GET `/api/payments`
 
-Returns all payments, sorted by creation date (newest first).
+Returns payments, sorted by creation date (newest first). Supports pagination and filters.
+
+**Query parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `page` | integer | Page number (default: `1`) |
+| `limit` | integer | Items per page (default: `20`, max: `100`) |
+| `clientId` | string | Filter by client ID |
+| `saleId` | string | Filter by sale ID |
+| `dateFrom` | string | ISO 8601 date — start of range (inclusive) |
+| `dateTo` | string | ISO 8601 date — end of range (inclusive) |
 
 **Response `200`:**
 ```json
-[
-  {
-    "id": "uuid",
-    "clientId": "uuid",
-    "saleId": "uuid",
-    "amount": 50000,
-    "note": "Abono parcial",
-    "createdAt": "2026-04-08T00:00:00.000Z"
+{
+  "data": [
+    {
+      "id": "uuid",
+      "clientId": "uuid",
+      "saleId": "uuid",
+      "amount": 50000,
+      "note": "Abono parcial",
+      "createdAt": "2026-04-08T00:00:00.000Z"
+    }
+  ],
+  "pagination": {
+    "total": 31,
+    "page": 1,
+    "limit": 20,
+    "totalPages": 2,
+    "hasNextPage": true,
+    "hasPrevPage": false
   }
-]
+}
 ```
 
 ---
@@ -780,24 +871,46 @@ Audit log entries are created automatically inside the atomic transactions of cr
 
 #### GET `/api/audit-logs`
 
-Returns all audit log entries, sorted by creation date (newest first).
+Returns audit log entries, sorted by creation date (newest first). Supports pagination and filters.
 
 > **Requires `ADMIN` role.**
 
+**Query parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `page` | integer | Page number (default: `1`) |
+| `limit` | integer | Items per page (default: `20`, max: `100`) |
+| `clientId` | string | Filter by client ID |
+| `userId` | string | Filter by user (staff member) who triggered the operation |
+| `action` | string | `CREDIT_SALE` or `PAYMENT` |
+| `dateFrom` | string | ISO 8601 date — start of range (inclusive) |
+| `dateTo` | string | ISO 8601 date — end of range (inclusive) |
+
 **Response `200`:**
 ```json
-[
-  {
-    "id": "uuid",
-    "clientId": "uuid",
-    "userId": "uuid",
-    "action": "PAYMENT",
-    "before": 150000,
-    "after": 100000,
-    "ip": "::1",
-    "createdAt": "2026-04-08T00:00:00.000Z"
+{
+  "data": [
+    {
+      "id": "uuid",
+      "clientId": "uuid",
+      "userId": "uuid",
+      "action": "PAYMENT",
+      "before": 150000,
+      "after": 100000,
+      "ip": "::1",
+      "createdAt": "2026-04-08T00:00:00.000Z"
+    }
+  ],
+  "pagination": {
+    "total": 9,
+    "page": 1,
+    "limit": 20,
+    "totalPages": 1,
+    "hasNextPage": false,
+    "hasPrevPage": false
   }
-]
+}
 ```
 
 | `action` value | Meaning |
@@ -1080,7 +1193,50 @@ npm run db:seed         # Create default admin user
 | 7 | Pricing Domain Service (Strategy Pattern — differential pricing by sale type) | ✅ Done |
 | 8 | Notifications (WhatsApp via Twilio + email via Nodemailer, Domain Events pattern) | ✅ Done |
 | 9 | PDF reports (on-demand account statements + auto-attach on payment emails) | ✅ Done |
-| 10 | API improvements (pagination, filters, search) | Planned |
+| 10 | API improvements (pagination, filters, search) | ✅ Done |
+
+---
+
+## Pagination & Filtering
+
+Every `GET /` listing endpoint supports optional pagination and module-specific filters via query string. No change to the URL path — only query parameters differ.
+
+### Response shape (all paginated endpoints)
+
+```json
+{
+  "data": [...],
+  "pagination": {
+    "total": 47,
+    "page": 2,
+    "limit": 10,
+    "totalPages": 5,
+    "hasNextPage": true,
+    "hasPrevPage": true
+  }
+}
+```
+
+### Pagination parameters (all modules)
+
+| Parameter | Default | Max | Description |
+|-----------|---------|-----|-------------|
+| `page` | `1` | — | Page number (1-indexed) |
+| `limit` | `20` | `100` | Items per page |
+
+### Filter quick reference
+
+```
+GET /api/clients?search=maria&hasDebt=true&page=1&limit=10
+GET /api/products?search=camisa&maxStock=5
+GET /api/sales?type=CREDIT&status=PENDING&dateFrom=2026-01-01&dateTo=2026-04-30
+GET /api/payments?clientId=uuid&dateFrom=2026-04-01
+GET /api/audit-logs?action=PAYMENT&userId=uuid&limit=50
+```
+
+### Architecture
+
+Filters follow Clean Architecture: `req.query` → `PaginationDto` + `FilterXxxDto` (validation in domain layer) → Use Case → Repository → Prisma datasource (`buildWhere()` translates DTOs to Prisma `where`). `findMany` and `count` run in parallel via `Promise.all` — one database round trip per request.
 
 ---
 

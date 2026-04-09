@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { CustomError } from '../../domain/errors';
-import { CreateClientDto, UpdateClientDto } from '../../domain/dtos/clients';
+import { CreateClientDto, UpdateClientDto, FilterClientsDto } from '../../domain/dtos/clients';
+import { PaginationDto } from '../../domain/dtos/shared';
 import { CreateClientUseCase } from '../../domain/use-cases/clients/create-client.use-case';
 import { GetClientsUseCase } from '../../domain/use-cases/clients/get-clients.use-case';
 import { GetClientByIdUseCase } from '../../domain/use-cases/clients/get-client-by-id.use-case';
@@ -16,10 +17,16 @@ export class ClientController {
     private readonly deleteClientUseCase: DeleteClientUseCase,
   ) {}
 
-  getAll = async (_req: Request, res: Response): Promise<void> => {
+  getAll = async (req: Request, res: Response): Promise<void> => {
+    const [pError, pagination] = PaginationDto.create(req.query as Record<string, unknown>);
+    if (pError) { res.status(400).json({ error: pError }); return; }
+
+    const [fError, filters] = FilterClientsDto.create(req.query as Record<string, unknown>);
+    if (fError) { res.status(400).json({ error: fError }); return; }
+
     try {
-      const clients = await this.getClientsUseCase.execute();
-      res.json(clients);
+      const result = await this.getClientsUseCase.execute(pagination!, filters!);
+      res.json(result);
     } catch (err) {
       this.handleError(err, res);
     }

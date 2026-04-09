@@ -1,6 +1,9 @@
 import { prisma } from '../../config/prisma';
 import { SaleDatasource, SaleCreateData } from '../../domain/datasources/sale.datasource';
 import { SaleEntity, SaleType, SaleStatus } from '../../domain/entities';
+import { FilterSalesDto } from '../../domain/dtos/sales';
+import { PaginationDto } from '../../domain/dtos/shared';
+import { PaginatedResult } from '../../domain/types/paginated.type';
 
 // Inclusión de ítems en todas las consultas de venta
 const SALE_WITH_ITEMS = {
@@ -11,14 +14,46 @@ function mapToEntity(sale: Record<string, unknown>): SaleEntity {
   return SaleEntity.fromObject(sale);
 }
 
-export class PrismaSaleDatasource implements SaleDatasource {
-  async findAll(): Promise<SaleEntity[]> {
-    const sales = await prisma.sale.findMany({
-      include: SALE_WITH_ITEMS,
-      orderBy: { createdAt: 'desc' },
-    });
+function buildWhere(filters: FilterSalesDto) {
+  return {
+    ...(filters.clientId && { clientId: filters.clientId }),
+    ...(filters.type && { type: filters.type }),
+    ...(filters.status && { status: filters.status }),
+    ...((filters.dateFrom || filters.dateTo) && {
+      createdAt: {
+        ...(filters.dateFrom && { gte: filters.dateFrom }),
+        ...(filters.dateTo && { lte: filters.dateTo }),
+      },
+    }),
+  };
+}
 
-    return sales.map((sale) => mapToEntity(sale as unknown as Record<string, unknown>));
+export class PrismaSaleDatasource implements SaleDatasource {
+  async findAll(pagination: PaginationDto, filters: FilterSalesDto): Promise<PaginatedResult<SaleEntity>> {
+    const where = buildWhere(filters);
+
+    const [sales, total] = await Promise.all([
+      prisma.sale.findMany({
+        where,
+        include: SALE_WITH_ITEMS,
+        orderBy: { createdAt: 'desc' },
+        skip: pagination.skip,
+        take: pagination.limit,
+      }),
+      prisma.sale.count({ where }),
+    ]);
+
+    return {
+      data: sales.map((s) => mapToEntity(s as unknown as Record<string, unknown>)),
+      pagination: {
+        total,
+        page: pagination.page,
+        limit: pagination.limit,
+        totalPages: Math.ceil(total / pagination.limit),
+        hasNextPage: pagination.page * pagination.limit < total,
+        hasPrevPage: pagination.page > 1,
+      },
+    };
   }
 
   async findById(id: string): Promise<SaleEntity | null> {

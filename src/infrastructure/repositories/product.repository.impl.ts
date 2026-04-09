@@ -1,14 +1,16 @@
 import { ProductDatasource } from '../../domain/datasources';
 import { ProductRepository } from '../../domain/repositories';
 import { ProductEntity } from '../../domain/entities';
-import { CreateProductDto, UpdateProductDto } from '../../domain/dtos/products';
+import { CreateProductDto, UpdateProductDto, FilterProductsDto } from '../../domain/dtos/products';
 import { UploadResult } from '../../domain/services/file-storage.service';
+import { PaginationDto } from '../../domain/dtos/shared';
+import { PaginatedResult } from '../../domain/types/paginated.type';
 
 export class ProductRepositoryImpl implements ProductRepository {
   constructor(private readonly datasource: ProductDatasource) {}
 
-  findAll(): Promise<ProductEntity[]> {
-    return this.datasource.findAll();
+  findAll(pagination: PaginationDto, filters: FilterProductsDto): Promise<PaginatedResult<ProductEntity>> {
+    return this.datasource.findAll(pagination, filters);
   }
 
   findById(id: string): Promise<ProductEntity | null> {

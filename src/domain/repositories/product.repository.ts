@@ -1,9 +1,11 @@
 import { ProductEntity } from '../entities';
-import { CreateProductDto, UpdateProductDto } from '../dtos/products';
+import { CreateProductDto, UpdateProductDto, FilterProductsDto } from '../dtos/products';
 import { UploadResult } from '../services/file-storage.service';
+import { PaginationDto } from '../dtos/shared';
+import { PaginatedResult } from '../types/paginated.type';
 
 export interface ProductRepository {
-  findAll(): Promise<ProductEntity[]>;
+  findAll(pagination: PaginationDto, filters: FilterProductsDto): Promise<PaginatedResult<ProductEntity>>;
   findById(id: string): Promise<ProductEntity | null>;
   create(dto: CreateProductDto): Promise<ProductEntity>;
   update(id: string, dto: UpdateProductDto): Promise<ProductEntity>;

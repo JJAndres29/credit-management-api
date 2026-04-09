@@ -1,5 +1,7 @@
 import { Request, Response } from 'express';
 import { CustomError } from '../../domain/errors';
+import { FilterAuditLogsDto } from '../../domain/dtos/audit-logs';
+import { PaginationDto } from '../../domain/dtos/shared';
 import { GetAuditLogsUseCase } from '../../domain/use-cases/audit-logs/get-audit-logs.use-case';
 import { GetAuditLogsByClientUseCase } from '../../domain/use-cases/audit-logs/get-audit-logs-by-client.use-case';
 
@@ -9,10 +11,16 @@ export class AuditLogController {
     private readonly getAuditLogsByClientUseCase: GetAuditLogsByClientUseCase,
   ) {}
 
-  getAll = async (_req: Request, res: Response): Promise<void> => {
+  getAll = async (req: Request, res: Response): Promise<void> => {
+    const [pError, pagination] = PaginationDto.create(req.query as Record<string, unknown>);
+    if (pError) { res.status(400).json({ error: pError }); return; }
+
+    const [fError, filters] = FilterAuditLogsDto.create(req.query as Record<string, unknown>);
+    if (fError) { res.status(400).json({ error: fError }); return; }
+
     try {
-      const logs = await this.getAuditLogsUseCase.execute();
-      res.json(logs);
+      const result = await this.getAuditLogsUseCase.execute(pagination!, filters!);
+      res.json(result);
     } catch (err) {
       this.handleError(err, res);
     }

@@ -1,13 +1,15 @@
 import { ClientDatasource } from '../../domain/datasources';
 import { ClientRepository } from '../../domain/repositories';
 import { ClientEntity } from '../../domain/entities';
-import { CreateClientDto, UpdateClientDto } from '../../domain/dtos/clients';
+import { CreateClientDto, UpdateClientDto, FilterClientsDto } from '../../domain/dtos/clients';
+import { PaginationDto } from '../../domain/dtos/shared';
+import { PaginatedResult } from '../../domain/types/paginated.type';
 
 export class ClientRepositoryImpl implements ClientRepository {
   constructor(private readonly datasource: ClientDatasource) {}
 
-  findAll(): Promise<ClientEntity[]> {
-    return this.datasource.findAll();
+  findAll(pagination: PaginationDto, filters: FilterClientsDto): Promise<PaginatedResult<ClientEntity>> {
+    return this.datasource.findAll(pagination, filters);
   }
 
   findById(id: string): Promise<ClientEntity | null> {

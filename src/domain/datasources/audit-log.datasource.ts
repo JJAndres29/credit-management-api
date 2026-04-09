@@ -1,4 +1,7 @@
 import { AuditLogEntity } from '../entities';
+import { FilterAuditLogsDto } from '../dtos/audit-logs';
+import { PaginationDto } from '../dtos/shared';
+import { PaginatedResult } from '../types/paginated.type';
 
 /**
  * Datos necesarios para crear un registro de auditoría dentro de una transacción.
@@ -19,6 +22,6 @@ export interface AuditLogData {
  * por eso este datasource solo expone métodos de consulta.
  */
 export interface AuditLogDatasource {
-  findAll(): Promise<AuditLogEntity[]>;
+  findAll(pagination: PaginationDto, filters: FilterAuditLogsDto): Promise<PaginatedResult<AuditLogEntity>>;
   findByClientId(clientId: string): Promise<AuditLogEntity[]>;
 }
