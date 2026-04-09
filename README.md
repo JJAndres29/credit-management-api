@@ -1148,19 +1148,19 @@ npm test              # Run all tests
 npm run test:watch    # Watch mode (re-runs on file save)
 ```
 
-### Current coverage
+### Current coverage — 115 tests across 7 suites
 
-| Module | Unit tests |
-|--------|-----------|
-| `LoginUseCase` | Covered — invalid user, inactive user, wrong password, success, token payload, password not exposed |
-| `RenewTokenUseCase` | Covered — invalid user, inactive user, success |
-| Pricing strategies | Pending (high priority — pure domain logic, no mocks needed) |
-| User use cases | Pending |
-| Client use cases | Pending |
-| Product use cases | Pending |
-| Sales use cases | Pending |
-| Payments use cases | Pending |
-| DTOs | Pending |
+| Module | File | Tests |
+|--------|------|-------|
+| `LoginUseCase` | `src/domain/use-cases/auth/login.use-case.test.ts` | 6 — invalid user, inactive user, wrong password, success, token payload, password not exposed |
+| `RenewTokenUseCase` | `src/domain/use-cases/auth/renew-token.use-case.test.ts` | 5 — invalid user, inactive user, success, payload, password not exposed |
+| `CashPricingStrategy` / `CreditPricingStrategy` / `PricingService` | `src/domain/services/pricing/pricing.test.ts` | 27 — appliesTo, calculations at 0/15/100%, rounding, priority selection, routing |
+| `CreateSaleUseCase` | `src/domain/use-cases/sales/create-sale.use-case.test.ts` | 21 — client/product not found, inactive product, insufficient stock/credit, CASH (no event, no auditLog), CREDIT (event emitted, auditLog with before/after) |
+| `CreatePaymentUseCase` | `src/domain/use-cases/payments/create-payment.use-case.test.ts` | 22 — inactive client, amount > balance, foreign sale (403), PAID sale, overpayment, full/partial/general payment, auditLog, PAYMENT_REGISTERED event |
+| `PaymentNotificationSubscriber` / `SaleNotificationSubscriber` | `src/infrastructure/subscribers/notification-subscribers.test.ts` | 25 — resilience (each channel independent), FAILED logs with errorMessage, PDF fallback, throttle (4th notification blocked), client with no phone/email, client not found in DB |
+| `GenerateAccountStatementUseCase` | `src/domain/use-cases/reports/generate-account-statement.use-case.test.ts` | 20 — client not found, parallel queries, client with no sales, product deduplication across sales, fallback name for deleted products, generatedBy propagated, Buffer returned |
+| User / Client / Product use cases | — | Pending |
+| DTOs | — | Pending |
 
 ---
 

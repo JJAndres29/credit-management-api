@@ -34,8 +34,8 @@ export class CreditPricingStrategy implements PricingStrategy {
 
   calculate(context: PricingContext): PricingResult {
     const basePrice = context.product.price;
-    const surchargeAmount = basePrice * (this.surchargePercent / 100);
-    const unitPrice = basePrice + surchargeAmount;
+    const surchargeAmount = Math.round(basePrice * (this.surchargePercent / 100) * 100) / 100;
+    const unitPrice = Math.round((basePrice + surchargeAmount) * 100) / 100;
 
     return {
       basePrice,
