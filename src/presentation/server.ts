@@ -79,3 +79,4 @@ export class Server {
     res.status(500).json({ error: 'Internal server error' });
   };
 }
+
