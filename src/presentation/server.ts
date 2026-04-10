@@ -53,7 +53,7 @@ export class Server {
 
     this.app.use(this.handleError);
 
-    this.app.listen(this.options.port, () => {
+    this.app.listen(this.options.port,'0.0.0.0', () => {
       this.logger?.info(`Server running on port ${this.options.port}`, { port: this.options.port });
     });
   }
