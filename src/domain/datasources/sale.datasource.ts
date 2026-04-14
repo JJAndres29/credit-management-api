@@ -1,4 +1,4 @@
-import { SaleEntity, SaleType } from '../entities';
+import { SaleEntity, SaleType, InstallmentFrequency } from '../entities';
 import { AuditLogData } from './audit-log.datasource';
 import { FilterSalesDto } from '../dtos/sales';
 import { PaginationDto } from '../dtos/shared';
@@ -11,6 +11,9 @@ import { PaginatedResult } from '../types/paginated.type';
  *
  * `auditLog` solo se incluye en ventas CREDIT porque son las únicas que modifican
  * el balance del cliente. Las ventas CASH no generan cambio de balance.
+ *
+ * Los campos de cuotas (`installmentsCount`, `frequency`, `installmentAmount`) son
+ * opcionales y solo se incluyen cuando la venta tiene un plan de cuotas definido.
  */
 export interface SaleCreateData {
   clientId: string;
@@ -28,6 +31,12 @@ export interface SaleCreateData {
     appliedRule: string;
   }[];
   auditLog?: AuditLogData;
+  /** Número de cuotas pactadas. Solo presente si la venta tiene plan de cuotas. */
+  installmentsCount?: number;
+  /** Periodicidad del pago (MONTHLY | BIWEEKLY). Solo presente si hay plan de cuotas. */
+  frequency?: InstallmentFrequency;
+  /** Monto por cuota = total / installmentsCount. Calculado por InstallmentCalculatorService. */
+  installmentAmount?: number;
 }
 
 export interface SaleDatasource {

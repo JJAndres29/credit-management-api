@@ -1,4 +1,4 @@
-import { SaleType } from '../../entities';
+import { SaleType, InstallmentFrequency } from '../../entities';
 
 export interface CreateSaleItemDto {
   productId: string;
@@ -10,10 +10,20 @@ export class CreateSaleDto {
     public readonly clientId: string,
     public readonly type: SaleType,
     public readonly items: CreateSaleItemDto[],
+    /**
+     * Número de cuotas para ventas a crédito. Mínimo 2.
+     * Undefined cuando la venta no tiene plan de cuotas.
+     */
+    public readonly installmentsCount: number | undefined,
+    /**
+     * Periodicidad de pago: MONTHLY (mensual) o BIWEEKLY (quincenal).
+     * Undefined cuando la venta no tiene plan de cuotas.
+     */
+    public readonly frequency: InstallmentFrequency | undefined,
   ) {}
 
   static create(object: Record<string, unknown>): [string?, CreateSaleDto?] {
-    const { clientId, type, items } = object;
+    const { clientId, type, items, installmentsCount, frequency } = object;
 
     if (!clientId || typeof clientId !== 'string' || clientId.trim().length === 0) {
       return ['El ID del cliente es requerido'];
@@ -47,6 +57,37 @@ export class CreateSaleDto {
       return ['No se pueden repetir productos en una misma venta'];
     }
 
+    // --- Validación de campos de cuotas ---
+    // Los campos solo son válidos en ventas a crédito. Si se envían en ventas CASH
+    // se rechaza el request para evitar ambigüedad en el intento del cliente.
+    const hasInstallmentsCount = installmentsCount !== undefined && installmentsCount !== null;
+    const hasFrequency = frequency !== undefined && frequency !== null;
+
+    if ((hasInstallmentsCount || hasFrequency) && type !== SaleType.CREDIT) {
+      return ['Los campos de cuotas (installmentsCount, frequency) solo aplican a ventas de tipo CREDIT'];
+    }
+
+    if (hasInstallmentsCount !== hasFrequency) {
+      return ['Debes proporcionar tanto installmentsCount como frequency para definir un plan de cuotas'];
+    }
+
+    let parsedInstallmentsCount: number | undefined;
+    let parsedFrequency: InstallmentFrequency | undefined;
+
+    if (hasInstallmentsCount) {
+      if (typeof installmentsCount !== 'number' || !Number.isInteger(installmentsCount) || installmentsCount < 2) {
+        return ['installmentsCount debe ser un número entero mayor o igual a 2'];
+      }
+
+      const validFrequencies = Object.values(InstallmentFrequency);
+      if (!validFrequencies.includes(frequency as InstallmentFrequency)) {
+        return [`frequency debe ser: ${validFrequencies.join(' | ')}`];
+      }
+
+      parsedInstallmentsCount = installmentsCount as number;
+      parsedFrequency = frequency as InstallmentFrequency;
+    }
+
     return [
       undefined,
       new CreateSaleDto(
@@ -56,6 +97,8 @@ export class CreateSaleDto {
           productId: (i.productId as string).trim(),
           quantity: i.quantity as number,
         })),
+        parsedInstallmentsCount,
+        parsedFrequency,
       ),
     ];
   }
