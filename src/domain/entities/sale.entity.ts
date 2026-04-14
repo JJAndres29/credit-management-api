@@ -42,11 +42,11 @@ export class SaleEntity {
     public readonly createdAt: Date,
     public readonly items: SaleItemEntity[],
     /** Número de cuotas pactadas. Null si la venta no tiene plan de cuotas. */
-    public readonly installmentsCount: number | null,
+    public readonly installmentsCount: number | null = null,
     /** Periodicidad de pago. Null si la venta no tiene plan de cuotas. */
-    public readonly frequency: InstallmentFrequency | null,
+    public readonly frequency: InstallmentFrequency | null = null,
     /** Monto de cada cuota = total / installmentsCount. Null si no aplica. */
-    public readonly installmentAmount: number | null,
+    public readonly installmentAmount: number | null = null,
   ) {}
 
   static fromObject(object: Record<string, unknown>): SaleEntity {
