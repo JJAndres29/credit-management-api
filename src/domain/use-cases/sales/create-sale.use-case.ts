@@ -5,6 +5,7 @@ import { SaleRepository } from '../../repositories';
 import { ClientRepository } from '../../repositories';
 import { ProductRepository } from '../../repositories';
 import { PricingService } from '../../services/pricing';
+import { InstallmentCalculatorService } from '../../services/installments';
 import { EventEmitterPort, CREDIT_SALE_CREATED } from '../../events';
 
 export class CreateSaleUseCase {
@@ -23,6 +24,12 @@ export class CreateSaleUseCase {
      * sin romper la lógica de negocio ni los tests existentes.
      */
     private readonly eventEmitter?: EventEmitterPort,
+    /**
+     * Domain Service para el cálculo del monto de cada cuota.
+     * Tiene un valor por defecto para no romper tests ni llamadas existentes.
+     * El composition root (sale.router.ts) lo instancia explícitamente.
+     */
+    private readonly installmentCalculator: InstallmentCalculatorService = new InstallmentCalculatorService(),
   ) {}
 
   async execute(dto: CreateSaleDto, userId: string, ip: string): Promise<SaleEntity> {
@@ -93,7 +100,15 @@ export class CreateSaleUseCase {
       }
     }
 
-    // 5. Persistir: la transacción en el datasource se encarga de crear la venta,
+    // 5. Calcular monto de cuota cuando el DTO incluye plan de cuotas.
+    //    La división y redondeo son responsabilidad de InstallmentCalculatorService.
+    //    El total ya incluye el recargo de crédito — solo se divide, no se recarga de nuevo.
+    let installmentAmount: number | undefined;
+    if (dto.type === SaleType.CREDIT && dto.installmentsCount !== undefined) {
+      installmentAmount = this.installmentCalculator.calculate(total, dto.installmentsCount);
+    }
+
+    // 6. Persistir: la transacción en el datasource se encarga de crear la venta,
     //    sus ítems, descontar stock y actualizar el balance del cliente (si es crédito).
     //    Para ventas CREDIT se incluye el audit log para que quede dentro de la
     //    misma transacción atómica — si la venta falla, el log también se revierte.
@@ -114,9 +129,12 @@ export class CreateSaleUseCase {
               ip,
             }
           : undefined,
+      installmentsCount: dto.installmentsCount,
+      frequency: dto.frequency,
+      installmentAmount,
     });
 
-    // 6. Emitir evento solo para ventas CREDIT (generan deuda → cliente debe saber).
+    // 7. Emitir evento solo para ventas CREDIT (generan deuda → cliente debe saber).
     //    Se emite DESPUÉS de que la transacción se commitea.
     //    La notificación es best-effort — si falla, la venta ya está registrada.
     if (dto.type === SaleType.CREDIT) {

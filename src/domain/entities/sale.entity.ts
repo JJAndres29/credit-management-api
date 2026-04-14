@@ -9,6 +9,11 @@ export enum SaleStatus {
   PARTIAL = 'PARTIAL',
 }
 
+export enum InstallmentFrequency {
+  MONTHLY = 'MONTHLY',
+  BIWEEKLY = 'BIWEEKLY',
+}
+
 export class SaleItemEntity {
   constructor(
     public readonly id: string,
@@ -36,10 +41,17 @@ export class SaleEntity {
     public readonly total: number,
     public readonly createdAt: Date,
     public readonly items: SaleItemEntity[],
+    /** Número de cuotas pactadas. Null si la venta no tiene plan de cuotas. */
+    public readonly installmentsCount: number | null,
+    /** Periodicidad de pago. Null si la venta no tiene plan de cuotas. */
+    public readonly frequency: InstallmentFrequency | null,
+    /** Monto de cada cuota = total / installmentsCount. Null si no aplica. */
+    public readonly installmentAmount: number | null,
   ) {}
 
   static fromObject(object: Record<string, unknown>): SaleEntity {
-    const { id, clientId, type, status, total, createdAt, items } = object;
+    const { id, clientId, type, status, total, createdAt, items, installmentsCount, frequency, installmentAmount } =
+      object;
 
     if (!id) throw new Error('Sale id is required');
     if (!clientId) throw new Error('Sale clientId is required');
@@ -70,6 +82,9 @@ export class SaleEntity {
       Number(total),
       (createdAt as Date) ?? new Date(),
       mappedItems,
+      installmentsCount != null ? Number(installmentsCount) : null,
+      (frequency as InstallmentFrequency | null) ?? null,
+      installmentAmount != null ? Number(installmentAmount) : null,
     );
   }
 }

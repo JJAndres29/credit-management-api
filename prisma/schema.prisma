@@ -23,6 +23,11 @@ enum SaleStatus {
   PARTIAL
 }
 
+enum InstallmentFrequency {
+  MONTHLY
+  BIWEEKLY
+}
+
 model User {
   id        String   @id @default(uuid())
   name      String
@@ -78,12 +83,15 @@ model ProductImage {
 }
 
 model Sale {
-  id        String     @id @default(uuid())
-  clientId  String
-  type      SaleType
-  status    SaleStatus @default(PENDING)
-  total     Decimal    @db.Decimal(10, 2)
-  createdAt DateTime   @default(now())
+  id                String                @id @default(uuid())
+  clientId          String
+  type              SaleType
+  status            SaleStatus            @default(PENDING)
+  total             Decimal               @db.Decimal(10, 2)
+  installmentsCount Int?                  // Null para ventas sin plan de cuotas
+  frequency         InstallmentFrequency? // MONTHLY | BIWEEKLY — null si no es venta en cuotas
+  installmentAmount Decimal?              @db.Decimal(10, 2) // total / installmentsCount, redondeado a 2 decimales
+  createdAt         DateTime              @default(now())
 
   client   Client     @relation(fields: [clientId], references: [id])
   items    SaleItem[]

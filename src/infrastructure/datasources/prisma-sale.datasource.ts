@@ -116,7 +116,7 @@ export class PrismaSaleDatasource implements SaleDatasource {
         }
       }
 
-      // 3. Crear la venta con sus ítems
+      // 3. Crear la venta con sus ítems (y campos de cuotas si aplica)
       const created = await tx.sale.create({
         data: {
           clientId: data.clientId,
@@ -124,6 +124,12 @@ export class PrismaSaleDatasource implements SaleDatasource {
           // Venta en efectivo queda PAID de inmediato; crédito queda PENDING
           status: isCashSale ? SaleStatus.PAID : SaleStatus.PENDING,
           total: data.total,
+          // Campos de cuotas — se omiten del INSERT cuando no aplican (undefined → Prisma los ignora)
+          ...(data.installmentsCount !== undefined && {
+            installmentsCount: data.installmentsCount,
+            frequency: data.frequency,
+            installmentAmount: data.installmentAmount,
+          }),
           items: {
             create: data.items.map((item) => ({
               productId: item.productId,
