@@ -21,7 +21,7 @@ function makeProduct(price: number): ProductEntity {
 }
 
 function makeClient(): ClientEntity {
-  return new ClientEntity('cli-1', 'Test Client', '555-0000', null, 5000, 0, true, new Date(), new Date());
+  return new ClientEntity('cli-1', 'Test Client', '555-0000', null, 'CC', '12345678', 'Calle 1 # 2-3', 'Centro', 5000, 0, true, new Date(), new Date());
 }
 
 function makeContext(saleType: SaleType, price: number, quantity = 1): PricingContext {

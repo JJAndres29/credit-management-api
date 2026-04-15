@@ -43,6 +43,10 @@ function makeClient(clientId: string, overrides: Partial<{
     'María López',
     overrides.phone ?? '555-0001',
     overrides.email !== undefined ? overrides.email : 'maria@example.com',
+    'CC',
+    '12345678',
+    'Calle 1 # 2-3',
+    'Centro',
     5_000,
     100,
     true,
@@ -311,7 +315,7 @@ describe('PaymentNotificationSubscriber', () => {
 
     it('no intenta enviar WhatsApp si el cliente no tiene teléfono', async () => {
       mocks.mockClientRepo.findById.mockResolvedValue(
-        new ClientEntity(clientId, 'Sin Tel', '', 'sin@tel.com', 1000, 0, true, new Date(), new Date()),
+        new ClientEntity(clientId, 'Sin Tel', '', 'sin@tel.com', 'CC', '12345678', 'Calle 1 # 2-3', 'Centro', 1000, 0, true, new Date(), new Date()),
       );
 
       buildSubscriber();
