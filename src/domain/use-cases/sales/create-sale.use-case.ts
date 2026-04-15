@@ -4,7 +4,6 @@ import { CreateSaleDto } from '../../dtos/sales';
 import { SaleRepository } from '../../repositories';
 import { ClientRepository } from '../../repositories';
 import { ProductRepository } from '../../repositories';
-import { PricingService } from '../../services/pricing';
 import { InstallmentCalculatorService } from '../../services/installments';
 import { EventEmitterPort, CREDIT_SALE_CREATED } from '../../events';
 
@@ -13,12 +12,6 @@ export class CreateSaleUseCase {
     private readonly saleRepository: SaleRepository,
     private readonly clientRepository: ClientRepository,
     private readonly productRepository: ProductRepository,
-    /**
-     * PricingService determina qué precio aplicar según el contexto de la venta.
-     * Se inyecta como dependencia para que el use case sea testeable de forma aislada
-     * y para que el composition root controle qué strategies están activas.
-     */
-    private readonly pricingService: PricingService,
     /**
      * Opcional: si no se inyecta (e.g. en tests), las notificaciones se omiten
      * sin romper la lógica de negocio ni los tests existentes.
@@ -37,14 +30,16 @@ export class CreateSaleUseCase {
     const client = await this.clientRepository.findById(dto.clientId);
     if (!client) throw CustomError.notFound(`Cliente con ID ${dto.clientId} no encontrado`);
 
-    // 2. Validar cada producto y calcular precio con la strategy correspondiente
+    // 2. Validar cada producto y construir ítems enriquecidos.
+    //    El precio unitario viene del DTO (fijado en el momento de la venta),
+    //    por lo que el servidor solo valida existencia, estado y stock del producto.
     const enrichedItems: {
       productId: string;
       quantity: number;
       basePrice: number;
       unitPrice: number;
       subtotal: number;
-      appliedRule: string;
+      appliedRule: null;
     }[] = [];
 
     for (const item of dto.items) {
@@ -64,32 +59,23 @@ export class CreateSaleUseCase {
         );
       }
 
-      // El PricingService selecciona automáticamente la strategy correcta según
-      // el tipo de venta (CASH → CashPricingStrategy, CREDIT → CreditPricingStrategy).
-      // El use case no sabe cómo se calcula el precio — esa responsabilidad es del servicio.
-      const pricing = this.pricingService.calculate({
-        product,
-        saleType: dto.type,
-        client,
-        quantity: item.quantity,
-        saleDate: new Date(),
-      });
+      const unitPrice = Math.round(item.unitPrice * 100) / 100;
+      const subtotal = Math.round(unitPrice * item.quantity * 100) / 100;
 
       enrichedItems.push({
         productId: item.productId,
         quantity: item.quantity,
-        basePrice: pricing.basePrice,
-        unitPrice: pricing.unitPrice,
-        subtotal: pricing.unitPrice * item.quantity,
-        appliedRule: pricing.appliedRule,
+        basePrice: unitPrice,   // precio registrado al momento de la venta
+        unitPrice,
+        subtotal,
+        appliedRule: null,
       });
     }
 
-    // 3. Calcular el total de la venta con los precios ya aplicados
-    const total = enrichedItems.reduce((sum, item) => sum + item.subtotal, 0);
+    // 3. Calcular el total de la venta
+    const total = Math.round(enrichedItems.reduce((sum, item) => sum + item.subtotal, 0) * 100) / 100;
 
     // 4. Para ventas a crédito: verificar que el cliente tiene crédito disponible
-    //    La verificación usa el total con recargo, que es el que se registrará como deuda
     if (dto.type === SaleType.CREDIT) {
       const creditAvailable = Number(client.creditLimit) - Number(client.balance);
 
@@ -101,17 +87,12 @@ export class CreateSaleUseCase {
     }
 
     // 5. Calcular monto de cuota cuando el DTO incluye plan de cuotas.
-    //    La división y redondeo son responsabilidad de InstallmentCalculatorService.
-    //    El total ya incluye el recargo de crédito — solo se divide, no se recarga de nuevo.
     let installmentAmount: number | undefined;
     if (dto.type === SaleType.CREDIT && dto.installmentsCount !== undefined) {
       installmentAmount = this.installmentCalculator.calculate(total, dto.installmentsCount);
     }
 
-    // 6. Persistir: la transacción en el datasource se encarga de crear la venta,
-    //    sus ítems, descontar stock y actualizar el balance del cliente (si es crédito).
-    //    Para ventas CREDIT se incluye el audit log para que quede dentro de la
-    //    misma transacción atómica — si la venta falla, el log también se revierte.
+    // 6. Persistir en una transacción atómica.
     const balanceBefore = Number(client.balance);
 
     const sale = await this.saleRepository.create({
@@ -132,11 +113,11 @@ export class CreateSaleUseCase {
       installmentsCount: dto.installmentsCount,
       frequency: dto.frequency,
       installmentAmount,
+      collectionDay: dto.collectionDay,
+      collectionDay2: dto.collectionDay2,
     });
 
     // 7. Emitir evento solo para ventas CREDIT (generan deuda → cliente debe saber).
-    //    Se emite DESPUÉS de que la transacción se commitea.
-    //    La notificación es best-effort — si falla, la venta ya está registrada.
     if (dto.type === SaleType.CREDIT) {
       this.eventEmitter?.emit(CREDIT_SALE_CREATED, {
         saleId: sale.id,

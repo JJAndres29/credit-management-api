@@ -11,9 +11,7 @@ import { AuthRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaAuthDatasource } from '../../infrastructure/datasources';
 import { AuthMiddleware } from '../middlewares';
 import { JwtAdapter, TwilioWhatsAppService, NodemailerEmailService } from '../../infrastructure/services';
-import { PricingService, CashPricingStrategy, CreditPricingStrategy } from '../../domain/services/pricing';
 import { InstallmentCalculatorService } from '../../domain/services/installments';
-import { envs } from '../../config/envs';
 import { globalEventEmitter } from '../../infrastructure/events';
 import { SaleNotificationSubscriber } from '../../infrastructure/subscribers';
 
@@ -26,28 +24,11 @@ export class SaleRouter {
     const clientRepository = new ClientRepositoryImpl(new PrismaClientDatasource());
     const productRepository = new ProductRepositoryImpl(new PrismaProductDatasource());
 
-    /**
-     * Composition root del Pricing Domain Service.
-     *
-     * Este es el único lugar del sistema donde se decide qué strategies están activas
-     * y en qué orden. Agregar una nueva regla de pricing = instanciarla aquí y pasarla
-     * al array. Nada más cambia en el resto del sistema.
-     *
-     * Las strategies base tienen priority 10.
-     * Strategies futuras más específicas (mayoristas, VIP, promociones) deben usar
-     * priority >= 20 para sobreescribir la base cuando apliquen.
-     */
-    const pricingService = new PricingService([
-      new CashPricingStrategy(),
-      new CreditPricingStrategy(envs.creditSurchargePercent),
-    ]);
-
     // Servicios de notificación — se deshabilitan automáticamente si faltan las env vars
     const whatsAppService = new TwilioWhatsAppService();
     const emailService = new NodemailerEmailService();
 
     // Subscriber: escucha CreditSaleCreated y envía WhatsApp + Email.
-    // Se construye aquí (composition root) y se auto-registra en el globalEventEmitter.
     new SaleNotificationSubscriber(globalEventEmitter, clientRepository, whatsAppService, emailService);
 
     const installmentCalculator = new InstallmentCalculatorService();
@@ -57,7 +38,6 @@ export class SaleRouter {
         saleRepository,
         clientRepository,
         productRepository,
-        pricingService,
         globalEventEmitter,
         installmentCalculator,
       ),

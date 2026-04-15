@@ -27,8 +27,8 @@ export interface SaleCreateData {
     /** Precio final cobrado (puede incluir recargo de crédito) */
     unitPrice: number;
     subtotal: number;
-    /** Regla de pricing aplicada. Ej: "CASH_BASE" | "CREDIT_SURCHARGE_15PCT" */
-    appliedRule: string;
+    /** Null desde que el precio se fija manualmente en el momento de la venta. */
+    appliedRule: string | null;
   }[];
   auditLog?: AuditLogData;
   /** Número de cuotas pactadas. Solo presente si la venta tiene plan de cuotas. */
@@ -37,6 +37,13 @@ export interface SaleCreateData {
   frequency?: InstallmentFrequency;
   /** Monto por cuota = total / installmentsCount. Calculado por InstallmentCalculatorService. */
   installmentAmount?: number;
+  /**
+   * Día del mes para el cobro (1-31).
+   * MONTHLY: único día de cobro.  BIWEEKLY: primer día de cobro.
+   */
+  collectionDay?: number;
+  /** Segundo día de cobro (1-31). Exclusivo para planes BIWEEKLY. */
+  collectionDay2?: number;
 }
 
 export interface SaleDatasource {

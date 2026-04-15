@@ -3,6 +3,9 @@
  *
  * Sin mocks de infraestructura, sin DB, sin HTTP.
  * Todos los colaboradores se reemplazan con jest.fn().
+ *
+ * El precio unitario ahora se define en el request (por el vendedor en el momento
+ * de la venta). Ya no existe PricingService — el use case no calcula precios.
  */
 
 import { CreateSaleUseCase } from './create-sale.use-case';
@@ -10,7 +13,6 @@ import { CreateSaleDto } from '../../dtos/sales';
 import { ClientRepository } from '../../repositories';
 import { ProductRepository } from '../../repositories';
 import { SaleRepository } from '../../repositories';
-import { PricingService } from '../../services/pricing';
 import { EventEmitterPort, CREDIT_SALE_CREATED } from '../../events';
 import { ClientEntity } from '../../entities/client.entity';
 import { ProductEntity } from '../../entities/product.entity';
@@ -44,14 +46,12 @@ function makeClient(overrides: Partial<{
 
 function makeProduct(overrides: Partial<{
   id: string;
-  price: number;
   stock: number;
   isActive: boolean;
 }> = {}): ProductEntity {
   return new ProductEntity(
     overrides.id ?? 'prod-1',
     'Producto Test',
-    overrides.price ?? 100,
     overrides.stock ?? 50,
     [],
     overrides.isActive ?? true,
@@ -69,12 +69,16 @@ function makeSale(type: SaleType, status: SaleStatus, total: number): SaleEntity
     total,
     new Date(),
     [
-      new SaleItemEntity('item-1', 'sale-1', 'prod-1', 2, 100, 100, 200, 'CASH_BASE'),
+      new SaleItemEntity('item-1', 'sale-1', 'prod-1', 2, 100, 100, 200, null),
     ],
   );
 }
 
-function makeDto(type: SaleType, items = [{ productId: 'prod-1', quantity: 2 }]): CreateSaleDto {
+/** items now require unitPrice */
+function makeDto(
+  type: SaleType,
+  items = [{ productId: 'prod-1', quantity: 2, unitPrice: 100 }],
+): CreateSaleDto {
   const [error, dto] = CreateSaleDto.create({ clientId: 'client-1', type, items });
   if (error) throw new Error(`makeDto failed: ${error}`);
   return dto!;
@@ -109,10 +113,6 @@ const mockSaleRepo = {
   findByClientId: jest.fn(),
 } as jest.Mocked<SaleRepository>;
 
-const mockPricingService = {
-  calculate: jest.fn(),
-} as unknown as PricingService;
-
 const mockEventEmitter: jest.Mocked<EventEmitterPort> = {
   on: jest.fn(),
   emit: jest.fn(),
@@ -129,7 +129,6 @@ describe('CreateSaleUseCase', () => {
       mockSaleRepo,
       mockClientRepo,
       mockProductRepo,
-      mockPricingService as PricingService,
       mockEventEmitter,
     );
   });
@@ -203,53 +202,37 @@ describe('CreateSaleUseCase', () => {
 
   describe('cuando el crédito es insuficiente (CREDIT)', () => {
     it('lanza CustomError 400 con el crédito disponible y requerido', async () => {
-      // creditLimit: 100, balance: 80 → disponible: 20, pero total será 200
+      // creditLimit: 100, balance: 80 → disponible: 20, pero total será 200 (2 × $100)
       mockClientRepo.findById.mockResolvedValue(makeClient({ creditLimit: 100, balance: 80 }));
-      mockProductRepo.findById.mockResolvedValue(makeProduct({ price: 100, stock: 50 }));
-      (mockPricingService.calculate as jest.Mock).mockReturnValue({
-        basePrice: 100,
-        unitPrice: 115,   // CREDIT con 15% de recargo
-        surchargeAmount: 15,
-        appliedRule: 'CREDIT_SURCHARGE_15PCT',
-      });
+      mockProductRepo.findById.mockResolvedValue(makeProduct({ stock: 50 }));
 
-      // total = 115 * 2 = 230, disponible = 20 → debe fallar
-      await expect(useCase.execute(makeDto(SaleType.CREDIT), 'user-1', '127.0.0.1')).rejects.toMatchObject({
+      // total = 100 * 2 = 200, disponible = 20 → debe fallar
+      await expect(
+        useCase.execute(makeDto(SaleType.CREDIT, [{ productId: 'prod-1', quantity: 2, unitPrice: 100 }]), 'user-1', '127.0.0.1'),
+      ).rejects.toMatchObject({
         statusCode: 400,
         message: expect.stringContaining('Crédito insuficiente'),
       });
     });
 
     it('acepta la venta cuando el crédito disponible es exactamente igual al total', async () => {
-      const total = 200; // 100 * 2 a 0% recargo
+      const total = 200; // 2 × $100
       mockClientRepo.findById.mockResolvedValue(makeClient({ creditLimit: 200, balance: 0 }));
-      mockProductRepo.findById.mockResolvedValue(makeProduct({ price: 100, stock: 50 }));
-      (mockPricingService.calculate as jest.Mock).mockReturnValue({
-        basePrice: 100,
-        unitPrice: 100,
-        surchargeAmount: 0,
-        appliedRule: 'CREDIT_SURCHARGE_0PCT',
-      });
+      mockProductRepo.findById.mockResolvedValue(makeProduct({ stock: 50 }));
       mockSaleRepo.create.mockResolvedValue(makeSale(SaleType.CREDIT, SaleStatus.PENDING, total));
 
-      await expect(useCase.execute(makeDto(SaleType.CREDIT), 'user-1', '127.0.0.1')).resolves.toBeDefined();
+      await expect(
+        useCase.execute(makeDto(SaleType.CREDIT, [{ productId: 'prod-1', quantity: 2, unitPrice: 100 }]), 'user-1', '127.0.0.1'),
+      ).resolves.toBeDefined();
     });
   });
 
   // ─── Venta CASH ───────────────────────────────────────────────────────────
 
   describe('venta CASH', () => {
-    const cashPricing = {
-      basePrice: 100,
-      unitPrice: 100,
-      surchargeAmount: 0,
-      appliedRule: 'CASH_BASE',
-    };
-
     beforeEach(() => {
       mockClientRepo.findById.mockResolvedValue(makeClient({ balance: 500 }));
-      mockProductRepo.findById.mockResolvedValue(makeProduct({ price: 100, stock: 50 }));
-      (mockPricingService.calculate as jest.Mock).mockReturnValue(cashPricing);
+      mockProductRepo.findById.mockResolvedValue(makeProduct({ stock: 50 }));
       mockSaleRepo.create.mockResolvedValue(makeSale(SaleType.CASH, SaleStatus.PAID, 200));
     });
 
@@ -285,9 +268,24 @@ describe('CreateSaleUseCase', () => {
     it('calcula el total correcto (unitPrice × quantity)', async () => {
       await useCase.execute(makeDto(SaleType.CASH), 'user-1', '127.0.0.1');
 
-      // quantity=2, unitPrice=100 → subtotal=200
+      // quantity=2, unitPrice=100 → total=200
       expect(mockSaleRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({ total: 200 }),
+      );
+    });
+
+    it('usa el unitPrice del DTO directamente en los ítems', async () => {
+      await useCase.execute(
+        makeDto(SaleType.CASH, [{ productId: 'prod-1', quantity: 2, unitPrice: 150 }]),
+        'user-1', '127.0.0.1',
+      );
+
+      expect(mockSaleRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          items: expect.arrayContaining([
+            expect.objectContaining({ unitPrice: 150, subtotal: 300 }),
+          ]),
+        }),
       );
     });
   });
@@ -295,19 +293,12 @@ describe('CreateSaleUseCase', () => {
   // ─── Venta CREDIT ─────────────────────────────────────────────────────────
 
   describe('venta CREDIT', () => {
-    const creditPricing = {
-      basePrice: 100,
-      unitPrice: 115,
-      surchargeAmount: 15,
-      appliedRule: 'CREDIT_SURCHARGE_15PCT',
-    };
     const client = makeClient({ balance: 0, creditLimit: 10_000 });
 
     beforeEach(() => {
       mockClientRepo.findById.mockResolvedValue(client);
-      mockProductRepo.findById.mockResolvedValue(makeProduct({ price: 100, stock: 50 }));
-      (mockPricingService.calculate as jest.Mock).mockReturnValue(creditPricing);
-      mockSaleRepo.create.mockResolvedValue(makeSale(SaleType.CREDIT, SaleStatus.PENDING, 230));
+      mockProductRepo.findById.mockResolvedValue(makeProduct({ stock: 50 }));
+      mockSaleRepo.create.mockResolvedValue(makeSale(SaleType.CREDIT, SaleStatus.PENDING, 200));
     });
 
     it('emite CREDIT_SALE_CREATED con los datos correctos', async () => {
@@ -317,7 +308,7 @@ describe('CreateSaleUseCase', () => {
         CREDIT_SALE_CREATED,
         expect.objectContaining({
           clientId: 'client-1',
-          total: 230, // 115 × 2
+          total: 200, // 100 × 2
         }),
       );
     });
@@ -327,7 +318,7 @@ describe('CreateSaleUseCase', () => {
 
       expect(mockEventEmitter.emit).toHaveBeenCalledWith(
         CREDIT_SALE_CREATED,
-        expect.objectContaining({ newBalance: 0 + 230 }),
+        expect.objectContaining({ newBalance: 0 + 200 }),
       );
     });
 
@@ -339,7 +330,7 @@ describe('CreateSaleUseCase', () => {
           auditLog: expect.objectContaining({
             action: AuditAction.CREDIT_SALE,
             before: 0,
-            after: 230,
+            after: 200,
             userId: 'user-1',
             ip: '127.0.0.1',
           }),
@@ -347,17 +338,13 @@ describe('CreateSaleUseCase', () => {
       );
     });
 
-    it('incluye basePrice y appliedRule del pricing en cada ítem', async () => {
+    it('el ítem tiene appliedRule null (precio manual sin regla automática)', async () => {
       await useCase.execute(makeDto(SaleType.CREDIT), 'user-1', '127.0.0.1');
 
       expect(mockSaleRepo.create).toHaveBeenCalledWith(
         expect.objectContaining({
           items: expect.arrayContaining([
-            expect.objectContaining({
-              basePrice: 100,
-              unitPrice: 115,
-              appliedRule: 'CREDIT_SURCHARGE_15PCT',
-            }),
+            expect.objectContaining({ appliedRule: null }),
           ]),
         }),
       );
@@ -370,6 +357,51 @@ describe('CreateSaleUseCase', () => {
     });
   });
 
+  // ─── collectionDay ────────────────────────────────────────────────────────
+
+  describe('collectionDay / collectionDay2', () => {
+    beforeEach(() => {
+      mockClientRepo.findById.mockResolvedValue(makeClient());
+      mockProductRepo.findById.mockResolvedValue(makeProduct({ stock: 50 }));
+      mockSaleRepo.create.mockResolvedValue(makeSale(SaleType.CREDIT, SaleStatus.PENDING, 200));
+    });
+
+    it('pasa collectionDay al repositorio cuando se define en plan MONTHLY', async () => {
+      const [, dto] = CreateSaleDto.create({
+        clientId: 'client-1',
+        type: SaleType.CREDIT,
+        items: [{ productId: 'prod-1', quantity: 2, unitPrice: 100 }],
+        installmentsCount: 3,
+        frequency: 'MONTHLY',
+        collectionDay: 30,
+      });
+
+      await useCase.execute(dto!, 'user-1', '127.0.0.1');
+
+      expect(mockSaleRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ collectionDay: 30, collectionDay2: undefined }),
+      );
+    });
+
+    it('pasa ambos días al repositorio cuando se define en plan BIWEEKLY', async () => {
+      const [, dto] = CreateSaleDto.create({
+        clientId: 'client-1',
+        type: SaleType.CREDIT,
+        items: [{ productId: 'prod-1', quantity: 2, unitPrice: 100 }],
+        installmentsCount: 6,
+        frequency: 'BIWEEKLY',
+        collectionDay: 15,
+        collectionDay2: 30,
+      });
+
+      await useCase.execute(dto!, 'user-1', '127.0.0.1');
+
+      expect(mockSaleRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({ collectionDay: 15, collectionDay2: 30 }),
+      );
+    });
+  });
+
   // ─── Sin event emitter ────────────────────────────────────────────────────
 
   describe('cuando no se inyecta eventEmitter', () => {
@@ -378,15 +410,11 @@ describe('CreateSaleUseCase', () => {
         mockSaleRepo,
         mockClientRepo,
         mockProductRepo,
-        mockPricingService as PricingService,
         // eventEmitter omitido
       );
 
       mockClientRepo.findById.mockResolvedValue(makeClient());
       mockProductRepo.findById.mockResolvedValue(makeProduct());
-      (mockPricingService.calculate as jest.Mock).mockReturnValue({
-        basePrice: 100, unitPrice: 100, surchargeAmount: 0, appliedRule: 'CREDIT_SURCHARGE_0PCT',
-      });
       mockSaleRepo.create.mockResolvedValue(makeSale(SaleType.CREDIT, SaleStatus.PENDING, 200));
 
       await expect(

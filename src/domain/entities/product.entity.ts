@@ -4,7 +4,6 @@ export class ProductEntity {
   constructor(
     public readonly id: string,
     public readonly name: string,
-    public readonly price: number,
     public readonly stock: number,
     public readonly images: ProductImageEntity[],
     public readonly isActive: boolean,
@@ -16,7 +15,6 @@ export class ProductEntity {
     return {
       id: this.id,
       name: this.name,
-      price: this.price,
       stock: this.stock,
       images: this.images,
       isActive: this.isActive,
@@ -26,11 +24,10 @@ export class ProductEntity {
   }
 
   static fromObject(object: Record<string, unknown>): ProductEntity {
-    const { id, name, price, stock, images, isActive, createdAt, updatedAt } = object;
+    const { id, name, stock, images, isActive, createdAt, updatedAt } = object;
 
     if (!id) throw new Error('Product id is required');
     if (!name) throw new Error('Product name is required');
-    if (price === undefined) throw new Error('Product price is required');
 
     const parsedImages = Array.isArray(images)
       ? images.map((img) => ProductImageEntity.fromObject(img as Record<string, unknown>))
@@ -39,7 +36,6 @@ export class ProductEntity {
     return new ProductEntity(
       id as string,
       name as string,
-      Number(price),
       Number(stock ?? 0),
       parsedImages,
       (isActive as boolean) ?? true,
