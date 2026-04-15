@@ -16,7 +16,7 @@ import { PrismaSaleDatasource } from '../../infrastructure/datasources';
 import { AuthRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaAuthDatasource } from '../../infrastructure/datasources';
 import { AuthMiddleware } from '../middlewares';
-import { JwtAdapter, TwilioWhatsAppService, NodemailerEmailService, PdfkitPdfService } from '../../infrastructure/services';
+import { JwtAdapter, MetaWhatsAppService, NodemailerEmailService, PdfkitPdfService } from '../../infrastructure/services';
 import { globalEventEmitter } from '../../infrastructure/events';
 import { PaymentNotificationSubscriber } from '../../infrastructure/subscribers';
 import { GenerateAccountStatementUseCase } from '../../domain/use-cases/reports';
@@ -33,7 +33,7 @@ export class PaymentRouter {
     const saleRepository = new SaleRepositoryImpl(new PrismaSaleDatasource());
 
     // Servicios de notificación — se deshabilitan automáticamente si faltan las env vars
-    const whatsAppService = new TwilioWhatsAppService();
+    const whatsAppService = new MetaWhatsAppService();
     const emailService = new NodemailerEmailService();
 
     // Use case de PDF para adjuntarlo al email de notificación de pago
@@ -47,12 +47,12 @@ export class PaymentRouter {
     );
 
     // Subscriber: escucha PaymentRegistered y envía WhatsApp + Email (con PDF adjunto).
-    // Se construye aquí (composition root) y se auto-registra en el globalEventEmitter.
+    // Se pasa null cuando el servicio no está configurado para evitar registros FAILED innecesarios.
     new PaymentNotificationSubscriber(
       globalEventEmitter,
       clientRepository,
-      whatsAppService,
-      emailService,
+      whatsAppService.isEnabled ? whatsAppService : null,
+      emailService.isEnabled ? emailService : null,
       accountStatementUseCase,
     );
 

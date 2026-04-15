@@ -19,7 +19,9 @@ export class TwilioWhatsAppService implements NotificationService {
   private readonly enabled: boolean;
 
   constructor() {
-    const { accountSid, authToken, whatsappFrom } = envs.twilio;
+    const accountSid = '';
+    const authToken = '';
+    const whatsappFrom = '';
 
     if (!accountSid || !authToken || !whatsappFrom) {
       console.warn(
