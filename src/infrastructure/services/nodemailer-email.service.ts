@@ -46,6 +46,10 @@ export class NodemailerEmailService implements EmailService {
     this.enabled = true;
   }
 
+  get isEnabled(): boolean {
+    return this.enabled;
+  }
+
   async sendEmail(options: SendEmailOptions): Promise<boolean> {
     if (!this.enabled || !this.transporter) return false;
 

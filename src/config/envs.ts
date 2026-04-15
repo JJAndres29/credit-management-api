@@ -29,9 +29,8 @@ export const envs = {
     secretKey: process.env.MAILER_SECRET_KEY ?? '',
     service: process.env.MAILER_SERVICE ?? 'gmail',
   },
-  twilio: {
-    accountSid: process.env.TWILIO_ACCOUNT_SID ?? '',
-    authToken: process.env.TWILIO_AUTH_TOKEN ?? '',
-    whatsappFrom: process.env.TWILIO_WHATSAPP_FROM ?? '',
+  meta: {
+    token: process.env.META_WHATSAPP_TOKEN ?? '',
+    phoneNumberId: process.env.META_WHATSAPP_PHONE_NUMBER_ID ?? '',
   },
 };
