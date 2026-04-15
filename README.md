@@ -34,7 +34,7 @@ This system allows a retail business to manage credit operations for its clients
 - Client management with credit limits and balance tracking
 - Product catalog management with stock control and multi-image uploads via Cloudinary
 - Cash and credit sales with automatic stock deduction and client balance update (atomic transaction)
-- **Differential pricing by sale type** — cash and credit sales apply different prices via a pluggable Pricing Domain Service (Strategy Pattern). Prices are always computed server-side; clients cannot supply them
+- **Manual pricing at sale time** — the seller sets the unit price for each item when creating a sale. The server computes subtotals and total; the frontend cannot override them
 - Payment registration with automatic sale status update (PENDING → PARTIAL → PAID) and client balance reduction (atomic transaction)
 - Immutable audit log of every balance-changing operation (credit sales and payments), written atomically inside each transaction
 - **Automatic notifications** — WhatsApp (via Twilio) and email (via Nodemailer/Gmail) sent after every payment and credit sale. Payment emails include the full account statement as a PDF attachment. Notifications are optional and best-effort: if the provider fails or credentials are missing, the financial operation is not affected
@@ -69,8 +69,7 @@ The project follows **Clean Architecture**, organized in three strict layers. In
 | **Adapter** | External libraries (JWT, Cloudinary, Twilio, Nodemailer) implement domain interfaces — replace any library without touching business logic |
 | **DTO** | Input validation happens at the system boundary before reaching use cases |
 | **Dependency Injection** | Constructor-based throughout — no service locator or global state |
-| **Strategy (Pricing)** | Pricing rules are interchangeable strategies. Adding a new pricing rule = one new class, no existing code touched |
-| **Domain Service (Pricing)** | `PricingService` lives in the domain layer — pure business logic, no framework or DB dependencies, fully unit-testable |
+| **Domain Service (Installments)** | `InstallmentCalculatorService` lives in the domain layer — pure business logic, no framework or DB dependencies, fully unit-testable |
 | **Domain Events** | Use cases emit events after committing transactions. Subscribers handle side effects (notifications) asynchronously — financial operations never wait for or fail because of notifications |
 | **Domain Service (PDF)** | `PdfService` interface lives in the domain layer. `PdfkitPdfService` in infrastructure is the only file that knows about PDFKit. Replacing the PDF library requires changing only one file |
 
@@ -130,15 +129,7 @@ credit-management-system/
 │   │   ├── errors/                # CustomError with HTTP status factory methods
 │   │   ├── repositories/          # Repository interfaces (ports)
 │   │   ├── services/
-│   │   │   ├── pricing/           # Pricing Domain Service (Strategy Pattern)
-│   │   │   │   ├── pricing-context.ts          # Input value object
-│   │   │   │   ├── pricing-result.ts           # Output value object
-│   │   │   │   ├── pricing-strategy.interface.ts
-│   │   │   │   ├── pricing.service.ts          # Orchestrator — selects highest-priority matching strategy
-│   │   │   │   └── strategies/
-│   │   │   │       ├── cash-pricing.strategy.ts     # CASH → base price, no surcharge
-│   │   │   │       └── credit-pricing.strategy.ts   # CREDIT → base price + CREDIT_SURCHARGE_PERCENT%
-│   │   │   └── ...                # JwtService, EmailService, NotificationService, PdfService, FileStorageService
+│   │   │   └── ...                # JwtService, EmailService, NotificationService, PdfService, FileStorageService, InstallmentCalculatorService
 │   │   └── use-cases/
 │   │       ├── auth/              # LoginUseCase, RenewTokenUseCase
 │   │       ├── clients/           # CreateClient, GetClients, GetClientById, UpdateClient, DeleteClient
@@ -262,7 +253,6 @@ API available at: `http://localhost:3000`
 | `JWT_SECRET` | Yes | JWT signing secret — use 64+ random hex chars in production |
 | `JWT_EXPIRES_IN` | Yes | Token TTL (e.g. `7d`, `24h`) |
 | `ALLOWED_ORIGINS` | No | Comma-separated CORS origins. Defaults to `localhost:4200,localhost:5173` |
-| `CREDIT_SURCHARGE_PERCENT` | No | Surcharge % applied to credit sales. Default: `0`. Example: `15` adds 15% to the base product price on all CREDIT sales |
 | `CLOUDINARY_CLOUD_NAME` | Yes* | Required for product image uploads |
 | `CLOUDINARY_API_KEY` | Yes* | Required for product image uploads |
 | `CLOUDINARY_API_SECRET` | Yes* | Required for product image uploads |
@@ -284,22 +274,32 @@ API available at: `http://localhost:3000`
 ```
 User             — System staff with role (ADMIN | SELLER)
 Client           — Credit customers: credit limit, current balance, contact info
-Product          — Inventory items: name, price (base price), stock count
+Product          — Inventory items: name, stock count (no fixed price — price is set at sale time)
 ProductImage     — Product photos: Cloudinary URL, publicId, display order (one product → many images)
-Sale             — Orders per client: type (CASH | CREDIT), status (PAID | PENDING | PARTIAL)
-SaleItem         — Line items per sale: product, quantity, basePrice (snapshot), unitPrice (final charged), subtotal, appliedRule
+Sale             — Orders per client: type (CASH | CREDIT), status (PAID | PENDING | PARTIAL), optional installment plan and collection days
+SaleItem         — Line items per sale: product, quantity, basePrice (price at sale time), unitPrice, subtotal
 Payment          — Payments per client/sale: amount, optional note
 AuditLog         — Immutable log of balance changes: user, IP, before/after values
 NotificationLog  — Log of every notification attempt: channel (WHATSAPP|EMAIL), event, status (SENT|FAILED), errorMessage
 ```
 
-**`SaleItem` pricing fields:**
+**`SaleItem` price fields:**
 
 | Field | Description |
 |-------|-------------|
-| `basePrice` | Snapshot of `Product.price` at the time of the sale — immutable, for audit purposes |
-| `unitPrice` | Final price charged per unit (may include a credit surcharge) |
-| `appliedRule` | Pricing rule applied — e.g. `"CASH_BASE"`, `"CREDIT_SURCHARGE_15PCT"`. Null on sales created before the Pricing Domain Service |
+| `basePrice` | Price set by the seller at the time of the sale — immutable, for audit purposes |
+| `unitPrice` | Same as `basePrice` — the manually entered price per unit |
+| `appliedRule` | Always `null` — no automatic pricing rule is applied; price is set manually |
+
+**`Sale` installment + collection day fields:**
+
+| Field | Description |
+|-------|-------------|
+| `installmentsCount` | Number of installments agreed (null if no plan) |
+| `frequency` | `MONTHLY` or `BIWEEKLY` (null if no plan) |
+| `installmentAmount` | `total / installmentsCount`, rounded to 2 decimals |
+| `collectionDay` | Day of the month for billing (1-31). MONTHLY: the single day; BIWEEKLY: first day |
+| `collectionDay2` | Second billing day (1-31), BIWEEKLY plans only |
 
 **Enums:**
 
@@ -398,8 +398,6 @@ Returns active products with their images, sorted by creation date (newest first
 | `page` | integer | Page number (default: `1`) |
 | `limit` | integer | Items per page (default: `20`, max: `100`) |
 | `search` | string | Filter by product name (case-insensitive) |
-| `minPrice` | number | Minimum price |
-| `maxPrice` | number | Maximum price |
 | `minStock` | integer | Minimum stock |
 | `maxStock` | integer | Maximum stock |
 
@@ -410,7 +408,6 @@ Returns active products with their images, sorted by creation date (newest first
     {
       "id": "uuid",
       "name": "Camisa Azul",
-      "price": 45000,
       "stock": 100,
       "images": [
         {
@@ -458,7 +455,6 @@ Create a new product. Images are added separately via `POST /:id/images`.
 ```json
 {
   "name": "Camisa Azul",
-  "price": 45000,
   "stock": 100
 }
 ```
@@ -466,8 +462,9 @@ Create a new product. Images are added separately via `POST /:id/images`.
 | Field | Type | Required | Validation |
 |-------|------|----------|-----------|
 | `name` | string | Yes | Min 2 characters |
-| `price` | number | Yes | Greater than 0 |
 | `stock` | number | No | Integer >= 0, defaults to `0` |
+
+> Products have no fixed price. The seller sets the price per unit when creating each sale.
 
 **Response `201`:** Created product object with empty `images` array.
 
@@ -475,15 +472,14 @@ Create a new product. Images are added separately via `POST /:id/images`.
 
 #### PUT `/api/products/:id`
 
-Update product name and/or price. At least one field required. Use dedicated endpoints for stock (`PATCH /:id/stock`) and images (`POST /:id/images`).
+Update the product name. Use dedicated endpoints for stock (`PATCH /:id/stock`) and images (`POST /:id/images`). Products no longer have a fixed price — prices are set at sale time.
 
 > **Requires `ADMIN` role.**
 
-**Request body (all fields optional):**
+**Request body:**
 ```json
 {
-  "name": "Camisa Azul Premium",
-  "price": 55000
+  "name": "Camisa Azul Premium"
 }
 ```
 
@@ -727,7 +723,7 @@ Returns a single sale with its line items. Returns `404` if not found.
 
 #### POST `/api/sales`
 
-Create a new sale. Prices are always taken from the current product catalog — client cannot supply prices.
+Create a new sale. The seller sets the unit price for each item at the time of the sale.
 
 **Request body:**
 ```json
@@ -735,9 +731,13 @@ Create a new sale. Prices are always taken from the current product catalog — 
   "clientId": "uuid",
   "type": "CREDIT",
   "items": [
-    { "productId": "uuid", "quantity": 3 },
-    { "productId": "uuid", "quantity": 1 }
-  ]
+    { "productId": "uuid", "quantity": 3, "unitPrice": 45.00 },
+    { "productId": "uuid", "quantity": 1, "unitPrice": 120.50 }
+  ],
+  "installmentsCount": 6,
+  "frequency": "BIWEEKLY",
+  "collectionDay": 15,
+  "collectionDay2": 30
 }
 ```
 
@@ -748,18 +748,21 @@ Create a new sale. Prices are always taken from the current product catalog — 
 | `items` | array | Yes | Min 1 item. No duplicate `productId` values |
 | `items[].productId` | string | Yes | Product must exist, be active, and have sufficient stock |
 | `items[].quantity` | integer | Yes | Positive integer |
+| `items[].unitPrice` | number | Yes | Price per unit set by the seller (> 0) |
+| `installmentsCount` | integer | No | ≥ 2. Only for `CREDIT` sales. Requires `frequency` |
+| `frequency` | string | No | `MONTHLY` or `BIWEEKLY`. Requires `installmentsCount` |
+| `collectionDay` | integer | No | 1–31. Billing day. MONTHLY: only day; BIWEEKLY: first day. Requires plan |
+| `collectionDay2` | integer | No | 1–31. Second billing day. `BIWEEKLY` only. Requires `collectionDay` |
 
 **Business rules applied:**
 - Stock is verified before creating the sale — insufficient stock returns `400`
-- **Prices are always computed server-side by the Pricing Domain Service** — the client never supplies unit prices
-  - `CASH` sales apply the base product price (`CASH_BASE` rule)
-  - `CREDIT` sales apply a configurable surcharge (`CREDIT_SURCHARGE_{N}PCT` rule, set via `CREDIT_SURCHARGE_PERCENT` env var)
-- For `CREDIT` sales: `client.creditLimit - client.balance >= total` (computed with the surcharge-adjusted total), otherwise `400`
+- **`total` is always computed server-side** as `sum(unitPrice × quantity)` — the frontend cannot override it
+- For `CREDIT` sales: `client.creditLimit - client.balance >= total`, otherwise `400`
 - All operations (stock deduction, balance update, sale + items creation) run in a **single atomic database transaction**
 - `CASH` sales are created with status `PAID`. `CREDIT` sales start as `PENDING`
-- Each `SaleItem` records `basePrice`, `unitPrice`, and `appliedRule` for full pricing traceability
+- Each `SaleItem` records `basePrice = unitPrice` and `appliedRule = null` for audit traceability
 
-**Response `201`:** Created sale object with items. Each item includes `basePrice`, `unitPrice`, and `appliedRule`.
+**Response `201`:** Created sale object with items. Each item includes `basePrice` and `unitPrice`.
 
 **Response `400`:** Validation error, insufficient stock, or insufficient credit.
 
@@ -1152,14 +1155,13 @@ npm test              # Run all tests
 npm run test:watch    # Watch mode (re-runs on file save)
 ```
 
-### Current coverage — 115 tests across 7 suites
+### Current coverage — 91 tests across 6 suites
 
 | Module | File | Tests |
 |--------|------|-------|
 | `LoginUseCase` | `src/domain/use-cases/auth/login.use-case.test.ts` | 6 — invalid user, inactive user, wrong password, success, token payload, password not exposed |
 | `RenewTokenUseCase` | `src/domain/use-cases/auth/renew-token.use-case.test.ts` | 5 — invalid user, inactive user, success, payload, password not exposed |
-| `CashPricingStrategy` / `CreditPricingStrategy` / `PricingService` | `src/domain/services/pricing/pricing.test.ts` | 27 — appliesTo, calculations at 0/15/100%, rounding, priority selection, routing |
-| `CreateSaleUseCase` | `src/domain/use-cases/sales/create-sale.use-case.test.ts` | 21 — client/product not found, inactive product, insufficient stock/credit, CASH (no event, no auditLog), CREDIT (event emitted, auditLog with before/after) |
+| `CreateSaleUseCase` | `src/domain/use-cases/sales/create-sale.use-case.test.ts` | 22 — client/product not found, inactive product, insufficient stock/credit, CASH (no event, no auditLog, unitPrice used directly), CREDIT (event emitted, auditLog, appliedRule null), collectionDay passed for MONTHLY and BIWEEKLY |
 | `CreatePaymentUseCase` | `src/domain/use-cases/payments/create-payment.use-case.test.ts` | 22 — inactive client, amount > balance, foreign sale (403), PAID sale, overpayment, full/partial/general payment, auditLog, PAYMENT_REGISTERED event |
 | `PaymentNotificationSubscriber` / `SaleNotificationSubscriber` | `src/infrastructure/subscribers/notification-subscribers.test.ts` | 25 — resilience (each channel independent), FAILED logs with errorMessage, PDF fallback, throttle (4th notification blocked), client with no phone/email, client not found in DB |
 | `GenerateAccountStatementUseCase` | `src/domain/use-cases/reports/generate-account-statement.use-case.test.ts` | 20 — client not found, parallel queries, client with no sales, product deduplication across sales, fallback name for deleted products, generatedBy propagated, Buffer returned |
@@ -1246,36 +1248,35 @@ Filters follow Clean Architecture: `req.query` → `PaginationDto` + `FilterXxxD
 
 ## Pricing System
 
-The system uses a **Pricing Domain Service** with the **Strategy Pattern** to calculate prices at sale time.
+Prices are **set manually at sale time** by the seller. There is no automatic price catalog or surcharge.
 
 ### How it works
 
-1. When a sale is created, `CreateSaleUseCase` calls `PricingService.calculate(context)` for each item
-2. `PricingService` selects the highest-priority `PricingStrategy` that matches the context
-3. The selected strategy computes `basePrice`, `unitPrice`, `surchargeAmount`, and `appliedRule`
-4. The use case uses `unitPrice` for totals and credit limit checks
-5. All three values are persisted in `SaleItem` for permanent audit traceability
+1. When creating a sale, the frontend (seller) provides `unitPrice` for each line item
+2. `CreateSaleUseCase` validates product existence, activity, and stock — but trusts the provided price
+3. The server computes `subtotal = unitPrice × quantity` and `total = sum(subtotals)` — clients cannot override the total
+4. `SaleItem.basePrice = unitPrice` and `appliedRule = null` are persisted for audit traceability
 
-### Active strategies
+### Installment plans and collection days
 
-| Strategy | Rule name | Applies to | Priority |
-|----------|-----------|-----------|----------|
-| `CashPricingStrategy` | `CASH_BASE` | All `CASH` sales | 10 |
-| `CreditPricingStrategy` | `CREDIT_SURCHARGE_{N}PCT` | All `CREDIT` sales | 10 |
+Credit sales support optional installment plans:
 
-### Adding a new pricing rule
+| Field | Description |
+|-------|-------------|
+| `installmentsCount` | Number of installments (integer ≥ 2) |
+| `frequency` | `MONTHLY` or `BIWEEKLY` |
+| `collectionDay` | Day of month for billing (1–31). MONTHLY: only day; BIWEEKLY: first day |
+| `collectionDay2` | Second billing day (1–31), BIWEEKLY plans only |
 
-Create a class implementing `PricingStrategy`, set `priority >= 20` to override base rules, and register it in `sale.router.ts`:
-
-```typescript
-const pricingService = new PricingService([
-  new CashPricingStrategy(),
-  new CreditPricingStrategy(envs.creditSurchargePercent),
-  new WholesaleClientStrategy(), // new — priority 20, overrides base when applicable
-]);
+BIWEEKLY example — collect on the 15th and 30th every month:
+```json
+{
+  "installmentsCount": 6,
+  "frequency": "BIWEEKLY",
+  "collectionDay": 15,
+  "collectionDay2": 30
+}
 ```
-
-No other files need to change.
 
 ---
 

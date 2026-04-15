@@ -47,11 +47,26 @@ export class SaleEntity {
     public readonly frequency: InstallmentFrequency | null = null,
     /** Monto de cada cuota = total / installmentsCount. Null si no aplica. */
     public readonly installmentAmount: number | null = null,
+    /**
+     * Día del mes en que se realiza el cobro (1-31).
+     * Para planes MONTHLY: único día de cobro mensual.
+     * Para planes BIWEEKLY: primer día de cobro (junto con collectionDay2).
+     * Null si no se definió día de cobro.
+     */
+    public readonly collectionDay: number | null = null,
+    /**
+     * Segundo día de cobro (1-31). Exclusivo para planes BIWEEKLY.
+     * Null si el plan es MONTHLY o si no se definieron días de cobro.
+     */
+    public readonly collectionDay2: number | null = null,
   ) {}
 
   static fromObject(object: Record<string, unknown>): SaleEntity {
-    const { id, clientId, type, status, total, createdAt, items, installmentsCount, frequency, installmentAmount } =
-      object;
+    const {
+      id, clientId, type, status, total, createdAt, items,
+      installmentsCount, frequency, installmentAmount,
+      collectionDay, collectionDay2,
+    } = object;
 
     if (!id) throw new Error('Sale id is required');
     if (!clientId) throw new Error('Sale clientId is required');
@@ -85,6 +100,8 @@ export class SaleEntity {
       installmentsCount != null ? Number(installmentsCount) : null,
       (frequency as InstallmentFrequency | null) ?? null,
       installmentAmount != null ? Number(installmentAmount) : null,
+      collectionDay != null ? Number(collectionDay) : null,
+      collectionDay2 != null ? Number(collectionDay2) : null,
     );
   }
 }

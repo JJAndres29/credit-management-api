@@ -19,13 +19,6 @@ export const envs = {
   databaseUrl: process.env.DATABASE_URL!,
   jwtSecret: process.env.JWT_SECRET!,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN!,
-  /**
-   * Porcentaje de recargo aplicado a ventas a crédito (CREDIT).
-   * Ejemplo: 15 → los productos cuestan 15% más en ventas a crédito.
-   * Default: 0 (sin recargo) si la variable no está definida.
-   * Cambiar este valor no requiere modificar código, solo reiniciar el proceso.
-   */
-  creditSurchargePercent: Number(process.env.CREDIT_SURCHARGE_PERCENT ?? 0),
   cloudinary: {
     cloudName: process.env.CLOUDINARY_CLOUD_NAME ?? '',
     apiKey: process.env.CLOUDINARY_API_KEY ?? '',

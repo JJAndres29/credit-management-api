@@ -10,8 +10,8 @@ import { CustomError } from '../../errors';
  * y sus resultados son deterministas.
  *
  * Diseño deliberado:
- * - El total recibido ya incluye el recargo de crédito (calculado por PricingService).
- *   Este servicio solo divide, no vuelve a aplicar ningún recargo.
+ * - El total es el que viene del use case (suma de unitPrice × quantity por ítem).
+ *   Este servicio solo divide, no aplica ningún recargo adicional.
  * - El redondeo es hacia el entero más cercano en centavos (banker's-safe).
  *   Si hubiera diferencia de centavos por redondeo acumulado, la última cuota
  *   absorbe la discrepancia — eso es responsabilidad del módulo de Pagos, no de este servicio.

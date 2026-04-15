@@ -13,10 +13,6 @@ const includeImages = {
 };
 
 function buildWhere(filters: FilterProductsDto) {
-  const priceFilter: Record<string, unknown> = {};
-  if (filters.minPrice !== undefined) priceFilter.gte = filters.minPrice;
-  if (filters.maxPrice !== undefined) priceFilter.lte = filters.maxPrice;
-
   const stockFilter: Record<string, unknown> = {};
   if (filters.minStock !== undefined) stockFilter.gte = filters.minStock;
   if (filters.maxStock !== undefined) stockFilter.lte = filters.maxStock;
@@ -26,7 +22,6 @@ function buildWhere(filters: FilterProductsDto) {
     ...(filters.search && {
       name: { contains: filters.search, mode: 'insensitive' as const },
     }),
-    ...(Object.keys(priceFilter).length > 0 && { price: priceFilter }),
     ...(Object.keys(stockFilter).length > 0 && { stock: stockFilter }),
   };
 }
@@ -74,7 +69,6 @@ export class PrismaProductDatasource implements ProductDatasource {
     const product = await prisma.product.create({
       data: {
         name: dto.name,
-        price: dto.price,
         stock: dto.stock,
       },
       include: includeImages,
@@ -88,7 +82,6 @@ export class PrismaProductDatasource implements ProductDatasource {
       where: { id },
       data: {
         name: dto.name,
-        price: dto.price,
       },
       include: includeImages,
     });

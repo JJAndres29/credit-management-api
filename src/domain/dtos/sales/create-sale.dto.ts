@@ -3,6 +3,8 @@ import { SaleType, InstallmentFrequency } from '../../entities';
 export interface CreateSaleItemDto {
   productId: string;
   quantity: number;
+  /** Precio unitario del producto fijado al momento de la venta. Debe ser mayor a 0. */
+  unitPrice: number;
 }
 
 export class CreateSaleDto {
@@ -20,10 +22,26 @@ export class CreateSaleDto {
      * Undefined cuando la venta no tiene plan de cuotas.
      */
     public readonly frequency: InstallmentFrequency | undefined,
+    /**
+     * Día del mes para el cobro (1-31).
+     * MONTHLY: único día de cobro (ej. 30 → cobra el 30 de cada mes).
+     * BIWEEKLY: primer día de cobro (junto con collectionDay2).
+     * Undefined si no se desea registrar el día de cobro.
+     */
+    public readonly collectionDay: number | undefined,
+    /**
+     * Segundo día de cobro (1-31). Solo para planes BIWEEKLY.
+     * Undefined si el plan es MONTHLY o si no se definieron días de cobro.
+     */
+    public readonly collectionDay2: number | undefined,
   ) {}
 
   static create(object: Record<string, unknown>): [string?, CreateSaleDto?] {
-    const { clientId, type, items, installmentsCount, frequency } = object;
+    const {
+      clientId, type, items,
+      installmentsCount, frequency,
+      collectionDay, collectionDay2,
+    } = object;
 
     if (!clientId || typeof clientId !== 'string' || clientId.trim().length === 0) {
       return ['El ID del cliente es requerido'];
@@ -49,6 +67,11 @@ export class CreateSaleDto {
       if (qty === undefined || typeof qty !== 'number' || !Number.isInteger(qty) || qty < 1) {
         return [`La cantidad en la posición ${i + 1} debe ser un número entero mayor a 0`];
       }
+
+      const price = item.unitPrice;
+      if (price === undefined || price === null || typeof price !== 'number' || price <= 0) {
+        return [`El precio unitario en la posición ${i + 1} debe ser un número mayor a 0`];
+      }
     }
 
     // Detectar productos duplicados en la misma venta
@@ -58,8 +81,6 @@ export class CreateSaleDto {
     }
 
     // --- Validación de campos de cuotas ---
-    // Los campos solo son válidos en ventas a crédito. Si se envían en ventas CASH
-    // se rechaza el request para evitar ambigüedad en el intento del cliente.
     const hasInstallmentsCount = installmentsCount !== undefined && installmentsCount !== null;
     const hasFrequency = frequency !== undefined && frequency !== null;
 
@@ -88,6 +109,44 @@ export class CreateSaleDto {
       parsedFrequency = frequency as InstallmentFrequency;
     }
 
+    // --- Validación de días de cobro ---
+    const hasCollectionDay = collectionDay !== undefined && collectionDay !== null;
+    const hasCollectionDay2 = collectionDay2 !== undefined && collectionDay2 !== null;
+
+    if ((hasCollectionDay || hasCollectionDay2) && !hasInstallmentsCount) {
+      return ['Los días de cobro (collectionDay, collectionDay2) solo se pueden definir junto con un plan de cuotas'];
+    }
+
+    let parsedCollectionDay: number | undefined;
+    let parsedCollectionDay2: number | undefined;
+
+    if (hasCollectionDay) {
+      const day = Number(collectionDay);
+      if (!Number.isInteger(day) || day < 1 || day > 31) {
+        return ['collectionDay debe ser un número entero entre 1 y 31'];
+      }
+      parsedCollectionDay = day;
+    }
+
+    if (hasCollectionDay2) {
+      if (parsedFrequency !== InstallmentFrequency.BIWEEKLY) {
+        return ['collectionDay2 solo aplica a planes con frequency BIWEEKLY'];
+      }
+      const day2 = Number(collectionDay2);
+      if (!Number.isInteger(day2) || day2 < 1 || day2 > 31) {
+        return ['collectionDay2 debe ser un número entero entre 1 y 31'];
+      }
+      parsedCollectionDay2 = day2;
+    }
+
+    if (parsedFrequency === InstallmentFrequency.BIWEEKLY && hasCollectionDay && !hasCollectionDay2) {
+      return ['Para planes BIWEEKLY debes proporcionar tanto collectionDay como collectionDay2'];
+    }
+
+    if (parsedFrequency === InstallmentFrequency.MONTHLY && hasCollectionDay2) {
+      return ['collectionDay2 no aplica a planes MONTHLY; usa solo collectionDay'];
+    }
+
     return [
       undefined,
       new CreateSaleDto(
@@ -96,9 +155,12 @@ export class CreateSaleDto {
         (items as Record<string, unknown>[]).map((i) => ({
           productId: (i.productId as string).trim(),
           quantity: i.quantity as number,
+          unitPrice: i.unitPrice as number,
         })),
         parsedInstallmentsCount,
         parsedFrequency,
+        parsedCollectionDay,
+        parsedCollectionDay2,
       ),
     ];
   }

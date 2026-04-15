@@ -70,7 +70,6 @@ model Client {
 model Product {
   id        String   @id @default(uuid())
   name      String
-  price     Decimal  @db.Decimal(10, 2)
   stock     Int      @default(0)
   isActive  Boolean  @default(true)
   createdAt DateTime @default(now())
@@ -100,6 +99,8 @@ model Sale {
   installmentsCount Int?                  // Null para ventas sin plan de cuotas
   frequency         InstallmentFrequency? // MONTHLY | BIWEEKLY — null si no es venta en cuotas
   installmentAmount Decimal?              @db.Decimal(10, 2) // total / installmentsCount, redondeado a 2 decimales
+  collectionDay     Int?                  // Día del mes para el cobro (1-31). Ej: 30 → cobra el día 30 de cada mes
+  collectionDay2    Int?                  // Segundo día de cobro para planes BIWEEKLY. Ej: 15 → cobra el 15 y el collectionDay
   createdAt         DateTime              @default(now())
 
   client   Client     @relation(fields: [clientId], references: [id])

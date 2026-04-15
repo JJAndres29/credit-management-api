@@ -130,6 +130,9 @@ export class PrismaSaleDatasource implements SaleDatasource {
             frequency: data.frequency,
             installmentAmount: data.installmentAmount,
           }),
+          // Días de cobro — opcionales, solo presentes cuando el vendedor los define
+          ...(data.collectionDay !== undefined && { collectionDay: data.collectionDay }),
+          ...(data.collectionDay2 !== undefined && { collectionDay2: data.collectionDay2 }),
           items: {
             create: data.items.map((item) => ({
               productId: item.productId,
