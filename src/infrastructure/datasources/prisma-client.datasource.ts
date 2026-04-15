@@ -82,6 +82,10 @@ export class PrismaClientDatasource implements ClientDatasource {
         name: dto.name,
         phone: dto.phone,
         email: dto.email,
+        documentType: dto.documentType,
+        documentNumber: dto.documentNumber,
+        address: dto.address,
+        neighborhood: dto.neighborhood,
         creditLimit: dto.creditLimit,
       },
     });
@@ -96,6 +100,10 @@ export class PrismaClientDatasource implements ClientDatasource {
         name: dto.name,
         phone: dto.phone,
         email: dto.email,
+        documentType: dto.documentType,
+        documentNumber: dto.documentNumber,
+        address: dto.address,
+        neighborhood: dto.neighborhood,
         creditLimit: dto.creditLimit,
       },
     });

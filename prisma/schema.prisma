@@ -28,6 +28,11 @@ enum InstallmentFrequency {
   BIWEEKLY
 }
 
+enum DocumentType {
+  CC  // Cédula de ciudadanía
+  CE  // Cédula de extranjería
+}
+
 model User {
   id        String   @id @default(uuid())
   name      String
@@ -42,15 +47,19 @@ model User {
 }
 
 model Client {
-  id          String   @id @default(uuid())
-  name        String
-  phone       String
-  email       String?
-  creditLimit Decimal  @db.Decimal(10, 2)
-  balance     Decimal  @default(0) @db.Decimal(10, 2)
-  isActive    Boolean  @default(true)
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  id             String       @id @default(uuid())
+  name           String
+  phone          String
+  email          String?
+  documentType   DocumentType
+  documentNumber String
+  address        String
+  neighborhood   String
+  creditLimit    Decimal      @db.Decimal(10, 2)
+  balance        Decimal      @default(0) @db.Decimal(10, 2)
+  isActive       Boolean      @default(true)
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
 
   sales             Sale[]
   payments          Payment[]

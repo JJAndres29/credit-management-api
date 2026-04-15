@@ -18,7 +18,7 @@ import { SaleEntity, SaleItemEntity, SaleType, SaleStatus } from '../../entities
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function makeClient(id = 'client-1'): ClientEntity {
-  return new ClientEntity(id, 'Carlos Díaz', '555-4321', 'carlos@example.com', 10_000, 500, true, new Date(), new Date());
+  return new ClientEntity(id, 'Carlos Díaz', '555-4321', 'carlos@example.com', 'CC', '12345678', 'Calle 1 # 2-3', 'Centro', 10_000, 500, true, new Date(), new Date());
 }
 
 function makeSale(id: string, clientId: string, productIds: string[]): SaleEntity {
