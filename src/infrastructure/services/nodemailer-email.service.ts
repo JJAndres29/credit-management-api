@@ -40,6 +40,7 @@ export class NodemailerEmailService implements EmailService {
         user: email,
         pass: secretKey,
       },
+      family: 4, // Fuerza IPv4 — Railway no soporta IPv6
     });
 
     this.from = email;
