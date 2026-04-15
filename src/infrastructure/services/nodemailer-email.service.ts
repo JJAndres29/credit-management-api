@@ -34,14 +34,15 @@ export class NodemailerEmailService implements EmailService {
       return;
     }
 
-    this.transporter = nodemailer.createTransport({
-      service,
-      auth: {
-        user: email,
-        pass: secretKey,
-      },
-      family: 4, // Fuerza IPv4 — Railway no soporta IPv6
-    });
+    // Configuración SMTP explícita para forzar IPv4 (Railway no soporta IPv6).
+    // Gmail usa host directo con family:4; otros servicios usan el shorthand `service`.
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const transportOptions: any =
+      service === 'gmail'
+        ? { host: 'smtp.gmail.com', port: 465, secure: true, family: 4, auth: { user: email, pass: secretKey } }
+        : { service, auth: { user: email, pass: secretKey } };
+
+    this.transporter = nodemailer.createTransport(transportOptions);
 
     this.from = email;
     this.enabled = true;
