@@ -47,7 +47,7 @@ export class PdfkitPdfService implements PdfService {
   private buildDocument(doc: PDFKit.PDFDocument, data: AccountStatementData): void {
     this.drawHeader(doc, data);
     this.drawClientInfo(doc, data);
-    this.drawCreditBar(doc, data.client.balance, data.client.creditLimit);
+    // this.drawCreditBar(doc, data.client.balance, data.client.creditLimit);
     this.drawSalesSection(doc, data.sales);
     this.drawPaymentsSection(doc, data.payments);
     this.drawFinancialSummary(doc, data);
@@ -133,64 +133,64 @@ export class PdfkitPdfService implements PdfService {
 
   // ─── Barra de uso de crédito ─────────────────────────────────────────────────
 
-  private drawCreditBar(
-    doc: PDFKit.PDFDocument,
-    balance: number,
-    creditLimit: number,
-  ): void {
-    this.drawSectionTitle(doc, 'Posición de Crédito');
+  // private drawCreditBar(
+  //   doc: PDFKit.PDFDocument,
+  //   balance: number,
+  //   creditLimit: number,
+  // ): void {
+  //   this.drawSectionTitle(doc, 'Posición de Crédito');
 
-    const y = doc.y;
-    const barWidth = CONTENT_WIDTH;
-    const barHeight = 14;
-    const usedFraction = creditLimit > 0 ? Math.min(balance / creditLimit, 1) : 0;
-    const available = Math.max(creditLimit - balance, 0);
+  //   const y = doc.y;
+  //   const barWidth = CONTENT_WIDTH;
+  //   const barHeight = 14;
+  //   const usedFraction = creditLimit > 0 ? Math.min(balance / creditLimit, 1) : 0;
+  //   const available = Math.max(creditLimit - balance, 0);
 
-    // Fondo de la barra (gris claro)
-    doc
-      .roundedRect(PAGE_MARGIN, y, barWidth, barHeight, 4)
-      .fillColor(COLORS.border)
-      .fill();
+  //   // Fondo de la barra (gris claro)
+  //   doc
+  //     .roundedRect(PAGE_MARGIN, y, barWidth, barHeight, 4)
+  //     .fillColor(COLORS.border)
+  //     .fill();
 
-    // Porción usada
-    if (usedFraction > 0) {
-      const usedColor = usedFraction > 0.8 ? COLORS.danger : usedFraction > 0.5 ? COLORS.warning : COLORS.success;
-      doc
-        .roundedRect(PAGE_MARGIN, y, barWidth * usedFraction, barHeight, 4)
-        .fillColor(usedColor)
-        .fill();
-    }
+  //   // Porción usada
+  //   if (usedFraction > 0) {
+  //     const usedColor = usedFraction > 0.8 ? COLORS.danger : usedFraction > 0.5 ? COLORS.warning : COLORS.success;
+  //     doc
+  //       .roundedRect(PAGE_MARGIN, y, barWidth * usedFraction, barHeight, 4)
+  //       .fillColor(usedColor)
+  //       .fill();
+  //   }
 
-    // Etiquetas debajo de la barra
-    const labelY = y + barHeight + 6;
-    doc
-      .fillColor(COLORS.muted)
-      .fontSize(8)
-      .font('Helvetica')
-      .text(`Deuda: ${this.formatCurrency(balance)}`, PAGE_MARGIN, labelY);
+  //   // Etiquetas debajo de la barra
+  //   const labelY = y + barHeight + 6;
+  //   doc
+  //     .fillColor(COLORS.muted)
+  //     .fontSize(8)
+  //     .font('Helvetica')
+  //     .text(`Deuda: ${this.formatCurrency(balance)}`, PAGE_MARGIN, labelY);
 
-    doc
-      .fillColor(COLORS.success)
-      .fontSize(8)
-      .font('Helvetica-Bold')
-      .text(
-        `Disponible: ${this.formatCurrency(available)}`,
-        PAGE_MARGIN,
-        labelY,
-        { width: CONTENT_WIDTH, align: 'center' },
-      );
+  //   doc
+  //     .fillColor(COLORS.success)
+  //     .fontSize(8)
+  //     .font('Helvetica-Bold')
+  //     .text(
+  //       `Disponible: ${this.formatCurrency(available)}`,
+  //       PAGE_MARGIN,
+  //       labelY,
+  //       { width: CONTENT_WIDTH, align: 'center' },
+  //     );
 
-    doc
-      .fillColor(COLORS.muted)
-      .fontSize(8)
-      .font('Helvetica')
-      .text(`Límite: ${this.formatCurrency(creditLimit)}`, PAGE_MARGIN, labelY, {
-        width: CONTENT_WIDTH,
-        align: 'right',
-      });
+  //   doc
+  //     .fillColor(COLORS.muted)
+  //     .fontSize(8)
+  //     .font('Helvetica')
+  //     .text(`Límite: ${this.formatCurrency(creditLimit)}`, PAGE_MARGIN, labelY, {
+  //       width: CONTENT_WIDTH,
+  //       align: 'right',
+  //     });
 
-    doc.y = labelY + 20;
-  }
+  //   doc.y = labelY + 20;
+  // }
 
   // ─── Sección de ventas ───────────────────────────────────────────────────────
 
