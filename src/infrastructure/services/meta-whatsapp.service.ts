@@ -76,6 +76,7 @@ export class MetaWhatsAppService implements NotificationService {
         return false;
       }
 
+      console.log('[MetaWhatsAppService] Mensaje enviado a:', this.formatPhone(to));
       return true;
     } catch (error) {
       console.error('[MetaWhatsAppService] Error al enviar mensaje:', error);
