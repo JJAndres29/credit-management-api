@@ -30,7 +30,7 @@ export class SaleNotificationSubscriber {
 
   private handle = async (data: unknown): Promise<void> => {
     try {
-      const { saleId, clientId, total, newBalance, installmentsCount, installmentAmount } = data as CreditSaleCreatedData;
+      const { saleId, clientId, total, newBalance } = data as CreditSaleCreatedData;
 
       const client = await this.clientRepository.findById(clientId);
       if (!client) return;
@@ -39,18 +39,6 @@ export class SaleNotificationSubscriber {
       const formattedBalance = this.formatCurrency(newBalance);
       const date = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' });
 
-      let installmentInfo = '';
-      if (installmentsCount && installmentAmount) {
-        const formattedInstallment = this.formatCurrency(installmentAmount);
-        installmentInfo =
-          `\nCuota inicial: *${formattedInstallment}* (${installmentsCount} cuotas en total).`;
-      }
-
-      const whatsAppMsg =
-        `Hola ${client.name}, se registró una compra a crédito por *${formattedTotal}*.\n` +
-        `Saldo pendiente: *${formattedBalance}*.` +
-        installmentInfo +
-        `\nPara ver el detalle completo de su cuenta, revise el correo electrónico registrado.`;
 
       // Email — detalle completo
       const emailHtml = this.buildSaleEmailHtml({
@@ -80,7 +68,12 @@ export class SaleNotificationSubscriber {
             clientId,
             channel: 'WHATSAPP',
             event: 'CREDIT_SALE_CREATED',
-            send: () => this.whatsAppService!.sendWhatsApp(client.phone, whatsAppMsg),
+            send: () =>
+              this.whatsAppService!.sendTemplate(client.phone, 'compra_credito', [
+                client.name,
+                formattedTotal,
+                formattedBalance,
+              ]),
           }),
         );
       }

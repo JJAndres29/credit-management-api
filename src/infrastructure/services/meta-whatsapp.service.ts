@@ -23,7 +23,6 @@ import { NotificationService } from '../../domain/services/notification.service'
  */
 export class MetaWhatsAppService implements NotificationService {
   private readonly token: string;
-  private readonly phoneNumberId: string;
   private readonly enabled: boolean;
   private readonly apiUrl: string;
 
@@ -37,19 +36,58 @@ export class MetaWhatsAppService implements NotificationService {
       );
       this.enabled = false;
       this.token = '';
-      this.phoneNumberId = '';
       this.apiUrl = '';
       return;
     }
 
     this.token = token;
-    this.phoneNumberId = phoneNumberId;
     this.apiUrl = `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`;
     this.enabled = true;
   }
 
   get isEnabled(): boolean {
     return this.enabled;
+  }
+
+  async sendTemplate(to: string, templateName: string, variables: string[], languageCode = 'es_CO'): Promise<boolean> {
+    if (!this.enabled) return false;
+
+    try {
+      const response = await fetch(this.apiUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          to: this.formatPhone(to),
+          type: 'template',
+          template: {
+            name: templateName,
+            language: { code: languageCode },
+            components: [
+              {
+                type: 'body',
+                parameters: variables.map((v) => ({ type: 'text', text: v })),
+              },
+            ],
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        console.error('[MetaWhatsAppService] Error de plantilla:', response.status, errorBody);
+        return false;
+      }
+
+      console.log('[MetaWhatsAppService] Plantilla enviada a:', this.formatPhone(to));
+      return true;
+    } catch (error) {
+      console.error('[MetaWhatsAppService] Error al enviar plantilla:', error);
+      return false;
+    }
   }
 
   async sendWhatsApp(to: string, message: string): Promise<boolean> {
