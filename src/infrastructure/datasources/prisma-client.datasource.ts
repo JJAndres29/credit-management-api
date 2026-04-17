@@ -11,6 +11,7 @@ function buildWhere(filters: FilterClientsDto) {
     ...(filters.search && {
       OR: [
         { name: { contains: filters.search, mode: 'insensitive' as const } },
+        { documentNumber: { contains: filters.search } },
         { phone: { contains: filters.search } },
         { email: { contains: filters.search, mode: 'insensitive' as const } },
       ],

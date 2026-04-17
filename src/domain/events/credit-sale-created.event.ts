@@ -6,6 +6,10 @@ export interface CreditSaleCreatedData {
   total: number;
   /** Balance del cliente DESPUÉS de registrar la venta a crédito */
   newBalance: number;
+  /** Número de cuotas pactadas. Null si no hay plan de cuotas. */
+  installmentsCount: number | null;
+  /** Monto de cada cuota. Null si no hay plan de cuotas. */
+  installmentAmount: number | null;
 }
 
 export type CreditSaleCreatedEvent = DomainEvent<CreditSaleCreatedData>;

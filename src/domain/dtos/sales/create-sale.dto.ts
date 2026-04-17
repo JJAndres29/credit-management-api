@@ -12,35 +12,27 @@ export class CreateSaleDto {
     public readonly clientId: string,
     public readonly type: SaleType,
     public readonly items: CreateSaleItemDto[],
-    /**
-     * Número de cuotas para ventas a crédito. Mínimo 2.
-     * Undefined cuando la venta no tiene plan de cuotas.
-     */
+    /** Número de cuotas para ventas a crédito. Mínimo 2. */
     public readonly installmentsCount: number | undefined,
-    /**
-     * Periodicidad de pago: MONTHLY (mensual) o BIWEEKLY (quincenal).
-     * Undefined cuando la venta no tiene plan de cuotas.
-     */
+    /** Periodicidad de pago: MONTHLY o BIWEEKLY. */
     public readonly frequency: InstallmentFrequency | undefined,
-    /**
-     * Día del mes para el cobro (1-31).
-     * MONTHLY: único día de cobro (ej. 30 → cobra el 30 de cada mes).
-     * BIWEEKLY: primer día de cobro (junto con collectionDay2).
-     * Undefined si no se desea registrar el día de cobro.
-     */
+    /** Día del mes para el cobro (1-31). */
     public readonly collectionDay: number | undefined,
-    /**
-     * Segundo día de cobro (1-31). Solo para planes BIWEEKLY.
-     * Undefined si el plan es MONTHLY o si no se definieron días de cobro.
-     */
+    /** Segundo día de cobro (1-31). Solo para planes BIWEEKLY. */
     public readonly collectionDay2: number | undefined,
+    /**
+     * Pago inicial opcional al momento de crear la venta a crédito.
+     * Reduce el saldo pendiente y el monto de cada cuota se recalcula
+     * sobre (total - initialPayment).
+     */
+    public readonly initialPayment: number | undefined,
   ) {}
 
   static create(object: Record<string, unknown>): [string?, CreateSaleDto?] {
     const {
       clientId, type, items,
       installmentsCount, frequency,
-      collectionDay, collectionDay2,
+      collectionDay, collectionDay2, initialPayment,
     } = object;
 
     if (!clientId || typeof clientId !== 'string' || clientId.trim().length === 0) {
@@ -147,6 +139,22 @@ export class CreateSaleDto {
       return ['collectionDay2 no aplica a planes MONTHLY; usa solo collectionDay'];
     }
 
+    // --- Validación de cuota inicial ---
+    let parsedInitialPayment: number | undefined;
+    if (initialPayment !== undefined && initialPayment !== null && initialPayment !== 0) {
+      if (type !== SaleType.CREDIT) {
+        return ['La cuota inicial solo aplica a ventas de tipo CREDIT'];
+      }
+      if (typeof initialPayment !== 'number' || isNaN(initialPayment) || initialPayment < 0) {
+        return ['La cuota inicial debe ser un número mayor o igual a 0'];
+      }
+      const rounded = Math.round(initialPayment * 100) / 100;
+      if (rounded !== initialPayment && Math.abs(rounded - initialPayment) > 0.001) {
+        return ['La cuota inicial no puede tener más de 2 decimales'];
+      }
+      parsedInitialPayment = rounded;
+    }
+
     return [
       undefined,
       new CreateSaleDto(
@@ -161,6 +169,7 @@ export class CreateSaleDto {
         parsedFrequency,
         parsedCollectionDay,
         parsedCollectionDay2,
+        parsedInitialPayment,
       ),
     ];
   }
