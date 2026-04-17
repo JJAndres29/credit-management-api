@@ -60,6 +60,7 @@ export class SaleRouter {
         productRepository,
         globalEventEmitter,
         installmentCalculator,
+        paymentRepository,
       ),
       new GetSalesUseCase(saleRepository),
       new GetSaleByIdUseCase(saleRepository),

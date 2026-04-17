@@ -59,7 +59,7 @@ export class PaymentNotificationSubscriber {
 
   private handle = async (data: unknown): Promise<void> => {
     try {
-      const { paymentId, clientId, amount, newBalance, note } = data as PaymentRegisteredData;
+      const { paymentId, clientId, amount, newBalance, note, saleInstallmentsCount, saleInstallmentAmount, saleTotalPaidAfter } = data as PaymentRegisteredData;
 
       if (!throttle.canSend(clientId)) {
         console.warn(
@@ -75,10 +75,24 @@ export class PaymentNotificationSubscriber {
       const formattedBalance = this.formatCurrency(newBalance);
       const date = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' });
 
-      // WhatsApp — sin saldo para proteger info financiera si el teléfono es robado
+      let installmentInfo = '';
+      if (saleInstallmentsCount && saleInstallmentAmount && saleTotalPaidAfter !== undefined) {
+        const paidInstallments = Math.min(
+          Math.floor(saleTotalPaidAfter / saleInstallmentAmount),
+          saleInstallmentsCount,
+        );
+        const remainingInstallments = saleInstallmentsCount - paidInstallments;
+        installmentInfo =
+          remainingInstallments > 0
+            ? `\nCuotas pagadas: ${paidInstallments} de ${saleInstallmentsCount}. Le quedan *${remainingInstallments} cuota(s)* por pagar.`
+            : `\n¡Felicitaciones! Ha completado el pago de todas sus cuotas (${saleInstallmentsCount}/${saleInstallmentsCount}).`;
+      }
+
       const whatsAppMsg =
-        `Hola ${client.name}, hemos recibido su abono de ${formattedAmount}. ` +
-        `Para ver el detalle completo de su cuenta, revise el correo electrónico registrado.`;
+        `Hola ${client.name}, hemos recibido su abono de *${formattedAmount}*.\n` +
+        `Saldo pendiente: *${formattedBalance}*.` +
+        installmentInfo +
+        `\nPara ver el detalle completo de su cuenta, revise el correo electrónico registrado.`;
 
       // Email — detalle completo
       const emailHtml = this.buildPaymentEmailHtml({

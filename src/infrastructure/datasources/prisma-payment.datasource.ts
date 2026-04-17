@@ -32,6 +32,7 @@ export class PrismaPaymentDatasource implements PaymentDatasource {
         orderBy: { createdAt: 'desc' },
         skip: pagination.skip,
         take: pagination.limit,
+        include: { client: { select: { documentNumber: true } } },
       }),
       prisma.payment.count({ where }),
     ]);
@@ -50,7 +51,10 @@ export class PrismaPaymentDatasource implements PaymentDatasource {
   }
 
   async findById(id: string): Promise<PaymentEntity | null> {
-    const payment = await prisma.payment.findUnique({ where: { id } });
+    const payment = await prisma.payment.findUnique({
+      where: { id },
+      include: { client: { select: { documentNumber: true } } },
+    });
     if (!payment) return null;
     return mapToEntity(payment as unknown as Record<string, unknown>);
   }

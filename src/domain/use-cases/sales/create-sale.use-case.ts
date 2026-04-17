@@ -1,28 +1,20 @@
 import { CustomError } from '../../errors';
 import { SaleEntity, SaleType, AuditAction } from '../../entities';
 import { CreateSaleDto } from '../../dtos/sales';
-import { SaleRepository } from '../../repositories';
+import { SaleRepository, PaymentRepository } from '../../repositories';
 import { ClientRepository } from '../../repositories';
 import { ProductRepository } from '../../repositories';
 import { InstallmentCalculatorService } from '../../services/installments';
-import { EventEmitterPort, CREDIT_SALE_CREATED } from '../../events';
+import { EventEmitterPort, CREDIT_SALE_CREATED, PAYMENT_REGISTERED } from '../../events';
 
 export class CreateSaleUseCase {
   constructor(
     private readonly saleRepository: SaleRepository,
     private readonly clientRepository: ClientRepository,
     private readonly productRepository: ProductRepository,
-    /**
-     * Opcional: si no se inyecta (e.g. en tests), las notificaciones se omiten
-     * sin romper la lógica de negocio ni los tests existentes.
-     */
     private readonly eventEmitter?: EventEmitterPort,
-    /**
-     * Domain Service para el cálculo del monto de cada cuota.
-     * Tiene un valor por defecto para no romper tests ni llamadas existentes.
-     * El composition root (sale.router.ts) lo instancia explícitamente.
-     */
     private readonly installmentCalculator: InstallmentCalculatorService = new InstallmentCalculatorService(),
+    private readonly paymentRepository?: PaymentRepository,
   ) {}
 
   async execute(dto: CreateSaleDto, userId: string, ip: string): Promise<SaleEntity> {
@@ -87,12 +79,22 @@ export class CreateSaleUseCase {
     }
 
     // 5. Calcular monto de cuota cuando el DTO incluye plan de cuotas.
+    //    Si hay cuota inicial, las cuotas se calculan sobre el saldo restante.
+    const initialPayment = dto.initialPayment ?? 0;
     let installmentAmount: number | undefined;
     if (dto.type === SaleType.CREDIT && dto.installmentsCount !== undefined) {
-      installmentAmount = this.installmentCalculator.calculate(total, dto.installmentsCount);
+      const baseForInstallments = Math.max(total - initialPayment, 0);
+      installmentAmount = this.installmentCalculator.calculate(baseForInstallments, dto.installmentsCount);
     }
 
-    // 6. Persistir en una transacción atómica.
+    // 6. Validar que la cuota inicial no supere el total de la venta
+    if (initialPayment > 0 && initialPayment >= total) {
+      throw CustomError.badRequest(
+        `La cuota inicial ($${initialPayment.toFixed(2)}) debe ser menor al total de la venta ($${total.toFixed(2)})`,
+      );
+    }
+
+    // 7. Persistir en una transacción atómica.
     const balanceBefore = Number(client.balance);
 
     const sale = await this.saleRepository.create({
@@ -117,13 +119,46 @@ export class CreateSaleUseCase {
       collectionDay2: dto.collectionDay2,
     });
 
-    // 7. Emitir evento solo para ventas CREDIT (generan deuda → cliente debe saber).
+    // 8. Registrar la cuota inicial como pago si se proporcionó.
+    let finalBalance = balanceBefore + total;
+    if (initialPayment > 0 && this.paymentRepository) {
+      await this.paymentRepository.create({
+        clientId: dto.clientId,
+        saleId: sale.id,
+        amount: initialPayment,
+        note: 'Cuota inicial',
+        saleTotal: total,
+        auditLog: {
+          userId,
+          action: AuditAction.PAYMENT,
+          before: balanceBefore + total,
+          after: balanceBefore + total - initialPayment,
+          ip,
+        },
+      });
+      finalBalance = balanceBefore + total - initialPayment;
+
+      this.eventEmitter?.emit(PAYMENT_REGISTERED, {
+        paymentId: sale.id,
+        clientId: dto.clientId,
+        amount: initialPayment,
+        newBalance: finalBalance,
+        note: 'Cuota inicial',
+        saleInstallmentsCount: dto.installmentsCount ?? null,
+        saleInstallmentAmount: installmentAmount ?? null,
+        saleTotalPaidAfter: initialPayment,
+      });
+    }
+
+    // 9. Emitir evento solo para ventas CREDIT (generan deuda → cliente debe saber).
     if (dto.type === SaleType.CREDIT) {
       this.eventEmitter?.emit(CREDIT_SALE_CREATED, {
         saleId: sale.id,
         clientId: dto.clientId,
         total,
-        newBalance: balanceBefore + total,
+        newBalance: finalBalance,
+        installmentsCount: dto.installmentsCount ?? null,
+        installmentAmount: installmentAmount ?? null,
       });
     }
 

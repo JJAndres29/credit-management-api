@@ -7,6 +7,11 @@ export interface PaymentRegisteredData {
   /** Balance del cliente DESPUÉS de aplicar el pago */
   newBalance: number;
   note: string | null;
+  /** Datos de cuotas de la venta asociada (solo cuando saleId tiene plan de cuotas) */
+  saleInstallmentsCount?: number | null;
+  saleInstallmentAmount?: number | null;
+  /** Total acumulado pagado en la venta DESPUÉS de este pago */
+  saleTotalPaidAfter?: number;
 }
 
 export type PaymentRegisteredEvent = DomainEvent<PaymentRegisteredData>;

@@ -35,6 +35,9 @@ export class CreatePaymentUseCase {
     }
 
     let saleTotal: number | undefined;
+    let saleInstallmentsCount: number | null = null;
+    let saleInstallmentAmount: number | null = null;
+    let saleTotalPaidAfter: number | undefined;
 
     // 3. Validaciones adicionales cuando el pago va asociado a una venta específica
     if (dto.saleId) {
@@ -66,6 +69,9 @@ export class CreatePaymentUseCase {
       }
 
       saleTotal = Number(sale.total);
+      saleInstallmentsCount = sale.installmentsCount;
+      saleInstallmentAmount = sale.installmentAmount;
+      saleTotalPaidAfter = totalAlreadyPaid + dto.amount;
     }
 
     // 4. Persistir: la transacción atómica en el datasource se encarga de:
@@ -94,6 +100,9 @@ export class CreatePaymentUseCase {
       amount: dto.amount,
       newBalance: clientBalance - dto.amount,
       note: dto.note,
+      saleInstallmentsCount,
+      saleInstallmentAmount,
+      saleTotalPaidAfter,
     });
 
     return payment;
