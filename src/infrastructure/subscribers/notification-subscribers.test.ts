@@ -99,6 +99,7 @@ function makeMocks() {
 
   const mockWhatsApp: jest.Mocked<NotificationService> = {
     sendWhatsApp: jest.fn().mockResolvedValue(true),
+    sendTemplate: jest.fn().mockResolvedValue(true),
   };
 
   const mockEmail: jest.Mocked<EmailService> = {
@@ -156,9 +157,11 @@ describe('PaymentNotificationSubscriber', () => {
       buildSubscriber();
       await mocks.getPaymentHandler()(makePaymentData(clientId));
 
-      expect(mocks.mockWhatsApp.sendWhatsApp).toHaveBeenCalledWith(
+      expect(mocks.mockWhatsApp.sendTemplate).toHaveBeenCalledWith(
         '555-0001',
-        expect.stringContaining('María López'),
+        'abono_recibido',
+        expect.arrayContaining(['María López']),
+        'es',
       );
     });
 
@@ -186,7 +189,7 @@ describe('PaymentNotificationSubscriber', () => {
 
     it('envía Email aunque WhatsApp falle (Promise.allSettled)', async () => {
       mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId));
-      mocks.mockWhatsApp.sendWhatsApp.mockRejectedValue(new Error('Twilio timeout'));
+      mocks.mockWhatsApp.sendTemplate.mockRejectedValue(new Error('Twilio timeout'));
 
       buildSubscriber();
       await mocks.getPaymentHandler()(makePaymentData(clientId));
@@ -196,7 +199,7 @@ describe('PaymentNotificationSubscriber', () => {
 
     it('persiste WhatsApp como FAILED y Email como SENT', async () => {
       mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId));
-      mocks.mockWhatsApp.sendWhatsApp.mockRejectedValue(new Error('Twilio timeout'));
+      mocks.mockWhatsApp.sendTemplate.mockRejectedValue(new Error('Twilio timeout'));
 
       buildSubscriber();
       await mocks.getPaymentHandler()(makePaymentData(clientId));
@@ -220,7 +223,7 @@ describe('PaymentNotificationSubscriber', () => {
       buildSubscriber();
       await mocks.getPaymentHandler()(makePaymentData(clientId));
 
-      expect(mocks.mockWhatsApp.sendWhatsApp).toHaveBeenCalled();
+      expect(mocks.mockWhatsApp.sendTemplate).toHaveBeenCalled();
     });
 
     it('persiste Email como FAILED con mensaje de error', async () => {
@@ -305,7 +308,7 @@ describe('PaymentNotificationSubscriber', () => {
       // Invocación 4 — debe ser bloqueada por el throttle
       await handler(data);
 
-      expect(mocks.mockWhatsApp.sendWhatsApp).not.toHaveBeenCalled();
+      expect(mocks.mockWhatsApp.sendTemplate).not.toHaveBeenCalled();
       expect(mocks.mockEmail.sendEmail).not.toHaveBeenCalled();
     });
   });
@@ -321,7 +324,7 @@ describe('PaymentNotificationSubscriber', () => {
       buildSubscriber();
       await mocks.getPaymentHandler()(makePaymentData(clientId));
 
-      expect(mocks.mockWhatsApp.sendWhatsApp).not.toHaveBeenCalled();
+      expect(mocks.mockWhatsApp.sendTemplate).not.toHaveBeenCalled();
       expect(mocks.mockEmail.sendEmail).toHaveBeenCalled();
     });
   });
@@ -336,7 +339,7 @@ describe('PaymentNotificationSubscriber', () => {
       await mocks.getPaymentHandler()(makePaymentData(clientId));
 
       expect(mocks.mockEmail.sendEmail).not.toHaveBeenCalled();
-      expect(mocks.mockWhatsApp.sendWhatsApp).toHaveBeenCalled();
+      expect(mocks.mockWhatsApp.sendTemplate).toHaveBeenCalled();
     });
   });
 
@@ -349,7 +352,7 @@ describe('PaymentNotificationSubscriber', () => {
         mocks.getPaymentHandler()(makePaymentData('pay-ghost-client')),
       ).resolves.toBeUndefined();
 
-      expect(mocks.mockWhatsApp.sendWhatsApp).not.toHaveBeenCalled();
+      expect(mocks.mockWhatsApp.sendTemplate).not.toHaveBeenCalled();
       expect(mocks.mockEmail.sendEmail).not.toHaveBeenCalled();
     });
   });
@@ -392,9 +395,10 @@ describe('SaleNotificationSubscriber', () => {
       buildSubscriber();
       await mocks.getSaleHandler()(makeSaleData(clientId));
 
-      expect(mocks.mockWhatsApp.sendWhatsApp).toHaveBeenCalledWith(
+      expect(mocks.mockWhatsApp.sendTemplate).toHaveBeenCalledWith(
         '555-0001',
-        expect.stringContaining('María López'),
+        'compra_credito',
+        expect.arrayContaining(['María López']),
       );
     });
 
@@ -422,7 +426,7 @@ describe('SaleNotificationSubscriber', () => {
 
     it('envía Email aunque WhatsApp falle', async () => {
       mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId));
-      mocks.mockWhatsApp.sendWhatsApp.mockRejectedValue(new Error('Twilio down'));
+      mocks.mockWhatsApp.sendTemplate.mockRejectedValue(new Error('Twilio down'));
 
       buildSubscriber();
       await mocks.getSaleHandler()(makeSaleData(clientId));
@@ -432,7 +436,7 @@ describe('SaleNotificationSubscriber', () => {
 
     it('persiste WhatsApp como FAILED y Email como SENT', async () => {
       mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId));
-      mocks.mockWhatsApp.sendWhatsApp.mockRejectedValue(new Error('Twilio down'));
+      mocks.mockWhatsApp.sendTemplate.mockRejectedValue(new Error('Twilio down'));
 
       buildSubscriber();
       await mocks.getSaleHandler()(makeSaleData(clientId));
@@ -456,7 +460,7 @@ describe('SaleNotificationSubscriber', () => {
       buildSubscriber();
       await mocks.getSaleHandler()(makeSaleData(clientId));
 
-      expect(mocks.mockWhatsApp.sendWhatsApp).toHaveBeenCalled();
+      expect(mocks.mockWhatsApp.sendTemplate).toHaveBeenCalled();
     });
   });
 
@@ -469,7 +473,7 @@ describe('SaleNotificationSubscriber', () => {
         mocks.getSaleHandler()(makeSaleData('sale-ghost-client')),
       ).resolves.toBeUndefined();
 
-      expect(mocks.mockWhatsApp.sendWhatsApp).not.toHaveBeenCalled();
+      expect(mocks.mockWhatsApp.sendTemplate).not.toHaveBeenCalled();
       expect(mocks.mockEmail.sendEmail).not.toHaveBeenCalled();
     });
   });
@@ -483,7 +487,7 @@ describe('SaleNotificationSubscriber', () => {
       buildSubscriber();
       await mocks.getSaleHandler()(makeSaleData(clientId));
 
-      expect(mocks.mockWhatsApp.sendWhatsApp).toHaveBeenCalled();
+      expect(mocks.mockWhatsApp.sendTemplate).toHaveBeenCalled();
       expect(mocks.mockEmail.sendEmail).not.toHaveBeenCalled();
     });
   });

@@ -59,7 +59,7 @@ export class PaymentNotificationSubscriber {
 
   private handle = async (data: unknown): Promise<void> => {
     try {
-      const { paymentId, clientId, amount, newBalance, note, saleInstallmentsCount, saleInstallmentAmount, saleTotalPaidAfter } = data as PaymentRegisteredData;
+      const { paymentId, clientId, amount, newBalance, note } = data as PaymentRegisteredData;
 
       if (!throttle.canSend(clientId)) {
         console.warn(
@@ -75,24 +75,6 @@ export class PaymentNotificationSubscriber {
       const formattedBalance = this.formatCurrency(newBalance);
       const date = new Date().toLocaleString('es-CO', { timeZone: 'America/Bogota' });
 
-      let installmentInfo = '';
-      if (saleInstallmentsCount && saleInstallmentAmount && saleTotalPaidAfter !== undefined) {
-        const paidInstallments = Math.min(
-          Math.floor(saleTotalPaidAfter / saleInstallmentAmount),
-          saleInstallmentsCount,
-        );
-        const remainingInstallments = saleInstallmentsCount - paidInstallments;
-        installmentInfo =
-          remainingInstallments > 0
-            ? `\nCuotas pagadas: ${paidInstallments} de ${saleInstallmentsCount}. Le quedan *${remainingInstallments} cuota(s)* por pagar.`
-            : `\n¡Felicitaciones! Ha completado el pago de todas sus cuotas (${saleInstallmentsCount}/${saleInstallmentsCount}).`;
-      }
-
-      const whatsAppMsg =
-        `Hola ${client.name}, hemos recibido su abono de *${formattedAmount}*.\n` +
-        `Saldo pendiente: *${formattedBalance}*.` +
-        installmentInfo +
-        `\nPara ver el detalle completo de su cuenta, revise el correo electrónico registrado.`;
 
       // Email — detalle completo
       const emailHtml = this.buildPaymentEmailHtml({
@@ -123,7 +105,12 @@ export class PaymentNotificationSubscriber {
             clientId,
             channel: 'WHATSAPP',
             event: 'PAYMENT_REGISTERED',
-            send: () => this.whatsAppService!.sendWhatsApp(client.phone, whatsAppMsg),
+            send: () =>
+              this.whatsAppService!.sendTemplate(client.phone, 'abono_recibido', [
+                client.name,
+                formattedAmount,
+                formattedBalance,
+              ], 'es'),
           }),
         );
       }
