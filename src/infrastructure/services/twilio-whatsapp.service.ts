@@ -57,6 +57,25 @@ export class TwilioWhatsAppService implements NotificationService {
     }
   }
 
+  async sendTemplate(to: string, templateName: string, variables: string[], _languageCode = 'es'): Promise<boolean> {
+    if (!this.enabled || !this.client) return false;
+
+    try {
+      await this.client.messages.create({
+        from: this.from,
+        to: this.formatPhone(to),
+        contentSid: templateName,
+        contentVariables: JSON.stringify(
+          Object.fromEntries(variables.map((v, i) => [String(i + 1), v])),
+        ),
+      });
+      return true;
+    } catch (error) {
+      console.error('[TwilioWhatsAppService] Error al enviar template:', error);
+      return false;
+    }
+  }
+
   /**
    * Normaliza el número al formato requerido por Twilio: whatsapp:+[número]
    *
