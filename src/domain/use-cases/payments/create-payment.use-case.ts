@@ -6,6 +6,16 @@ import { ClientRepository } from '../../repositories';
 import { SaleRepository } from '../../repositories';
 import { EventEmitterPort, PAYMENT_REGISTERED } from '../../events';
 
+export interface WhatsAppPayload {
+  phone: string;
+  message: string;
+}
+
+export interface CreatePaymentResult {
+  payment: PaymentEntity;
+  whatsappPayload: WhatsAppPayload | null;
+}
+
 export class CreatePaymentUseCase {
   constructor(
     private readonly paymentRepository: PaymentRepository,
@@ -18,7 +28,7 @@ export class CreatePaymentUseCase {
     private readonly eventEmitter?: EventEmitterPort,
   ) {}
 
-  async execute(dto: CreatePaymentDto, userId: string, ip: string): Promise<PaymentEntity> {
+  async execute(dto: CreatePaymentDto, userId: string, ip: string): Promise<CreatePaymentResult> {
     // 1. Verificar que el cliente existe y está activo
     const client = await this.clientRepository.findById(dto.clientId);
     if (!client) throw CustomError.notFound(`Cliente con ID ${dto.clientId} no encontrado`);
@@ -105,6 +115,18 @@ export class CreatePaymentUseCase {
       saleTotalPaidAfter,
     });
 
-    return payment;
+    const newBalance = clientBalance - dto.amount;
+    const fmt = (n: number) =>
+      n.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    const whatsappPayload: WhatsAppPayload | null = client.phone
+      ? {
+          phone: client.phone,
+          message:
+            `Hola ${client.name}, se registró un abono de $${fmt(dto.amount)} en tu cuenta. ` +
+            `Tu saldo actual es $${fmt(newBalance)}. Ref: ${payment.id.slice(0, 8)}`,
+        }
+      : null;
+
+    return { payment, whatsappPayload };
   }
 }

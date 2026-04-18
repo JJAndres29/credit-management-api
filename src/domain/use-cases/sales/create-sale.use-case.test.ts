@@ -251,10 +251,10 @@ describe('CreateSaleUseCase', () => {
     });
 
     it('retorna la entidad de venta devuelta por el repositorio', async () => {
-      const result = await useCase.execute(makeDto(SaleType.CASH), 'user-1', '127.0.0.1');
+      const { sale } = await useCase.execute(makeDto(SaleType.CASH), 'user-1', '127.0.0.1');
 
-      expect(result.type).toBe(SaleType.CASH);
-      expect(result.status).toBe(SaleStatus.PAID);
+      expect(sale.type).toBe(SaleType.CASH);
+      expect(sale.status).toBe(SaleStatus.PAID);
     });
 
     it('pasa el tipo CASH al repositorio', async () => {
@@ -351,9 +351,9 @@ describe('CreateSaleUseCase', () => {
     });
 
     it('retorna la entidad de venta con status PENDING', async () => {
-      const result = await useCase.execute(makeDto(SaleType.CREDIT), 'user-1', '127.0.0.1');
+      const { sale } = await useCase.execute(makeDto(SaleType.CREDIT), 'user-1', '127.0.0.1');
 
-      expect(result.status).toBe(SaleStatus.PENDING);
+      expect(sale.status).toBe(SaleStatus.PENDING);
     });
   });
 

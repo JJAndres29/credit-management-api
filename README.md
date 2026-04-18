@@ -37,7 +37,7 @@ This system allows a retail business to manage credit operations for its clients
 - **Manual pricing at sale time** — the seller sets the unit price for each item when creating a sale. The server computes subtotals and total; the frontend cannot override them
 - Payment registration with automatic sale status update (PENDING → PARTIAL → PAID) and client balance reduction (atomic transaction)
 - Immutable audit log of every balance-changing operation (credit sales and payments), written atomically inside each transaction
-- **Automatic notifications** — WhatsApp (via Meta Cloud API) and email (via Nodemailer/Gmail) sent after every payment and credit sale. Payment and sale notifications include the full account statement as a PDF document — sent as a WhatsApp document via `sendDocumentTemplate` (approved template, works outside the 24h window) and attached to the email. Notifications are optional and best-effort: if the provider fails or credentials are missing, the financial operation is not affected
+- **Automatic notifications** — Email (via Nodemailer/Gmail) sent after every payment and credit sale, with the PDF account statement attached. WhatsApp integration is **dormant**: the backend pre-builds a `whatsappPayload { phone, message }` returned in every `POST /api/payments` and `POST /api/sales` (201) response so the frontend can open a `wa.me` Deep Link for manual sending. The Meta Cloud API send blocks are commented out and can be reactivated without touching business logic. Notifications are optional and best-effort: if the provider fails or credentials are missing, the financial operation is not affected
 - **PDF account statements** — On-demand PDF generation for any client via `GET /api/reports/account-statement/:clientId`. The PDF is generated in memory and streamed directly to the browser — nothing is ever saved to disk
 
 ---
@@ -1154,7 +1154,7 @@ npm test              # Run all tests
 npm run test:watch    # Watch mode (re-runs on file save)
 ```
 
-### Current coverage — 91 tests across 6 suites
+### Current coverage — 99 tests across 6 suites
 
 | Module | File | Tests |
 |--------|------|-------|
@@ -1162,7 +1162,7 @@ npm run test:watch    # Watch mode (re-runs on file save)
 | `RenewTokenUseCase` | `src/domain/use-cases/auth/renew-token.use-case.test.ts` | 5 — invalid user, inactive user, success, payload, password not exposed |
 | `CreateSaleUseCase` | `src/domain/use-cases/sales/create-sale.use-case.test.ts` | 22 — client/product not found, inactive product, insufficient stock/credit, CASH (no event, no auditLog, unitPrice used directly), CREDIT (event emitted, auditLog, appliedRule null), collectionDay passed for MONTHLY and BIWEEKLY |
 | `CreatePaymentUseCase` | `src/domain/use-cases/payments/create-payment.use-case.test.ts` | 22 — inactive client, amount > balance, foreign sale (403), PAID sale, overpayment, full/partial/general payment, auditLog, PAYMENT_REGISTERED event |
-| `PaymentNotificationSubscriber` / `SaleNotificationSubscriber` | `src/infrastructure/subscribers/notification-subscribers.test.ts` | 25 — resilience (each channel independent), FAILED logs with errorMessage, PDF fallback, throttle (4th notification blocked), client with no phone/email, client not found in DB |
+| `PaymentNotificationSubscriber` / `SaleNotificationSubscriber` | `src/infrastructure/subscribers/notification-subscribers.test.ts` | 25 — WhatsApp disabled (not called), Email resilience, FAILED logs with errorMessage, PDF attachment, throttle (4th notification blocked), client with no phone/email, client not found in DB |
 | `GenerateAccountStatementUseCase` | `src/domain/use-cases/reports/generate-account-statement.use-case.test.ts` | 20 — client not found, parallel queries, client with no sales, product deduplication across sales, fallback name for deleted products, generatedBy propagated, Buffer returned |
 | User / Client / Product use cases | — | Pending |
 | DTOs | — | Pending |
@@ -1308,12 +1308,12 @@ The HTTP response is already returned at step 2. Notifications never block the A
 
 | Channel | Triggered by | Content |
 |---------|-------------|---------|
-| WhatsApp (text template) | Payment registered | Confirms amount received via `abono_recibido` template |
-| WhatsApp (document template) | Payment registered | PDF account statement via `abono_estado_cuenta` approved template — works outside Meta's 24h window |
+| WhatsApp Deep Link *(manual, frontend)* | Payment registered | `whatsappPayload.message` pre-built by backend — frontend opens `wa.me/{phone}?text={message}` |
 | Email | Payment registered | Amount, new balance, note, date, reference + **PDF account statement attached** |
-| WhatsApp (text template) | Credit sale created | Confirms sale amount via `compra_credito` template |
-| WhatsApp (document template) | Credit sale created | PDF account statement via `credito_estado_cuenta` approved template |
+| WhatsApp Deep Link *(manual, frontend)* | Credit sale created | `whatsappPayload.message` pre-built by backend |
 | Email | Credit sale created | Total, new balance, date, sale reference + **PDF account statement attached** |
+
+> **WhatsApp via Meta Cloud API** (templates `abono_recibido`, `abono_estado_cuenta`, `compra_credito`, `credito_estado_cuenta`) is **dormant** — the send blocks are commented in `payment-notification.subscriber.ts` and `sale-notification.subscriber.ts`. To reactivate, uncomment those blocks.
 
 > **PDF delivery strategy (Opción A — buffers directos):** The PDF is generated in memory as a `Buffer` and uploaded directly to Meta's `/media` endpoint. Meta returns a `media_id` which is referenced in the outbound message. The PDF is **never exposed via a public URL** — this prevents IDOR attacks where a guessable URL could let one client access another client's statement. The upload retries once on transient 5xx errors and does not retry on 4xx. If PDF generation or upload fails, email is sent without attachment and WhatsApp document is skipped — the text template still sends.
 

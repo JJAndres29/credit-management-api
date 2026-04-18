@@ -65,21 +65,22 @@ export class SaleNotificationSubscriber {
 
       const tasks: Promise<void>[] = [];
 
-      if (this.whatsAppService && client.phone) {
-        tasks.push(
-          this.sendAndLog({
-            clientId,
-            channel: 'WHATSAPP',
-            event: 'CREDIT_SALE_CREATED',
-            send: () =>
-              this.whatsAppService!.sendTemplate(client.phone, 'compra_credito', [
-                client.name,
-                formattedTotal,
-                formattedBalance,
-              ]),
-          }),
-        );
-      }
+      // WhatsApp via Meta API deshabilitado — el envío ahora es manual desde el frontend mediante Deep Links (wa.me).
+      // if (this.whatsAppService && client.phone) {
+      //   tasks.push(
+      //     this.sendAndLog({
+      //       clientId,
+      //       channel: 'WHATSAPP',
+      //       event: 'CREDIT_SALE_CREATED',
+      //       send: () =>
+      //         this.whatsAppService!.sendTemplate(client.phone, 'compra_credito', [
+      //           client.name,
+      //           formattedTotal,
+      //           formattedBalance,
+      //         ]),
+      //     }),
+      //   );
+      // }
 
       if (this.emailService && client.email) {
         tasks.push(
@@ -106,41 +107,36 @@ export class SaleNotificationSubscriber {
         );
       }
 
-      // WhatsApp con PDF adjunto — se envía en paralelo con el email.
-      // Usa el mismo Buffer generado para el email (no se regenera).
-      // Enviado mediante plantilla aprobada (`credito_estado_cuenta`) para que
-      // funcione fuera de la ventana de 24h de Meta — las notificaciones
-      // iniciadas por el negocio no tienen garantía de ventana abierta.
-      // Si falla, se registra con el logger y en NotificationLog; el email sigue su curso.
-      if (this.whatsAppService && client.phone && pdfBuffer) {
-        const pdfFilename = `estado-cuenta-${clientId.slice(0, 8)}.pdf`;
-        tasks.push(
-          this.sendAndLog({
-            clientId,
-            channel: 'WHATSAPP_DOCUMENT',
-            event: 'CREDIT_SALE_CREATED',
-            send: async () => {
-              try {
-                return await this.whatsAppService!.sendDocumentTemplate(
-                  client.phone,
-                  'credito_estado_cuenta',
-                  pdfBuffer!,
-                  pdfFilename,
-                  [client.name, formattedTotal, date],
-                  'es_CO',
-                );
-              } catch (err) {
-                this.logger?.error(
-                  'Fallo al enviar estado de cuenta por WhatsApp',
-                  err,
-                  { clientId, saleId, channel: 'WHATSAPP_DOCUMENT' },
-                );
-                return false;
-              }
-            },
-          }),
-        );
-      }
+      // WhatsApp con PDF adjunto deshabilitado — envío manual desde el frontend.
+      // if (this.whatsAppService && client.phone && pdfBuffer) {
+      //   const pdfFilename = `estado-cuenta-${clientId.slice(0, 8)}.pdf`;
+      //   tasks.push(
+      //     this.sendAndLog({
+      //       clientId,
+      //       channel: 'WHATSAPP_DOCUMENT',
+      //       event: 'CREDIT_SALE_CREATED',
+      //       send: async () => {
+      //         try {
+      //           return await this.whatsAppService!.sendDocumentTemplate(
+      //             client.phone,
+      //             'credito_estado_cuenta',
+      //             pdfBuffer!,
+      //             pdfFilename,
+      //             [client.name, formattedTotal, date],
+      //             'es_CO',
+      //           );
+      //         } catch (err) {
+      //           this.logger?.error(
+      //             'Fallo al enviar estado de cuenta por WhatsApp',
+      //             err,
+      //             { clientId, saleId, channel: 'WHATSAPP_DOCUMENT' },
+      //           );
+      //           return false;
+      //         }
+      //       },
+      //     }),
+      //   );
+      // }
 
       await Promise.allSettled(tasks);
     } catch (error) {
