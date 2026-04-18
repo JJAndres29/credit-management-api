@@ -101,6 +101,7 @@ function makeMocks() {
     sendWhatsApp: jest.fn().mockResolvedValue(true),
     sendTemplate: jest.fn().mockResolvedValue(true),
     sendDocument: jest.fn().mockResolvedValue(true),
+    sendDocumentTemplate: jest.fn().mockResolvedValue(true),
   };
 
   const mockEmail: jest.Mocked<EmailService> = {
@@ -287,8 +288,8 @@ describe('PaymentNotificationSubscriber', () => {
     });
   });
 
-  describe('PDF enviado por WhatsApp (Opción A — Meta Media ID)', () => {
-    it('envía el PDF como documento vía sendDocument cuando hay Buffer y teléfono', async () => {
+  describe('PDF enviado por WhatsApp (plantilla abono_estado_cuenta)', () => {
+    it('envía el PDF vía sendDocumentTemplate cuando hay Buffer y teléfono', async () => {
       const clientId = 'pay-wa-doc-ok';
       mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId));
       const fakeBuffer = Buffer.from('fake-pdf');
@@ -300,12 +301,13 @@ describe('PaymentNotificationSubscriber', () => {
       buildSubscriber(mockAccountStatement);
       await mocks.getPaymentHandler()(makePaymentData(clientId));
 
-      expect(mocks.mockWhatsApp.sendDocument).toHaveBeenCalledWith(
+      expect(mocks.mockWhatsApp.sendDocumentTemplate).toHaveBeenCalledWith(
         '555-0001',
+        'abono_estado_cuenta',
         fakeBuffer,
         expect.stringMatching(/\.pdf$/),
-        expect.any(String),
-        'application/pdf',
+        expect.arrayContaining([expect.any(String)]),
+        'es_CO',
       );
     });
 
@@ -339,7 +341,7 @@ describe('PaymentNotificationSubscriber', () => {
       buildSubscriber(mockAccountStatement);
       await mocks.getPaymentHandler()(makePaymentData(clientId));
 
-      expect(mocks.mockWhatsApp.sendDocument).not.toHaveBeenCalled();
+      expect(mocks.mockWhatsApp.sendDocumentTemplate).not.toHaveBeenCalled();
     });
 
     it('no envía PDF por WhatsApp si el cliente no tiene teléfono', async () => {
@@ -355,13 +357,15 @@ describe('PaymentNotificationSubscriber', () => {
       buildSubscriber(mockAccountStatement);
       await mocks.getPaymentHandler()(makePaymentData(clientId));
 
-      expect(mocks.mockWhatsApp.sendDocument).not.toHaveBeenCalled();
+      expect(mocks.mockWhatsApp.sendDocumentTemplate).not.toHaveBeenCalled();
     });
 
-    it('registra FAILED con mensaje de error si sendDocument lanza', async () => {
+    it('registra FAILED con mensaje de error si sendDocumentTemplate lanza', async () => {
       const clientId = 'pay-wa-doc-throws';
       mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId));
-      mocks.mockWhatsApp.sendDocument.mockRejectedValueOnce(new Error('Meta media upload failed'));
+      mocks.mockWhatsApp.sendDocumentTemplate.mockRejectedValueOnce(
+        new Error('Meta media upload failed'),
+      );
 
       const mockAccountStatement = {
         execute: jest.fn().mockResolvedValue(Buffer.from('pdf')),
@@ -384,7 +388,7 @@ describe('PaymentNotificationSubscriber', () => {
       buildSubscriber();
       await mocks.getPaymentHandler()(makePaymentData(clientId));
 
-      expect(mocks.mockWhatsApp.sendDocument).not.toHaveBeenCalled();
+      expect(mocks.mockWhatsApp.sendDocumentTemplate).not.toHaveBeenCalled();
     });
   });
 
@@ -470,12 +474,13 @@ describe('SaleNotificationSubscriber', () => {
     mocks = makeMocks();
   });
 
-  function buildSubscriber() {
+  function buildSubscriber(accountStatementUseCase?: GenerateAccountStatementUseCase) {
     return new SaleNotificationSubscriber(
       mocks.mockEventEmitter,
       mocks.mockClientRepo,
       mocks.mockWhatsApp,
       mocks.mockEmail,
+      accountStatementUseCase,
     );
   }
 
@@ -591,6 +596,94 @@ describe('SaleNotificationSubscriber', () => {
 
       expect(mocks.mockWhatsApp.sendTemplate).toHaveBeenCalled();
       expect(mocks.mockEmail.sendEmail).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('PDF enviado por WhatsApp (plantilla credito_estado_cuenta)', () => {
+    it('envía el PDF vía sendDocumentTemplate cuando hay Buffer y teléfono', async () => {
+      const clientId = 'sale-wa-doc-ok';
+      mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId));
+      const fakeBuffer = Buffer.from('fake-pdf');
+
+      const mockAccountStatement = {
+        execute: jest.fn().mockResolvedValue(fakeBuffer),
+      } as unknown as GenerateAccountStatementUseCase;
+
+      buildSubscriber(mockAccountStatement);
+      await mocks.getSaleHandler()(makeSaleData(clientId));
+
+      expect(mocks.mockWhatsApp.sendDocumentTemplate).toHaveBeenCalledWith(
+        '555-0001',
+        'credito_estado_cuenta',
+        fakeBuffer,
+        expect.stringMatching(/\.pdf$/),
+        expect.arrayContaining([expect.any(String)]),
+        'es_CO',
+      );
+    });
+
+    it('registra NotificationLog con canal WHATSAPP_DOCUMENT y status SENT', async () => {
+      const clientId = 'sale-wa-doc-log';
+      mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId));
+
+      const mockAccountStatement = {
+        execute: jest.fn().mockResolvedValue(Buffer.from('pdf')),
+      } as unknown as GenerateAccountStatementUseCase;
+
+      buildSubscriber(mockAccountStatement);
+      await mocks.getSaleHandler()(makeSaleData(clientId));
+
+      const calls = mocks.mockPrismaCreate.mock.calls;
+      const docLog = calls.find(
+        (c: [{ data: { channel: string } }]) => c[0].data.channel === 'WHATSAPP_DOCUMENT',
+      );
+      expect(docLog).toBeDefined();
+      expect(docLog[0].data.status).toBe('SENT');
+    });
+
+    it('no envía PDF por WhatsApp si el PDF no se pudo generar', async () => {
+      const clientId = 'sale-wa-doc-no-pdf';
+      mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId));
+
+      const mockAccountStatement = {
+        execute: jest.fn().mockRejectedValue(new Error('PDFKit error')),
+      } as unknown as GenerateAccountStatementUseCase;
+
+      buildSubscriber(mockAccountStatement);
+      await mocks.getSaleHandler()(makeSaleData(clientId));
+
+      expect(mocks.mockWhatsApp.sendDocumentTemplate).not.toHaveBeenCalled();
+    });
+
+    it('registra FAILED si sendDocumentTemplate lanza, email sigue enviándose', async () => {
+      const clientId = 'sale-wa-doc-throws';
+      mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId));
+      mocks.mockWhatsApp.sendDocumentTemplate.mockRejectedValueOnce(
+        new Error('Meta media upload failed'),
+      );
+
+      const mockAccountStatement = {
+        execute: jest.fn().mockResolvedValue(Buffer.from('pdf')),
+      } as unknown as GenerateAccountStatementUseCase;
+
+      buildSubscriber(mockAccountStatement);
+      await mocks.getSaleHandler()(makeSaleData(clientId));
+
+      const docLog = mocks.mockPrismaCreate.mock.calls.find(
+        (c: [{ data: { channel: string } }]) => c[0].data.channel === 'WHATSAPP_DOCUMENT',
+      );
+      expect(docLog[0].data.status).toBe('FAILED');
+      expect(mocks.mockEmail.sendEmail).toHaveBeenCalled();
+    });
+
+    it('no envía PDF por WhatsApp cuando no se inyecta accountStatementUseCase', async () => {
+      const clientId = 'sale-wa-doc-no-usecase';
+      mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId));
+
+      buildSubscriber();
+      await mocks.getSaleHandler()(makeSaleData(clientId));
+
+      expect(mocks.mockWhatsApp.sendDocumentTemplate).not.toHaveBeenCalled();
     });
   });
 });

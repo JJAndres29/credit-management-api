@@ -8,4 +8,12 @@ export interface NotificationService {
     caption?: string,
     mimeType?: string,
   ): Promise<boolean>;
+  sendDocumentTemplate(
+    to: string,
+    templateName: string,
+    document: Buffer,
+    filename: string,
+    bodyVariables: string[],
+    languageCode?: string,
+  ): Promise<boolean>;
 }

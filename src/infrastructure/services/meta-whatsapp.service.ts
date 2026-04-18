@@ -226,6 +226,85 @@ export class MetaWhatsAppService implements NotificationService {
   }
 
   /**
+   * Envío de documento mediante plantilla aprobada (header: DOCUMENT).
+   *
+   * A diferencia de `sendDocument` (free-form), las plantillas funcionan
+   * fuera de la ventana de 24 horas — son el único mecanismo confiable
+   * para notificaciones iniciadas por el negocio (ej. confirmación de pago
+   * o venta a crédito automática tras el registro en el sistema).
+   *
+   * Flujo:
+   *   1. Subir el PDF a /media → obtener media_id (reutiliza uploadMedia con retry)
+   *   2. Enviar mensaje type=template referenciando el media_id en el header
+   *      y las variables del body en orden ({{1}}, {{2}}, {{3}}, ...)
+   *
+   * Nota sobre languageCode: debe coincidir exactamente con el idioma
+   * aprobado en la plantilla de Meta (ej. 'es_CO', no 'es').
+   */
+  async sendDocumentTemplate(
+    to: string,
+    templateName: string,
+    document: Buffer,
+    filename: string,
+    bodyVariables: string[],
+    languageCode = 'es_CO',
+  ): Promise<boolean> {
+    if (!this.enabled) return false;
+
+    try {
+      const mediaId = await this.uploadMedia(document, filename, 'application/pdf');
+
+      const response = await fetch(this.apiUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          to: this.formatPhone(to),
+          type: 'template',
+          template: {
+            name: templateName,
+            language: { code: languageCode },
+            components: [
+              {
+                type: 'header',
+                parameters: [
+                  { type: 'document', document: { id: mediaId, filename } },
+                ],
+              },
+              {
+                type: 'body',
+                parameters: bodyVariables.map((v) => ({ type: 'text', text: v })),
+              },
+            ],
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        console.error(
+          '[MetaWhatsAppService] Error al enviar plantilla con documento:',
+          response.status,
+          errorBody,
+        );
+        return false;
+      }
+
+      console.log(
+        `[MetaWhatsAppService] Plantilla "${templateName}" con documento enviada a:`,
+        this.formatPhone(to),
+      );
+      return true;
+    } catch (error) {
+      console.error('[MetaWhatsAppService] Error en sendDocumentTemplate:', error);
+      return false;
+    }
+  }
+
+  /**
    * Normaliza el número al formato E.164 requerido por Meta Cloud API.
    *
    * Asume que los teléfonos en DB están en formato colombiano (10 dígitos, sin +57).

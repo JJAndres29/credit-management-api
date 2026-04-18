@@ -37,7 +37,7 @@ This system allows a retail business to manage credit operations for its clients
 - **Manual pricing at sale time** — the seller sets the unit price for each item when creating a sale. The server computes subtotals and total; the frontend cannot override them
 - Payment registration with automatic sale status update (PENDING → PARTIAL → PAID) and client balance reduction (atomic transaction)
 - Immutable audit log of every balance-changing operation (credit sales and payments), written atomically inside each transaction
-- **Automatic notifications** — WhatsApp (via Twilio) and email (via Nodemailer/Gmail) sent after every payment and credit sale. Payment emails include the full account statement as a PDF attachment. Notifications are optional and best-effort: if the provider fails or credentials are missing, the financial operation is not affected
+- **Automatic notifications** — WhatsApp (via Meta Cloud API) and email (via Nodemailer/Gmail) sent after every payment and credit sale. Payment and sale notifications include the full account statement as a PDF document — sent as a WhatsApp document via `sendDocumentTemplate` (approved template, works outside the 24h window) and attached to the email. Notifications are optional and best-effort: if the provider fails or credentials are missing, the financial operation is not affected
 - **PDF account statements** — On-demand PDF generation for any client via `GET /api/reports/account-statement/:clientId`. The PDF is generated in memory and streamed directly to the browser — nothing is ever saved to disk
 
 ---
@@ -66,7 +66,7 @@ The project follows **Clean Architecture**, organized in three strict layers. In
 |---------|---------|
 | **Repository** | Abstracts data access — swapping PostgreSQL requires no domain changes |
 | **Use Case** | Each business action is an isolated, testable class |
-| **Adapter** | External libraries (JWT, Cloudinary, Twilio, Nodemailer) implement domain interfaces — replace any library without touching business logic |
+| **Adapter** | External libraries (JWT, Cloudinary, Meta Cloud API, Nodemailer) implement domain interfaces — replace any library without touching business logic |
 | **DTO** | Input validation happens at the system boundary before reaching use cases |
 | **Dependency Injection** | Constructor-based throughout — no service locator or global state |
 | **Domain Service (Installments)** | `InstallmentCalculatorService` lives in the domain layer — pure business logic, no framework or DB dependencies, fully unit-testable |
@@ -142,7 +142,7 @@ credit-management-system/
 │   ├── infrastructure/            # Implements domain interfaces (adapters)
 │   │   ├── datasources/           # PrismaAuthDatasource, PrismaClientDatasource, PrismaProductDatasource, PrismaUserDatasource, PrismaSaleDatasource, PrismaPaymentDatasource, PrismaAuditLogDatasource
 │   │   ├── repositories/          # AuthRepositoryImpl, ClientRepositoryImpl, ProductRepositoryImpl, UserRepositoryImpl, SaleRepositoryImpl, PaymentRepositoryImpl, AuditLogRepositoryImpl
-│   │   └── services/              # JwtAdapter, CloudinaryAdapter, TwilioWhatsAppService, NodemailerEmailService, PdfkitPdfService, PinoLoggerService
+│   │   └── services/              # JwtAdapter, CloudinaryAdapter, MetaWhatsAppService, TwilioWhatsAppService (legacy/unused), NodemailerEmailService, PdfkitPdfService, PinoLoggerService
 │   └── presentation/              # HTTP layer
 │       ├── auth/                  # AuthController, AuthRouter
 │       ├── audit-logs/            # AuditLogController, AuditLogRouter
@@ -259,13 +259,12 @@ API available at: `http://localhost:3000`
 | `MAILER_EMAIL` | No† | Gmail address used as the sender: `youraddress@gmail.com` |
 | `MAILER_SECRET_KEY` | No† | Gmail App Password (16 chars). Generate at: Google Account → Security → 2-Step Verification → App passwords. **Not your Gmail password** |
 | `MAILER_SERVICE` | No | Email provider (default: `gmail`) |
-| `TWILIO_ACCOUNT_SID` | No‡ | Twilio Account SID — found at console.twilio.com → Dashboard. Starts with `AC...` |
-| `TWILIO_AUTH_TOKEN` | No‡ | Twilio Auth Token — same page, click the eye icon to reveal |
-| `TWILIO_WHATSAPP_FROM` | No‡ | WhatsApp Sandbox sender number, format: `whatsapp:+14155238886` (shown in Twilio → Messaging → Try it out → Send a WhatsApp message) |
+| `META_WHATSAPP_TOKEN` | No‡ | Permanent System User Token from Meta Business. Generate at: Meta Business Suite → Settings → System Users → Generate Token (with `whatsapp_business_messaging` permission) |
+| `META_WHATSAPP_PHONE_NUMBER_ID` | No‡ | Phone Number ID (not the number itself) — found in Meta Business Suite → WhatsApp → API Setup |
 
 > \* Required if you use the `POST /api/products/:id/images` endpoint.
 > † Both `MAILER_EMAIL` and `MAILER_SECRET_KEY` must be set together to enable email notifications. If either is missing, the server starts normally with a warning and emails are skipped.
-> ‡ All three Twilio variables must be set together to enable WhatsApp notifications. Same behavior — missing vars = warning + feature disabled, no crash.
+> ‡ Both Meta variables must be set together to enable WhatsApp notifications. Same behavior — missing vars = warning + feature disabled, no crash.
 
 ---
 
@@ -1301,7 +1300,7 @@ The HTTP response is already returned at step 2. Notifications never block the A
 |---------|---------------|
 | **WhatsApp content** | Messages confirm a movement occurred and redirect to email for details — no balance or debt amount exposed (stolen phone scenario) |
 | **Email content** | Full detail: amount, new balance, note, date, reference ID |
-| **Throttle** | In-memory cap of 3 notifications per client per hour — prevents Twilio charges from runaway loops |
+| **Throttle** | In-memory cap of 3 notifications per client per hour — prevents Meta API charges from runaway loops |
 | **NotificationLog** | Every attempt is recorded with channel, event, status (SENT/FAILED), and error message |
 | **Graceful degradation** | Missing env vars → server starts normally, feature disabled with a console warning |
 
@@ -1309,22 +1308,23 @@ The HTTP response is already returned at step 2. Notifications never block the A
 
 | Channel | Triggered by | Content |
 |---------|-------------|---------|
-| WhatsApp | Payment registered | Confirms amount received, redirects to email |
+| WhatsApp (text template) | Payment registered | Confirms amount received via `abono_recibido` template |
+| WhatsApp (document template) | Payment registered | PDF account statement via `abono_estado_cuenta` approved template — works outside Meta's 24h window |
 | Email | Payment registered | Amount, new balance, note, date, reference + **PDF account statement attached** |
-| WhatsApp | Credit sale created | Confirms sale amount, redirects to email |
-| Email | Credit sale created | Total, new balance, date, sale reference |
+| WhatsApp (text template) | Credit sale created | Confirms sale amount via `compra_credito` template |
+| WhatsApp (document template) | Credit sale created | PDF account statement via `credito_estado_cuenta` approved template |
+| Email | Credit sale created | Total, new balance, date, sale reference + **PDF account statement attached** |
 
-> **PDF attachment on payment emails:** When a payment is registered, the system automatically generates the client's full account statement as a PDF (in memory) and attaches it to the email. If PDF generation fails, the email is still sent without the attachment — the notification is never blocked by a PDF error.
+> **PDF delivery strategy (Opción A — buffers directos):** The PDF is generated in memory as a `Buffer` and uploaded directly to Meta's `/media` endpoint. Meta returns a `media_id` which is referenced in the outbound message. The PDF is **never exposed via a public URL** — this prevents IDOR attacks where a guessable URL could let one client access another client's statement. The upload retries once on transient 5xx errors and does not retry on 4xx. If PDF generation or upload fails, email is sent without attachment and WhatsApp document is skipped — the text template still sends.
 
 ### Enabling notifications
 
 Set the following in `.env` (see [Environment Variables](#environment-variables) for details):
 
 ```env
-# WhatsApp (Twilio Sandbox)
-TWILIO_ACCOUNT_SID=ACxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
-TWILIO_AUTH_TOKEN=your_auth_token
-TWILIO_WHATSAPP_FROM=whatsapp:+14155238886
+# WhatsApp (Meta Cloud API)
+META_WHATSAPP_TOKEN=your_system_user_token
+META_WHATSAPP_PHONE_NUMBER_ID=123456789012345
 
 # Email (Gmail + App Password)
 MAILER_EMAIL=youraddress@gmail.com
@@ -1333,6 +1333,15 @@ MAILER_SERVICE=gmail
 ```
 
 Both services are independent — you can enable only WhatsApp, only email, or both.
+
+**Required approved templates in Meta Business Manager:**
+
+| Template name | Trigger | Header | Body variables |
+|---|---|---|---|
+| `abono_recibido` | Payment registered | — | `{{1}}` name, `{{2}}` amount, `{{3}}` new balance |
+| `abono_estado_cuenta` | Payment registered | DOCUMENT (media_id) | `{{1}}` name, `{{2}}` amount, `{{3}}` date |
+| `compra_credito` | Credit sale created | — | `{{1}}` name, `{{2}}` total, `{{3}}` new balance |
+| `credito_estado_cuenta` | Credit sale created | DOCUMENT (media_id) | `{{1}}` name, `{{2}}` total, `{{3}}` date |
 
 ### Checking notification logs
 
@@ -1357,12 +1366,13 @@ Authorization: Bearer <admin-token>
 
 The browser or API client receives the PDF as a binary download. No file is ever saved to the server.
 
-**2. Automatic attachment on payment emails (client-facing)**
+**2. Automatic delivery on payment/sale notifications (client-facing)**
 
-When `POST /api/payments` registers a payment, the `PaymentNotificationSubscriber` automatically:
+When `POST /api/payments` or `POST /api/sales` (credit) commits, the subscriber automatically:
 1. Generates the account statement PDF for that client (using the same use case as the endpoint)
-2. Attaches it to the confirmation email as `estado-cuenta-{clientId}.pdf`
-3. If PDF generation fails — the email still sends without attachment
+2. Uploads the `Buffer` to Meta `/media` → gets a `media_id` → sends as WhatsApp document via approved template (no public URL exposed)
+3. Attaches the same `Buffer` to the confirmation email as `estado-cuenta-{clientId}.pdf`
+4. If PDF generation fails — the email sends without attachment and the WhatsApp document step is skipped (text template still sends)
 
 ### Architecture
 
