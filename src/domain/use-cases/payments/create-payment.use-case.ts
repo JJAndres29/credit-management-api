@@ -48,6 +48,7 @@ export class CreatePaymentUseCase {
     let saleInstallmentsCount: number | null = null;
     let saleInstallmentAmount: number | null = null;
     let saleTotalPaidAfter: number | undefined;
+    let remainingInstallments: number | null = null;
 
     // 3. Validaciones adicionales cuando el pago va asociado a una venta específica
     if (dto.saleId) {
@@ -82,6 +83,11 @@ export class CreatePaymentUseCase {
       saleInstallmentsCount = sale.installmentsCount;
       saleInstallmentAmount = sale.installmentAmount;
       saleTotalPaidAfter = totalAlreadyPaid + dto.amount;
+
+      if (saleInstallmentsCount !== null) {
+        const paymentsMade = existingPayments.length + 1;
+        remainingInstallments = Math.max(0, saleInstallmentsCount - paymentsMade);
+      }
     }
 
     // 4. Persistir: la transacción atómica en el datasource se encarga de:
@@ -118,12 +124,16 @@ export class CreatePaymentUseCase {
     const newBalance = clientBalance - dto.amount;
     const fmt = (n: number) =>
       n.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    const installmentsText =
+      remainingInstallments !== null
+        ? ` Cuotas pendientes: ${remainingInstallments}.`
+        : '';
     const whatsappPayload: WhatsAppPayload | null = client.phone
       ? {
           phone: client.phone,
           message:
             `Hola ${client.name}, se registró un abono de $${fmt(dto.amount)} en tu cuenta. ` +
-            `Tu saldo actual es $${fmt(newBalance)}. Ref: ${payment.id.slice(0, 8)}`,
+            `Tu saldo actual es $${fmt(newBalance)}.${installmentsText} Ref: ${payment.id.slice(0, 8)}`,
         }
       : null;
 
