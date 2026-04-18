@@ -17,6 +17,7 @@ import { AuthRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaAuthDatasource } from '../../infrastructure/datasources';
 import { AuthMiddleware } from '../middlewares';
 import { JwtAdapter, MetaWhatsAppService, NodemailerEmailService, PdfkitPdfService } from '../../infrastructure/services';
+import { globalLogger } from '../../infrastructure/services/pino-logger.service';
 import { globalEventEmitter } from '../../infrastructure/events';
 import { PaymentNotificationSubscriber } from '../../infrastructure/subscribers';
 import { GenerateAccountStatementUseCase } from '../../domain/use-cases/reports';
@@ -54,6 +55,7 @@ export class PaymentRouter {
       whatsAppService.isEnabled ? whatsAppService : null,
       emailService.isEnabled ? emailService : null,
       accountStatementUseCase,
+      globalLogger,
     );
 
     const controller = new PaymentController(

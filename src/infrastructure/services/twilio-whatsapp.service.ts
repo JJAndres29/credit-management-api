@@ -77,6 +77,21 @@ export class TwilioWhatsAppService implements NotificationService {
   }
 
   /**
+   * Envío de documento — no soportado en este adapter de Twilio (usar MetaWhatsAppService).
+   * Se implementa como no-op para cumplir la interfaz NotificationService.
+   */
+  async sendDocument(
+    _to: string,
+    _document: Buffer,
+    _filename: string,
+    _caption?: string,
+    _mimeType?: string,
+  ): Promise<boolean> {
+    console.warn('[TwilioWhatsAppService] sendDocument no soportado — usar MetaWhatsAppService');
+    return false;
+  }
+
+  /**
    * Normaliza el número al formato requerido por Twilio: whatsapp:+[número]
    *
    * Asume que los teléfonos en DB están en formato colombiano (10 dígitos, sin +57).

@@ -26,6 +26,8 @@ export class MetaWhatsAppService implements NotificationService {
   private readonly enabled: boolean;
   private readonly apiUrl: string;
 
+  private readonly mediaUrl: string;
+
   constructor() {
     const { token, phoneNumberId } = envs.meta;
 
@@ -37,11 +39,13 @@ export class MetaWhatsAppService implements NotificationService {
       this.enabled = false;
       this.token = '';
       this.apiUrl = '';
+      this.mediaUrl = '';
       return;
     }
 
     this.token = token;
     this.apiUrl = `https://graph.facebook.com/v19.0/${phoneNumberId}/messages`;
+    this.mediaUrl = `https://graph.facebook.com/v19.0/${phoneNumberId}/media`;
     this.enabled = true;
   }
 
@@ -118,6 +122,105 @@ export class MetaWhatsAppService implements NotificationService {
       return true;
     } catch (error) {
       console.error('[MetaWhatsAppService] Error al enviar mensaje:', error);
+      return false;
+    }
+  }
+
+  /**
+   * Sube un archivo binario (Buffer) al endpoint /media de Meta y retorna el media_id.
+   *
+   * Seguridad:
+   * - El archivo nunca se expone por URL pública. Solo tu número de Meta puede
+   *   referenciar este media_id en mensajes salientes.
+   * - El mimetype se fuerza a 'application/pdf' en el FormData para evitar
+   *   inferencias incorrectas por parte de Meta.
+   *
+   * Retry: hasta 2 intentos (1 inicial + 1 reintento) ante fallos de red/5xx.
+   * No reintenta ante 4xx (error del cliente — token inválido, formato mal).
+   */
+  private async uploadMedia(buffer: Buffer, filename: string, _mimeType: string): Promise<string> {
+    const maxAttempts = 2;
+    let lastError: unknown;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      try {
+        const form = new FormData();
+        form.append('messaging_product', 'whatsapp');
+        form.append('type', 'application/pdf');
+        form.append(
+          'file',
+          new Blob([new Uint8Array(buffer)], { type: 'application/pdf' }),
+          filename,
+        );
+
+        const response = await fetch(this.mediaUrl, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${this.token}` },
+          body: form,
+        });
+
+        if (!response.ok) {
+          const errorBody = await response.text();
+          if (response.status >= 400 && response.status < 500) {
+            throw new Error(`Meta /media 4xx (no-retry): ${response.status} ${errorBody}`);
+          }
+          throw new Error(`Meta /media ${response.status}: ${errorBody}`);
+        }
+
+        const json = (await response.json()) as { id?: string };
+        if (!json.id) throw new Error('Meta /media respondió sin campo id');
+        return json.id;
+      } catch (error) {
+        lastError = error;
+        const is4xx = error instanceof Error && error.message.includes('4xx (no-retry)');
+        if (is4xx || attempt === maxAttempts) break;
+        console.warn(`[MetaWhatsAppService] uploadMedia intento ${attempt} falló, reintentando…`);
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error('uploadMedia falló');
+  }
+
+  async sendDocument(
+    to: string,
+    document: Buffer,
+    filename: string,
+    caption?: string,
+    mimeType = 'application/pdf',
+  ): Promise<boolean> {
+    if (!this.enabled) return false;
+
+    try {
+      const mediaId = await this.uploadMedia(document, filename, mimeType);
+
+      const response = await fetch(this.apiUrl, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${this.token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          messaging_product: 'whatsapp',
+          to: this.formatPhone(to),
+          type: 'document',
+          document: {
+            id: mediaId,
+            filename,
+            ...(caption ? { caption } : {}),
+          },
+        }),
+      });
+
+      if (!response.ok) {
+        const errorBody = await response.text();
+        console.error('[MetaWhatsAppService] Error al enviar documento:', response.status, errorBody);
+        return false;
+      }
+
+      console.log('[MetaWhatsAppService] Documento enviado a:', this.formatPhone(to));
+      return true;
+    } catch (error) {
+      console.error('[MetaWhatsAppService] Error en sendDocument:', error);
       return false;
     }
   }

@@ -1,6 +1,7 @@
 import { EventEmitterPort, PAYMENT_REGISTERED, PaymentRegisteredData } from '../../domain/events';
 import { NotificationService } from '../../domain/services/notification.service';
 import { EmailService } from '../../domain/services/email.service';
+import { LoggerService } from '../../domain/services/logger.service';
 import { ClientRepository } from '../../domain/repositories';
 import { GenerateAccountStatementUseCase } from '../../domain/use-cases/reports';
 import { prisma } from '../../config/prisma';
@@ -49,10 +50,12 @@ export class PaymentNotificationSubscriber {
     private readonly whatsAppService: NotificationService | null,
     private readonly emailService: EmailService | null,
     /**
-     * Opcional: si se inyecta, el estado de cuenta en PDF se adjunta al email.
-     * Si no se inyecta, el email se envía sin adjunto (comportamiento anterior).
+     * Opcional: si se inyecta, el estado de cuenta en PDF se adjunta al email
+     * y se envía también como documento por WhatsApp.
+     * Si no se inyecta, el email se envía sin adjunto y no se manda PDF por WhatsApp.
      */
     private readonly accountStatementUseCase?: GenerateAccountStatementUseCase,
+    private readonly logger?: LoggerService,
   ) {
     this.eventEmitter.on(PAYMENT_REGISTERED, this.handle);
   }
@@ -136,6 +139,39 @@ export class PaymentNotificationSubscriber {
                     ]
                   : undefined,
               }),
+          }),
+        );
+      }
+
+      // WhatsApp con PDF adjunto — se envía en paralelo con el email.
+      // Usa el mismo Buffer generado para el email (no se regenera).
+      // Si falla, se registra con el logger y en NotificationLog; el email sigue su curso.
+      if (this.whatsAppService && client.phone && pdfBuffer) {
+        const pdfFilename = `estado-cuenta-${clientId.slice(0, 8)}.pdf`;
+        const caption = `Hola ${client.name}, adjuntamos su estado de cuenta actualizado tras el abono de ${formattedAmount}.`;
+        tasks.push(
+          this.sendAndLog({
+            clientId,
+            channel: 'WHATSAPP_DOCUMENT',
+            event: 'PAYMENT_REGISTERED',
+            send: async () => {
+              try {
+                return await this.whatsAppService!.sendDocument(
+                  client.phone,
+                  pdfBuffer!,
+                  pdfFilename,
+                  caption,
+                  'application/pdf',
+                );
+              } catch (err) {
+                this.logger?.error(
+                  'Fallo al enviar estado de cuenta por WhatsApp',
+                  err,
+                  { clientId, paymentId, channel: 'WHATSAPP_DOCUMENT' },
+                );
+                return false;
+              }
+            },
           }),
         );
       }
