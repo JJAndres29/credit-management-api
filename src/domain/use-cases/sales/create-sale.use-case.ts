@@ -7,6 +7,16 @@ import { ProductRepository } from '../../repositories';
 import { InstallmentCalculatorService } from '../../services/installments';
 import { EventEmitterPort, CREDIT_SALE_CREATED, PAYMENT_REGISTERED } from '../../events';
 
+export interface WhatsAppPayload {
+  phone: string;
+  message: string;
+}
+
+export interface CreateSaleResult {
+  sale: SaleEntity;
+  whatsappPayload: WhatsAppPayload | null;
+}
+
 export class CreateSaleUseCase {
   constructor(
     private readonly saleRepository: SaleRepository,
@@ -17,7 +27,7 @@ export class CreateSaleUseCase {
     private readonly paymentRepository?: PaymentRepository,
   ) {}
 
-  async execute(dto: CreateSaleDto, userId: string, ip: string): Promise<SaleEntity> {
+  async execute(dto: CreateSaleDto, userId: string, ip: string): Promise<CreateSaleResult> {
     // 1. Verificar que el cliente existe y está activo
     const client = await this.clientRepository.findById(dto.clientId);
     if (!client) throw CustomError.notFound(`Cliente con ID ${dto.clientId} no encontrado`);
@@ -162,6 +172,20 @@ export class CreateSaleUseCase {
       });
     }
 
-    return sale;
+    const fmt = (n: number) =>
+      n.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    const whatsappPayload: WhatsAppPayload | null = client.phone
+      ? {
+          phone: client.phone,
+          message:
+            dto.type === SaleType.CREDIT
+              ? `Hola ${client.name}, se registró una compra a crédito de $${fmt(total)} en tu cuenta. ` +
+                `Tu saldo actual es $${fmt(finalBalance)}. Ref: ${sale.id.slice(0, 8)}`
+              : `Hola ${client.name}, se registró una compra de contado de $${fmt(total)}. ` +
+                `Ref: ${sale.id.slice(0, 8)}`,
+        }
+      : null;
+
+    return { sale, whatsappPayload };
   }
 }

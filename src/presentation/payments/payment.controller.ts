@@ -72,8 +72,8 @@ export class PaymentController {
     const ip = req.ip ?? req.socket.remoteAddress ?? 'unknown';
 
     try {
-      const payment = await this.createPaymentUseCase.execute(dto!, user.id, ip);
-      res.status(201).json(payment);
+      const { payment, whatsappPayload } = await this.createPaymentUseCase.execute(dto!, user.id, ip);
+      res.status(201).json({ ...payment, whatsappPayload });
     } catch (err) {
       this.handleError(err, res);
     }

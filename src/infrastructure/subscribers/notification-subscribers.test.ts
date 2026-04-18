@@ -155,16 +155,11 @@ describe('PaymentNotificationSubscriber', () => {
       mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId));
     });
 
-    it('envía WhatsApp cuando el cliente tiene teléfono', async () => {
+    it('NO envía WhatsApp (deshabilitado — envío manual desde el frontend)', async () => {
       buildSubscriber();
       await mocks.getPaymentHandler()(makePaymentData(clientId));
 
-      expect(mocks.mockWhatsApp.sendTemplate).toHaveBeenCalledWith(
-        '555-0001',
-        'abono_recibido',
-        expect.arrayContaining(['María López']),
-        'es',
-      );
+      expect(mocks.mockWhatsApp.sendTemplate).not.toHaveBeenCalled();
     });
 
     it('envía Email cuando el cliente tiene email', async () => {
@@ -176,56 +171,53 @@ describe('PaymentNotificationSubscriber', () => {
       );
     });
 
-    it('persiste NotificationLog con status SENT para cada canal', async () => {
+    it('persiste NotificationLog con status SENT solo para EMAIL', async () => {
       buildSubscriber();
       await mocks.getPaymentHandler()(makePaymentData(clientId));
 
       const calls = mocks.mockPrismaCreate.mock.calls;
       const statuses = calls.map((c: { data: { status: string } }[]) => c[0].data.status);
-      expect(statuses).toEqual(['SENT', 'SENT']);
+      expect(statuses).toEqual(['SENT']);
     });
   });
 
-  describe('resiliencia: fallo de WhatsApp', () => {
-    const clientId = 'pay-whatsapp-fail';
+  describe('WhatsApp deshabilitado', () => {
+    const clientId = 'pay-whatsapp-disabled';
 
-    it('envía Email aunque WhatsApp falle (Promise.allSettled)', async () => {
+    it('envía Email independientemente de WhatsApp (deshabilitado)', async () => {
       mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId));
-      mocks.mockWhatsApp.sendTemplate.mockRejectedValue(new Error('Twilio timeout'));
 
       buildSubscriber();
       await mocks.getPaymentHandler()(makePaymentData(clientId));
 
+      expect(mocks.mockWhatsApp.sendTemplate).not.toHaveBeenCalled();
       expect(mocks.mockEmail.sendEmail).toHaveBeenCalled();
     });
 
-    it('persiste WhatsApp como FAILED y Email como SENT', async () => {
+    it('persiste solo EMAIL como SENT (sin log de WHATSAPP)', async () => {
       mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId));
-      mocks.mockWhatsApp.sendTemplate.mockRejectedValue(new Error('Twilio timeout'));
 
       buildSubscriber();
       await mocks.getPaymentHandler()(makePaymentData(clientId));
 
       const calls = mocks.mockPrismaCreate.mock.calls;
-      const logMap = Object.fromEntries(
-        calls.map((c: [{ data: { channel: string; status: string } }]) => [c[0].data.channel, c[0].data.status]),
-      );
-      expect(logMap['WHATSAPP']).toBe('FAILED');
-      expect(logMap['EMAIL']).toBe('SENT');
+      const channels = calls.map((c: [{ data: { channel: string } }]) => c[0].data.channel);
+      expect(channels).not.toContain('WHATSAPP');
+      expect(channels).toContain('EMAIL');
     });
   });
 
   describe('resiliencia: fallo de Email', () => {
     const clientId = 'pay-email-fail';
 
-    it('envía WhatsApp aunque Email falle', async () => {
+    it('no envía WhatsApp (deshabilitado) cuando Email falla', async () => {
       mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId));
       mocks.mockEmail.sendEmail.mockRejectedValue(new Error('Gmail auth error'));
 
       buildSubscriber();
       await mocks.getPaymentHandler()(makePaymentData(clientId));
 
-      expect(mocks.mockWhatsApp.sendTemplate).toHaveBeenCalled();
+      expect(mocks.mockWhatsApp.sendTemplate).not.toHaveBeenCalled();
     });
 
     it('persiste Email como FAILED con mensaje de error', async () => {
@@ -288,8 +280,8 @@ describe('PaymentNotificationSubscriber', () => {
     });
   });
 
-  describe('PDF enviado por WhatsApp (plantilla abono_estado_cuenta)', () => {
-    it('envía el PDF vía sendDocumentTemplate cuando hay Buffer y teléfono', async () => {
+  describe('PDF adjunto al email (WhatsApp document deshabilitado)', () => {
+    it('adjunta el PDF al email cuando el use case lo genera correctamente', async () => {
       const clientId = 'pay-wa-doc-ok';
       mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId));
       const fakeBuffer = Buffer.from('fake-pdf');
@@ -301,71 +293,19 @@ describe('PaymentNotificationSubscriber', () => {
       buildSubscriber(mockAccountStatement);
       await mocks.getPaymentHandler()(makePaymentData(clientId));
 
-      expect(mocks.mockWhatsApp.sendDocumentTemplate).toHaveBeenCalledWith(
-        '555-0001',
-        'abono_estado_cuenta',
-        fakeBuffer,
-        expect.stringMatching(/\.pdf$/),
-        expect.arrayContaining([expect.any(String)]),
-        'es_CO',
+      expect(mocks.mockWhatsApp.sendDocumentTemplate).not.toHaveBeenCalled();
+      expect(mocks.mockEmail.sendEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          attachments: expect.arrayContaining([
+            expect.objectContaining({ content: fakeBuffer }),
+          ]),
+        }),
       );
     });
 
-    it('registra NotificationLog con canal WHATSAPP_DOCUMENT y status SENT', async () => {
+    it('no registra log WHATSAPP_DOCUMENT (canal deshabilitado)', async () => {
       const clientId = 'pay-wa-doc-log';
       mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId));
-
-      const mockAccountStatement = {
-        execute: jest.fn().mockResolvedValue(Buffer.from('pdf')),
-      } as unknown as GenerateAccountStatementUseCase;
-
-      buildSubscriber(mockAccountStatement);
-      await mocks.getPaymentHandler()(makePaymentData(clientId));
-
-      const calls = mocks.mockPrismaCreate.mock.calls;
-      const docLog = calls.find(
-        (c: [{ data: { channel: string } }]) => c[0].data.channel === 'WHATSAPP_DOCUMENT',
-      );
-      expect(docLog).toBeDefined();
-      expect(docLog[0].data.status).toBe('SENT');
-    });
-
-    it('no envía PDF por WhatsApp si el PDF no se pudo generar', async () => {
-      const clientId = 'pay-wa-doc-no-pdf';
-      mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId));
-
-      const mockAccountStatement = {
-        execute: jest.fn().mockRejectedValue(new Error('PDFKit error')),
-      } as unknown as GenerateAccountStatementUseCase;
-
-      buildSubscriber(mockAccountStatement);
-      await mocks.getPaymentHandler()(makePaymentData(clientId));
-
-      expect(mocks.mockWhatsApp.sendDocumentTemplate).not.toHaveBeenCalled();
-    });
-
-    it('no envía PDF por WhatsApp si el cliente no tiene teléfono', async () => {
-      const clientId = 'pay-wa-doc-no-phone';
-      mocks.mockClientRepo.findById.mockResolvedValue(
-        new ClientEntity(clientId, 'Sin Tel', '', 'sin@tel.com', 'CC', '12345678', 'Calle 1 # 2-3', 'Centro', 1000, 0, true, new Date(), new Date()),
-      );
-
-      const mockAccountStatement = {
-        execute: jest.fn().mockResolvedValue(Buffer.from('pdf')),
-      } as unknown as GenerateAccountStatementUseCase;
-
-      buildSubscriber(mockAccountStatement);
-      await mocks.getPaymentHandler()(makePaymentData(clientId));
-
-      expect(mocks.mockWhatsApp.sendDocumentTemplate).not.toHaveBeenCalled();
-    });
-
-    it('registra FAILED con mensaje de error si sendDocumentTemplate lanza', async () => {
-      const clientId = 'pay-wa-doc-throws';
-      mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId));
-      mocks.mockWhatsApp.sendDocumentTemplate.mockRejectedValueOnce(
-        new Error('Meta media upload failed'),
-      );
 
       const mockAccountStatement = {
         execute: jest.fn().mockResolvedValue(Buffer.from('pdf')),
@@ -377,8 +317,24 @@ describe('PaymentNotificationSubscriber', () => {
       const docLog = mocks.mockPrismaCreate.mock.calls.find(
         (c: [{ data: { channel: string } }]) => c[0].data.channel === 'WHATSAPP_DOCUMENT',
       );
-      expect(docLog[0].data.status).toBe('FAILED');
-      expect(mocks.mockEmail.sendEmail).toHaveBeenCalled();
+      expect(docLog).toBeUndefined();
+    });
+
+    it('envía Email sin adjunto cuando el PDF falla', async () => {
+      const clientId = 'pay-wa-doc-no-pdf';
+      mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId));
+
+      const mockAccountStatement = {
+        execute: jest.fn().mockRejectedValue(new Error('PDFKit error')),
+      } as unknown as GenerateAccountStatementUseCase;
+
+      buildSubscriber(mockAccountStatement);
+      await mocks.getPaymentHandler()(makePaymentData(clientId));
+
+      expect(mocks.mockWhatsApp.sendDocumentTemplate).not.toHaveBeenCalled();
+      expect(mocks.mockEmail.sendEmail).toHaveBeenCalledWith(
+        expect.objectContaining({ attachments: undefined }),
+      );
     });
 
     it('no envía PDF por WhatsApp cuando no se inyecta accountStatementUseCase', async () => {
@@ -438,14 +394,14 @@ describe('PaymentNotificationSubscriber', () => {
   describe('cliente sin email', () => {
     const clientId = 'pay-no-email';
 
-    it('no intenta enviar Email si el cliente no tiene email', async () => {
+    it('no intenta enviar Email si el cliente no tiene email, ni WhatsApp (deshabilitado)', async () => {
       mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId, { email: null }));
 
       buildSubscriber();
       await mocks.getPaymentHandler()(makePaymentData(clientId));
 
       expect(mocks.mockEmail.sendEmail).not.toHaveBeenCalled();
-      expect(mocks.mockWhatsApp.sendTemplate).toHaveBeenCalled();
+      expect(mocks.mockWhatsApp.sendTemplate).not.toHaveBeenCalled();
     });
   });
 
@@ -498,15 +454,11 @@ describe('SaleNotificationSubscriber', () => {
       mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId));
     });
 
-    it('envía WhatsApp con el nombre del cliente', async () => {
+    it('NO envía WhatsApp (deshabilitado — envío manual desde el frontend)', async () => {
       buildSubscriber();
       await mocks.getSaleHandler()(makeSaleData(clientId));
 
-      expect(mocks.mockWhatsApp.sendTemplate).toHaveBeenCalledWith(
-        '555-0001',
-        'compra_credito',
-        expect.arrayContaining(['María López']),
-      );
+      expect(mocks.mockWhatsApp.sendTemplate).not.toHaveBeenCalled();
     });
 
     it('envía Email al correo del cliente', async () => {
@@ -518,56 +470,53 @@ describe('SaleNotificationSubscriber', () => {
       );
     });
 
-    it('persiste NotificationLog con status SENT para ambos canales', async () => {
+    it('persiste NotificationLog con status SENT solo para EMAIL', async () => {
       buildSubscriber();
       await mocks.getSaleHandler()(makeSaleData(clientId));
 
       const calls = mocks.mockPrismaCreate.mock.calls;
       const statuses = calls.map((c: [{ data: { status: string } }]) => c[0].data.status);
-      expect(statuses).toEqual(['SENT', 'SENT']);
+      expect(statuses).toEqual(['SENT']);
     });
   });
 
-  describe('resiliencia: fallo de WhatsApp', () => {
-    const clientId = 'sale-whatsapp-fail';
+  describe('WhatsApp deshabilitado', () => {
+    const clientId = 'sale-whatsapp-disabled';
 
-    it('envía Email aunque WhatsApp falle', async () => {
+    it('envía Email independientemente de WhatsApp (deshabilitado)', async () => {
       mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId));
-      mocks.mockWhatsApp.sendTemplate.mockRejectedValue(new Error('Twilio down'));
 
       buildSubscriber();
       await mocks.getSaleHandler()(makeSaleData(clientId));
 
+      expect(mocks.mockWhatsApp.sendTemplate).not.toHaveBeenCalled();
       expect(mocks.mockEmail.sendEmail).toHaveBeenCalled();
     });
 
-    it('persiste WhatsApp como FAILED y Email como SENT', async () => {
+    it('persiste solo EMAIL como SENT (sin log de WHATSAPP)', async () => {
       mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId));
-      mocks.mockWhatsApp.sendTemplate.mockRejectedValue(new Error('Twilio down'));
 
       buildSubscriber();
       await mocks.getSaleHandler()(makeSaleData(clientId));
 
       const calls = mocks.mockPrismaCreate.mock.calls;
-      const logMap = Object.fromEntries(
-        calls.map((c: [{ data: { channel: string; status: string } }]) => [c[0].data.channel, c[0].data.status]),
-      );
-      expect(logMap['WHATSAPP']).toBe('FAILED');
-      expect(logMap['EMAIL']).toBe('SENT');
+      const channels = calls.map((c: [{ data: { channel: string } }]) => c[0].data.channel);
+      expect(channels).not.toContain('WHATSAPP');
+      expect(channels).toContain('EMAIL');
     });
   });
 
   describe('resiliencia: fallo de Email', () => {
     const clientId = 'sale-email-fail';
 
-    it('envía WhatsApp aunque Email falle', async () => {
+    it('no envía WhatsApp (deshabilitado) cuando Email falla', async () => {
       mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId));
       mocks.mockEmail.sendEmail.mockRejectedValue(new Error('SMTP error'));
 
       buildSubscriber();
       await mocks.getSaleHandler()(makeSaleData(clientId));
 
-      expect(mocks.mockWhatsApp.sendTemplate).toHaveBeenCalled();
+      expect(mocks.mockWhatsApp.sendTemplate).not.toHaveBeenCalled();
     });
   });
 
@@ -585,22 +534,22 @@ describe('SaleNotificationSubscriber', () => {
     });
   });
 
-  describe('cliente sin email (solo WhatsApp)', () => {
+  describe('cliente sin email', () => {
     const clientId = 'sale-no-email';
 
-    it('solo envía WhatsApp si el cliente no tiene email', async () => {
+    it('no envía email ni WhatsApp (deshabilitado) si el cliente no tiene email', async () => {
       mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId, { email: null }));
 
       buildSubscriber();
       await mocks.getSaleHandler()(makeSaleData(clientId));
 
-      expect(mocks.mockWhatsApp.sendTemplate).toHaveBeenCalled();
+      expect(mocks.mockWhatsApp.sendTemplate).not.toHaveBeenCalled();
       expect(mocks.mockEmail.sendEmail).not.toHaveBeenCalled();
     });
   });
 
-  describe('PDF enviado por WhatsApp (plantilla credito_estado_cuenta)', () => {
-    it('envía el PDF vía sendDocumentTemplate cuando hay Buffer y teléfono', async () => {
+  describe('PDF adjunto al email (WhatsApp document deshabilitado)', () => {
+    it('adjunta el PDF al email cuando el use case lo genera correctamente', async () => {
       const clientId = 'sale-wa-doc-ok';
       mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId));
       const fakeBuffer = Buffer.from('fake-pdf');
@@ -612,55 +561,19 @@ describe('SaleNotificationSubscriber', () => {
       buildSubscriber(mockAccountStatement);
       await mocks.getSaleHandler()(makeSaleData(clientId));
 
-      expect(mocks.mockWhatsApp.sendDocumentTemplate).toHaveBeenCalledWith(
-        '555-0001',
-        'credito_estado_cuenta',
-        fakeBuffer,
-        expect.stringMatching(/\.pdf$/),
-        expect.arrayContaining([expect.any(String)]),
-        'es_CO',
+      expect(mocks.mockWhatsApp.sendDocumentTemplate).not.toHaveBeenCalled();
+      expect(mocks.mockEmail.sendEmail).toHaveBeenCalledWith(
+        expect.objectContaining({
+          attachments: expect.arrayContaining([
+            expect.objectContaining({ content: fakeBuffer }),
+          ]),
+        }),
       );
     });
 
-    it('registra NotificationLog con canal WHATSAPP_DOCUMENT y status SENT', async () => {
+    it('no registra log WHATSAPP_DOCUMENT (canal deshabilitado)', async () => {
       const clientId = 'sale-wa-doc-log';
       mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId));
-
-      const mockAccountStatement = {
-        execute: jest.fn().mockResolvedValue(Buffer.from('pdf')),
-      } as unknown as GenerateAccountStatementUseCase;
-
-      buildSubscriber(mockAccountStatement);
-      await mocks.getSaleHandler()(makeSaleData(clientId));
-
-      const calls = mocks.mockPrismaCreate.mock.calls;
-      const docLog = calls.find(
-        (c: [{ data: { channel: string } }]) => c[0].data.channel === 'WHATSAPP_DOCUMENT',
-      );
-      expect(docLog).toBeDefined();
-      expect(docLog[0].data.status).toBe('SENT');
-    });
-
-    it('no envía PDF por WhatsApp si el PDF no se pudo generar', async () => {
-      const clientId = 'sale-wa-doc-no-pdf';
-      mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId));
-
-      const mockAccountStatement = {
-        execute: jest.fn().mockRejectedValue(new Error('PDFKit error')),
-      } as unknown as GenerateAccountStatementUseCase;
-
-      buildSubscriber(mockAccountStatement);
-      await mocks.getSaleHandler()(makeSaleData(clientId));
-
-      expect(mocks.mockWhatsApp.sendDocumentTemplate).not.toHaveBeenCalled();
-    });
-
-    it('registra FAILED si sendDocumentTemplate lanza, email sigue enviándose', async () => {
-      const clientId = 'sale-wa-doc-throws';
-      mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId));
-      mocks.mockWhatsApp.sendDocumentTemplate.mockRejectedValueOnce(
-        new Error('Meta media upload failed'),
-      );
 
       const mockAccountStatement = {
         execute: jest.fn().mockResolvedValue(Buffer.from('pdf')),
@@ -672,8 +585,24 @@ describe('SaleNotificationSubscriber', () => {
       const docLog = mocks.mockPrismaCreate.mock.calls.find(
         (c: [{ data: { channel: string } }]) => c[0].data.channel === 'WHATSAPP_DOCUMENT',
       );
-      expect(docLog[0].data.status).toBe('FAILED');
-      expect(mocks.mockEmail.sendEmail).toHaveBeenCalled();
+      expect(docLog).toBeUndefined();
+    });
+
+    it('envía Email sin adjunto cuando el PDF falla', async () => {
+      const clientId = 'sale-wa-doc-no-pdf';
+      mocks.mockClientRepo.findById.mockResolvedValue(makeClient(clientId));
+
+      const mockAccountStatement = {
+        execute: jest.fn().mockRejectedValue(new Error('PDFKit error')),
+      } as unknown as GenerateAccountStatementUseCase;
+
+      buildSubscriber(mockAccountStatement);
+      await mocks.getSaleHandler()(makeSaleData(clientId));
+
+      expect(mocks.mockWhatsApp.sendDocumentTemplate).not.toHaveBeenCalled();
+      expect(mocks.mockEmail.sendEmail).toHaveBeenCalledWith(
+        expect.objectContaining({ attachments: undefined }),
+      );
     });
 
     it('no envía PDF por WhatsApp cuando no se inyecta accountStatementUseCase', async () => {

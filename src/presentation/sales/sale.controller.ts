@@ -61,8 +61,8 @@ export class SaleController {
     const ip = req.ip ?? req.socket.remoteAddress ?? 'unknown';
 
     try {
-      const sale = await this.createSaleUseCase.execute(dto!, user.id, ip);
-      res.status(201).json(sale);
+      const { sale, whatsappPayload } = await this.createSaleUseCase.execute(dto!, user.id, ip);
+      res.status(201).json({ ...sale, whatsappPayload });
     } catch (err) {
       this.handleError(err, res);
     }
