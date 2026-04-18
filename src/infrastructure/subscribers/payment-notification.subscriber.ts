@@ -145,10 +145,12 @@ export class PaymentNotificationSubscriber {
 
       // WhatsApp con PDF adjunto — se envía en paralelo con el email.
       // Usa el mismo Buffer generado para el email (no se regenera).
+      // Enviado mediante plantilla aprobada (`abono_estado_cuenta`) para que
+      // funcione fuera de la ventana de 24h de Meta — las notificaciones
+      // iniciadas por el negocio no tienen garantía de ventana abierta.
       // Si falla, se registra con el logger y en NotificationLog; el email sigue su curso.
       if (this.whatsAppService && client.phone && pdfBuffer) {
         const pdfFilename = `estado-cuenta-${clientId.slice(0, 8)}.pdf`;
-        const caption = `Hola ${client.name}, adjuntamos su estado de cuenta actualizado tras el abono de ${formattedAmount}.`;
         tasks.push(
           this.sendAndLog({
             clientId,
@@ -156,12 +158,13 @@ export class PaymentNotificationSubscriber {
             event: 'PAYMENT_REGISTERED',
             send: async () => {
               try {
-                return await this.whatsAppService!.sendDocument(
+                return await this.whatsAppService!.sendDocumentTemplate(
                   client.phone,
+                  'abono_estado_cuenta',
                   pdfBuffer!,
                   pdfFilename,
-                  caption,
-                  'application/pdf',
+                  [client.name, formattedAmount, date],
+                  'es_CO',
                 );
               } catch (err) {
                 this.logger?.error(

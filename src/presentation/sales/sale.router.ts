@@ -13,6 +13,7 @@ import { AuthRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaAuthDatasource } from '../../infrastructure/datasources';
 import { AuthMiddleware } from '../middlewares';
 import { JwtAdapter, MetaWhatsAppService, NodemailerEmailService, PdfkitPdfService } from '../../infrastructure/services';
+import { globalLogger } from '../../infrastructure/services/pino-logger.service';
 import { InstallmentCalculatorService } from '../../domain/services/installments';
 import { globalEventEmitter } from '../../infrastructure/events';
 import { SaleNotificationSubscriber } from '../../infrastructure/subscribers';
@@ -49,6 +50,7 @@ export class SaleRouter {
       whatsAppService.isEnabled ? whatsAppService : null,
       emailService.isEnabled ? emailService : null,
       accountStatementUseCase,
+      globalLogger,
     );
 
     const installmentCalculator = new InstallmentCalculatorService();

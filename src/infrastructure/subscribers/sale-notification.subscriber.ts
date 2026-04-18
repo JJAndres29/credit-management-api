@@ -1,6 +1,7 @@
 import { EventEmitterPort, CREDIT_SALE_CREATED, CreditSaleCreatedData } from '../../domain/events';
 import { NotificationService } from '../../domain/services/notification.service';
 import { EmailService } from '../../domain/services/email.service';
+import { LoggerService } from '../../domain/services/logger.service';
 import { ClientRepository } from '../../domain/repositories';
 import { GenerateAccountStatementUseCase } from '../../domain/use-cases/reports';
 import { prisma } from '../../config/prisma';
@@ -20,10 +21,12 @@ export class SaleNotificationSubscriber {
     private readonly whatsAppService: NotificationService | null,
     private readonly emailService: EmailService | null,
     /**
-     * Opcional: si se inyecta, el estado de cuenta en PDF se adjunta al email.
-     * Si no se inyecta, el email se envía sin adjunto.
+     * Opcional: si se inyecta, el estado de cuenta en PDF se adjunta al email
+     * y se envía también como documento por WhatsApp mediante plantilla.
+     * Si no se inyecta, el email se envía sin adjunto y no se manda PDF por WhatsApp.
      */
     private readonly accountStatementUseCase?: GenerateAccountStatementUseCase,
+    private readonly logger?: LoggerService,
   ) {
     this.eventEmitter.on(CREDIT_SALE_CREATED, this.handle);
   }
@@ -99,6 +102,42 @@ export class SaleNotificationSubscriber {
                     ]
                   : undefined,
               }),
+          }),
+        );
+      }
+
+      // WhatsApp con PDF adjunto — se envía en paralelo con el email.
+      // Usa el mismo Buffer generado para el email (no se regenera).
+      // Enviado mediante plantilla aprobada (`credito_estado_cuenta`) para que
+      // funcione fuera de la ventana de 24h de Meta — las notificaciones
+      // iniciadas por el negocio no tienen garantía de ventana abierta.
+      // Si falla, se registra con el logger y en NotificationLog; el email sigue su curso.
+      if (this.whatsAppService && client.phone && pdfBuffer) {
+        const pdfFilename = `estado-cuenta-${clientId.slice(0, 8)}.pdf`;
+        tasks.push(
+          this.sendAndLog({
+            clientId,
+            channel: 'WHATSAPP_DOCUMENT',
+            event: 'CREDIT_SALE_CREATED',
+            send: async () => {
+              try {
+                return await this.whatsAppService!.sendDocumentTemplate(
+                  client.phone,
+                  'credito_estado_cuenta',
+                  pdfBuffer!,
+                  pdfFilename,
+                  [client.name, formattedTotal, date],
+                  'es_CO',
+                );
+              } catch (err) {
+                this.logger?.error(
+                  'Fallo al enviar estado de cuenta por WhatsApp',
+                  err,
+                  { clientId, saleId, channel: 'WHATSAPP_DOCUMENT' },
+                );
+                return false;
+              }
+            },
           }),
         );
       }
