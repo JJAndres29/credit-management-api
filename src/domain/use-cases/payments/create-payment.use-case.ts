@@ -48,7 +48,8 @@ export class CreatePaymentUseCase {
     let saleInstallmentsCount: number | null = null;
     let saleInstallmentAmount: number | null = null;
     let saleTotalPaidAfter: number | undefined;
-    let remainingInstallments: number | null = null;
+    let saleCreatedAt: Date | null = null;
+    let saleInitialPayment: number = 0;
 
     // 3. Validaciones adicionales cuando el pago va asociado a una venta específica
     if (dto.saleId) {
@@ -56,19 +57,14 @@ export class CreatePaymentUseCase {
 
       if (!sale) throw CustomError.notFound(`Venta con ID ${dto.saleId} no encontrada`);
 
-      // Seguridad: la venta debe pertenecer al mismo cliente
-      // Esto evita que un usuario malintencionado asocie un pago al ID de la venta
-      // de otro cliente y reduzca el balance incorrecto
       if (sale.clientId !== dto.clientId) {
         throw CustomError.forbidden('La venta no pertenece al cliente indicado');
       }
 
-      // No se puede pagar una venta ya liquidada
       if (sale.status === SaleStatus.PAID) {
         throw CustomError.badRequest('La venta ya está completamente pagada');
       }
 
-      // Calcular cuánto queda por pagar en esta venta específica
       const existingPayments = await this.paymentRepository.findBySaleId(dto.saleId);
       const totalAlreadyPaid = existingPayments.reduce((sum, p) => sum + Number(p.amount), 0);
       const remaining = Number(sale.total) - totalAlreadyPaid;
@@ -83,11 +79,10 @@ export class CreatePaymentUseCase {
       saleInstallmentsCount = sale.installmentsCount;
       saleInstallmentAmount = sale.installmentAmount;
       saleTotalPaidAfter = totalAlreadyPaid + dto.amount;
-
-      if (saleInstallmentsCount !== null) {
-        const paymentsMade = existingPayments.length + 1;
-        remainingInstallments = Math.max(0, saleInstallmentsCount - paymentsMade);
-      }
+      saleCreatedAt = sale.createdAt;
+      // initialPayment se descuenta para que solo los pagos regulares cuenten
+      // en el cálculo de cuotas: paidInstallments = (totalPaid - initialPayment) / installmentAmount
+      saleInitialPayment = sale.initialPayment ?? 0;
     }
 
     // 4. Persistir: la transacción atómica en el datasource se encarga de:
@@ -109,7 +104,6 @@ export class CreatePaymentUseCase {
     });
 
     // 5. Emitir evento DESPUÉS de que la transacción se commitea.
-    //    La notificación es best-effort — si falla, el pago ya está registrado.
     this.eventEmitter?.emit(PAYMENT_REGISTERED, {
       paymentId: payment.id,
       clientId: dto.clientId,
@@ -123,19 +117,44 @@ export class CreatePaymentUseCase {
 
     const newBalance = clientBalance - dto.amount;
     const fmt = (n: number) =>
-      n.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-    const installmentsText =
-      remainingInstallments !== null
-        ? ` Cuotas pendientes: ${remainingInstallments}.`
-        : '';
-    const whatsappPayload: WhatsAppPayload | null = client.phone
-      ? {
-          phone: client.phone,
-          message:
-            `Hola ${client.name}, se registró un abono de $${fmt(dto.amount)} en tu cuenta. ` +
-            `Tu saldo actual es $${fmt(newBalance)}.${installmentsText} Ref: ${payment.id.slice(0, 8)}`,
-        }
-      : null;
+      new Intl.NumberFormat('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+    const fmtDate = (d: Date) => {
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const yyyy = d.getFullYear();
+      return `${dd}-${mm}-${yyyy}`;
+    };
+
+    let whatsappPayload: WhatsAppPayload | null = null;
+
+    if (client.phone && dto.saleId && saleTotal !== undefined && saleCreatedAt !== null) {
+      let installmentsLine = '';
+      if (saleInstallmentsCount !== null && saleInstallmentAmount !== null && saleTotalPaidAfter !== undefined) {
+        const regularPaid = saleTotalPaidAfter - saleInitialPayment;
+        const paidInstallments = fmt(regularPaid / saleInstallmentAmount);
+        installmentsLine = `\nCuotas pagadas ${paidInstallments} de ${saleInstallmentsCount}.`;
+      }
+
+      whatsappPayload = {
+        phone: client.phone,
+        message:
+          `*ESTADO DE CUENTA*\n` +
+          `Sr(a) ${client.name}, el estado de cuenta de su crédito No.${dto.saleId} es el siguiente:\n` +
+          `Fecha inicial ${fmtDate(saleCreatedAt)}.\n` +
+          `Valor del crédito ${fmt(saleTotal)}.\n` +
+          `Último pago realizado el ${fmtDate(payment.createdAt)} por valor de ${fmt(dto.amount)}.` +
+          installmentsLine +
+          `\nSu nuevo saldo es ${fmt(newBalance)}.`,
+      };
+    } else if (client.phone) {
+      whatsappPayload = {
+        phone: client.phone,
+        message:
+          `*ESTADO DE CUENTA*\n` +
+          `Sr(a) ${client.name}, se registró un abono de ${fmt(dto.amount)}.\n` +
+          `Su nuevo saldo es ${fmt(newBalance)}.`,
+      };
+    }
 
     return { payment, whatsappPayload };
   }

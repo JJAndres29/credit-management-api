@@ -296,7 +296,8 @@ NotificationLog  — Log of every notification attempt: channel (WHATSAPP|EMAIL)
 |-------|-------------|
 | `installmentsCount` | Number of installments agreed (null if no plan) |
 | `frequency` | `MONTHLY` or `BIWEEKLY` (null if no plan) |
-| `installmentAmount` | `total / installmentsCount`, rounded to 2 decimals |
+| `installmentAmount` | `(total - initialPayment) / installmentsCount`, rounded to 2 decimals |
+| `initialPayment` | Down payment applied at sale creation time (null if none) |
 | `collectionDay` | Day of the month for billing (1-31). MONTHLY: the single day; BIWEEKLY: first day |
 | `collectionDay2` | Second billing day (1-31), BIWEEKLY plans only |
 

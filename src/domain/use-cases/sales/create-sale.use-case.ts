@@ -127,6 +127,7 @@ export class CreateSaleUseCase {
       installmentAmount,
       collectionDay: dto.collectionDay,
       collectionDay2: dto.collectionDay2,
+      initialPayment: initialPayment > 0 ? initialPayment : undefined,
     });
 
     // 8. Registrar la cuota inicial como pago si se proporcionó.
@@ -173,18 +174,49 @@ export class CreateSaleUseCase {
     }
 
     const fmt = (n: number) =>
-      n.toLocaleString('es-CO', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
-    const whatsappPayload: WhatsAppPayload | null = client.phone
-      ? {
+      new Intl.NumberFormat('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+    const fmtDate = (d: Date) => {
+      const dd = String(d.getDate()).padStart(2, '0');
+      const mm = String(d.getMonth() + 1).padStart(2, '0');
+      const yyyy = d.getFullYear();
+      return `${dd}-${mm}-${yyyy}`;
+    };
+
+    let whatsappPayload: WhatsAppPayload | null = null;
+
+    if (client.phone) {
+      if (dto.type === SaleType.CREDIT) {
+        let body =
+          `*ESTADO DE CUENTA*\n` +
+          `Sr(a) ${client.name}, el estado de cuenta de su crédito No.${sale.id} es el siguiente:\n` +
+          `Fecha inicial ${fmtDate(sale.createdAt)}.\n` +
+          `Valor del crédito ${fmt(total)}.`;
+
+        if (installmentAmount && dto.installmentsCount) {
+          if (initialPayment > 0) {
+            // La cuota inicial NO es una cuota regular del plan — se descuenta del total
+            // antes de dividir. Al crear la venta, 0 cuotas regulares han sido pagadas.
+            body +=
+              `\nCuota inicial aplicada el ${fmtDate(sale.createdAt)} por valor de ${fmt(initialPayment)}.` +
+              `\nCuotas pagadas 0,00 de ${dto.installmentsCount}.`;
+          } else {
+            body +=
+              `\nCuotas pactadas ${dto.installmentsCount} de ${fmt(installmentAmount)} cada una.`;
+          }
+        }
+
+        body += `\nSu nuevo saldo es ${fmt(finalBalance)}.`;
+        whatsappPayload = { phone: client.phone, message: body };
+      } else {
+        whatsappPayload = {
           phone: client.phone,
           message:
-            dto.type === SaleType.CREDIT
-              ? `Hola ${client.name}, se registró una compra a crédito de $${fmt(total)} en tu cuenta. ` +
-                `Tu saldo actual es $${fmt(finalBalance)}. Ref: ${sale.id.slice(0, 8)}`
-              : `Hola ${client.name}, se registró una compra de contado de $${fmt(total)}. ` +
-                `Ref: ${sale.id.slice(0, 8)}`,
-        }
-      : null;
+            `*COMPRA REGISTRADA*\n` +
+            `Sr(a) ${client.name}, se registró una compra de contado el ${fmtDate(sale.createdAt)} ` +
+            `por valor de ${fmt(total)}. Ref: ${sale.id.slice(0, 8)}`,
+        };
+      }
+    }
 
     return { sale, whatsappPayload };
   }

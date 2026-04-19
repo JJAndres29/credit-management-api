@@ -133,6 +133,8 @@ export class PrismaSaleDatasource implements SaleDatasource {
           // Días de cobro — opcionales, solo presentes cuando el vendedor los define
           ...(data.collectionDay !== undefined && { collectionDay: data.collectionDay }),
           ...(data.collectionDay2 !== undefined && { collectionDay2: data.collectionDay2 }),
+          // Cuota inicial — null cuando no se dio cuota inicial
+          ...(data.initialPayment !== undefined && { initialPayment: data.initialPayment }),
           items: {
             create: data.items.map((item) => ({
               productId: item.productId,
