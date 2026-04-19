@@ -92,6 +92,7 @@ model ProductImage {
 
 model Sale {
   id                String                @id @default(uuid())
+  saleNumber        Int                   @unique @default(autoincrement())
   clientId          String
   type              SaleType
   status            SaleStatus            @default(PENDING)

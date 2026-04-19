@@ -45,6 +45,7 @@ export class CreatePaymentUseCase {
     }
 
     let saleTotal: number | undefined;
+    let saleNumber: number | null = null;
     let saleInstallmentsCount: number | null = null;
     let saleInstallmentAmount: number | null = null;
     let saleTotalPaidAfter: number | undefined;
@@ -76,6 +77,7 @@ export class CreatePaymentUseCase {
       }
 
       saleTotal = Number(sale.total);
+      saleNumber = sale.saleNumber;
       saleInstallmentsCount = sale.installmentsCount;
       saleInstallmentAmount = sale.installmentAmount;
       saleTotalPaidAfter = totalAlreadyPaid + dto.amount;
@@ -119,39 +121,45 @@ export class CreatePaymentUseCase {
     const fmt = (n: number) =>
       new Intl.NumberFormat('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
     const fmtDate = (d: Date) => {
-      const dd = String(d.getDate()).padStart(2, '0');
-      const mm = String(d.getMonth() + 1).padStart(2, '0');
-      const yyyy = d.getFullYear();
-      return `${dd}-${mm}-${yyyy}`;
+      const parts = new Intl.DateTimeFormat('es-CO', {
+        timeZone: 'America/Bogota',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      }).formatToParts(d);
+      const day = parts.find((p) => p.type === 'day')!.value;
+      const month = parts.find((p) => p.type === 'month')!.value;
+      const year = parts.find((p) => p.type === 'year')!.value;
+      return `${day}-${month}-${year}`;
     };
 
     let whatsappPayload: WhatsAppPayload | null = null;
 
-    if (client.phone && dto.saleId && saleTotal !== undefined && saleCreatedAt !== null) {
+    if (client.phone && dto.saleId && saleNumber !== null && saleTotal !== undefined && saleCreatedAt !== null) {
       let installmentsLine = '';
       if (saleInstallmentsCount !== null && saleInstallmentAmount !== null && saleTotalPaidAfter !== undefined) {
         const regularPaid = saleTotalPaidAfter - saleInitialPayment;
         const paidInstallments = fmt(regularPaid / saleInstallmentAmount);
-        installmentsLine = `\nCuotas pagadas ${paidInstallments} de ${saleInstallmentsCount}.`;
+        installmentsLine = `\n\nCuotas pagadas ${paidInstallments} de ${saleInstallmentsCount}.`;
       }
 
       whatsappPayload = {
         phone: client.phone,
         message:
-          `*ESTADO DE CUENTA*\n` +
-          `Sr(a) ${client.name}, el estado de cuenta de su crédito No.${dto.saleId} es el siguiente:\n` +
-          `Fecha inicial ${fmtDate(saleCreatedAt)}.\n` +
-          `Valor del crédito ${fmt(saleTotal)}.\n` +
+          `***\nESTADO DE CUENTA\n***\n\n` +
+          `Sr(a) ${client.name}, el estado de cuenta de su crédito No.${saleNumber} es el siguiente:\n\n` +
+          `Fecha inicial ${fmtDate(saleCreatedAt)}.\n\n` +
+          `Valor del crédito ${fmt(saleTotal)}.\n\n` +
           `Último pago realizado el ${fmtDate(payment.createdAt)} por valor de ${fmt(dto.amount)}.` +
           installmentsLine +
-          `\nSu nuevo saldo es ${fmt(newBalance)}.`,
+          `\n\nSu nuevo saldo es ${fmt(newBalance)}.`,
       };
     } else if (client.phone) {
       whatsappPayload = {
         phone: client.phone,
         message:
-          `*ESTADO DE CUENTA*\n` +
-          `Sr(a) ${client.name}, se registró un abono de ${fmt(dto.amount)}.\n` +
+          `***\nESTADO DE CUENTA\n***\n\n` +
+          `Sr(a) ${client.name}, se registró un abono de ${fmt(dto.amount)}.\n\n` +
           `Su nuevo saldo es ${fmt(newBalance)}.`,
       };
     }
