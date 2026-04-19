@@ -35,6 +35,7 @@ export class SaleItemEntity {
 export class SaleEntity {
   constructor(
     public readonly id: string,
+    public readonly saleNumber: number,
     public readonly clientId: string,
     public readonly type: SaleType,
     public readonly status: SaleStatus,
@@ -69,7 +70,7 @@ export class SaleEntity {
 
   static fromObject(object: Record<string, unknown>): SaleEntity {
     const {
-      id, clientId, type, status, total, createdAt, items,
+      id, saleNumber, clientId, type, status, total, createdAt, items,
       installmentsCount, frequency, installmentAmount,
       collectionDay, collectionDay2, initialPayment,
     } = object;
@@ -97,6 +98,7 @@ export class SaleEntity {
 
     return new SaleEntity(
       id as string,
+      Number(saleNumber),
       clientId as string,
       type as SaleType,
       (status as SaleStatus) ?? SaleStatus.PENDING,

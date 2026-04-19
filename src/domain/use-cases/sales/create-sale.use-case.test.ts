@@ -63,6 +63,7 @@ function makeProduct(overrides: Partial<{
 function makeSale(type: SaleType, status: SaleStatus, total: number): SaleEntity {
   return new SaleEntity(
     'sale-1',
+    1000,
     'client-1',
     type,
     status,
