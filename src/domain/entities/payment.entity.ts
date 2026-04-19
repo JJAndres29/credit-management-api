@@ -3,6 +3,7 @@ export class PaymentEntity {
     public readonly id: string,
     public readonly clientId: string,
     public readonly saleId: string | null,
+    public readonly saleNumber: number | null,
     public readonly amount: number,
     public readonly note: string | null,
     public readonly createdAt: Date,
@@ -10,7 +11,7 @@ export class PaymentEntity {
   ) {}
 
   static fromObject(object: Record<string, unknown>): PaymentEntity {
-    const { id, clientId, saleId, amount, note, createdAt, client } = object;
+    const { id, clientId, saleId, amount, note, createdAt, client, sale } = object;
 
     if (!id) throw new Error('Payment id is required');
     if (!clientId) throw new Error('Payment clientId is required');
@@ -21,10 +22,16 @@ export class PaymentEntity {
         ? (client as Record<string, unknown>).documentNumber as string
         : null;
 
+    const saleNumber =
+      sale && typeof sale === 'object' && 'saleNumber' in sale
+        ? Number((sale as Record<string, unknown>).saleNumber)
+        : null;
+
     return new PaymentEntity(
       id as string,
       clientId as string,
       (saleId as string | null) ?? null,
+      saleNumber,
       Number(amount),
       (note as string | null) ?? null,
       (createdAt as Date) ?? new Date(),
