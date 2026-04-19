@@ -38,7 +38,7 @@ function makeSale(id: string, clientId: string, productIds: string[]): SaleEntit
 }
 
 function makePayment(id: string, clientId: string): PaymentEntity {
-  return new PaymentEntity(id, clientId, null, 50, null, new Date());
+  return new PaymentEntity(id, clientId, null, null, 50, null, new Date());
 }
 
 // ─── Mocks ────────────────────────────────────────────────────────────────────

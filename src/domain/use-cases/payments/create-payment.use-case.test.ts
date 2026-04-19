@@ -70,6 +70,7 @@ function makePayment(overrides: Partial<{
     overrides.id ?? 'pay-1',
     overrides.clientId ?? 'client-1',
     overrides.saleId ?? 'sale-1',
+    null,
     overrides.amount ?? 100,
     null,
     new Date(),
