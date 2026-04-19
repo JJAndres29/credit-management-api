@@ -59,13 +59,19 @@ export class SaleEntity {
      * Null si el plan es MONTHLY o si no se definieron días de cobro.
      */
     public readonly collectionDay2: number | null = null,
+    /**
+     * Cuota inicial abonada al momento de crear la venta.
+     * Se descuenta del numerador al calcular cuotas pagadas:
+     * paidInstallments = (totalPaid - initialPayment) / installmentAmount
+     */
+    public readonly initialPayment: number | null = null,
   ) {}
 
   static fromObject(object: Record<string, unknown>): SaleEntity {
     const {
       id, clientId, type, status, total, createdAt, items,
       installmentsCount, frequency, installmentAmount,
-      collectionDay, collectionDay2,
+      collectionDay, collectionDay2, initialPayment,
     } = object;
 
     if (!id) throw new Error('Sale id is required');
@@ -102,6 +108,7 @@ export class SaleEntity {
       installmentAmount != null ? Number(installmentAmount) : null,
       collectionDay != null ? Number(collectionDay) : null,
       collectionDay2 != null ? Number(collectionDay2) : null,
+      initialPayment != null ? Number(initialPayment) : null,
     );
   }
 }

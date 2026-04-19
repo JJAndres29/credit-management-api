@@ -44,6 +44,11 @@ export interface SaleCreateData {
   collectionDay?: number;
   /** Segundo día de cobro (1-31). Exclusivo para planes BIWEEKLY. */
   collectionDay2?: number;
+  /**
+   * Cuota inicial abonada al crear la venta. Se persiste para que CreatePaymentUseCase
+   * pueda calcular correctamente: paidInstallments = (totalPaid - initialPayment) / installmentAmount
+   */
+  initialPayment?: number;
 }
 
 export interface SaleDatasource {
