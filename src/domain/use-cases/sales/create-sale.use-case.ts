@@ -217,7 +217,7 @@ export class CreateSaleUseCase {
           message:
             `***\nCOMPRA REGISTRADA\n***\n\n` +
             `Sr(a) ${client.name}, se registró una compra de contado el ${fmtDate(sale.createdAt)} ` +
-            `por valor de ${fmt(total)}. Ref: ${sale.id.slice(0, 8)}`,
+            `por valor de ${fmt(total)}. Ref: #${sale.saleNumber}`,
         };
       }
     }
