@@ -34,7 +34,7 @@ function makeSale(id: string, clientId: string, productIds: string[]): SaleEntit
       'CREDIT_SURCHARGE_15PCT',
     ),
   );
-  return new SaleEntity(id, clientId, SaleType.CREDIT, SaleStatus.PENDING, 230, new Date(), items);
+  return new SaleEntity(id, 1000, clientId, SaleType.CREDIT, SaleStatus.PENDING, 230, new Date(), items);
 }
 
 function makePayment(id: string, clientId: string): PaymentEntity {

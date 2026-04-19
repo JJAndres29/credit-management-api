@@ -48,6 +48,7 @@ function makeSale(overrides: Partial<{
 }> = {}): SaleEntity {
   return new SaleEntity(
     overrides.id ?? 'sale-1',
+    1000,
     overrides.clientId ?? 'client-1',
     SaleType.CREDIT,
     overrides.status ?? SaleStatus.PENDING,
