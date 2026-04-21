@@ -5,6 +5,20 @@ import { PaginationDto } from '../dtos/shared';
 import { PaginatedResult } from '../types/paginated.type';
 
 /**
+ * Datos para actualizar un pago existente.
+ * Solo los campos proporcionados se modifican.
+ * Si `amount` cambia, `auditLog` es obligatorio para registrar el ajuste de balance.
+ */
+export interface PaymentUpdateData {
+  amount?: number;
+  note?: string | null;
+  /** Total de la venta — requerido cuando amount cambia y el pago tiene saleId */
+  saleTotal?: number;
+  /** Requerido cuando amount cambia — registra el ajuste de balance */
+  auditLog?: AuditLogData;
+}
+
+/**
  * Datos ya validados y enriquecidos que llegan desde el use case.
  * saleTotal se incluye cuando hay saleId para que la transacción atómica
  * pueda calcular el nuevo estado de la venta sin salir de la transacción.
@@ -31,4 +45,10 @@ export interface PaymentDatasource {
    * recalcula el estado de la venta — todo en una transacción atómica.
    */
   create(data: PaymentCreateData): Promise<PaymentEntity>;
+  /**
+   * Actualiza el pago y (si amount cambia) ajusta el balance del cliente
+   * y recalcula el estado de la venta — todo en una transacción atómica.
+   * Solo ADMIN puede invocar este flujo.
+   */
+  update(id: string, data: PaymentUpdateData): Promise<PaymentEntity>;
 }

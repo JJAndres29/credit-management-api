@@ -1,26 +1,67 @@
 import { Router } from 'express';
 import { ClientController } from './client.controller';
-import { CreateClientUseCase, GetClientsUseCase, GetClientByIdUseCase, UpdateClientUseCase, DeleteClientUseCase } from '../../domain/use-cases/clients';
+import {
+  CreateClientUseCase,
+  GetClientsUseCase,
+  GetClientByIdUseCase,
+  UpdateClientUseCase,
+  DeleteClientUseCase,
+  NotifyClientUseCase,
+} from '../../domain/use-cases/clients';
 import { ClientRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaClientDatasource } from '../../infrastructure/datasources';
 import { AuthMiddleware, checkRole } from '../middlewares';
-import { JwtAdapter } from '../../infrastructure/services';
+import { JwtAdapter, NodemailerEmailService, PdfkitPdfService } from '../../infrastructure/services';
 import { AuthRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaAuthDatasource } from '../../infrastructure/datasources';
-import { Role } from '../../domain/entities'; 
+import { Role } from '../../domain/entities';
+import { globalEventEmitter } from '../../infrastructure/events';
+import { ClientNotifySubscriber } from '../../infrastructure/subscribers';
+import { GenerateAccountStatementUseCase } from '../../domain/use-cases/reports';
+import { SaleRepositoryImpl } from '../../infrastructure/repositories';
+import { PrismaSaleDatasource } from '../../infrastructure/datasources';
+import { PaymentRepositoryImpl } from '../../infrastructure/repositories';
+import { PrismaPaymentDatasource } from '../../infrastructure/datasources';
+import { ProductRepositoryImpl } from '../../infrastructure/repositories';
+import { PrismaProductDatasource } from '../../infrastructure/datasources';
+import { globalLogger } from '../../infrastructure/services/pino-logger.service';
 
 export class ClientRouter {
   static get routes(): Router {
     const router = Router();
 
-    const repository = new ClientRepositoryImpl(new PrismaClientDatasource());
+    const clientRepository = new ClientRepositoryImpl(new PrismaClientDatasource());
+
+    // Dependencias para el subscriber de notificación
+    const emailService = new NodemailerEmailService();
+    const saleRepository = new SaleRepositoryImpl(new PrismaSaleDatasource());
+    const paymentRepository = new PaymentRepositoryImpl(new PrismaPaymentDatasource());
+    const productRepository = new ProductRepositoryImpl(new PrismaProductDatasource());
+
+    const accountStatementUseCase = new GenerateAccountStatementUseCase(
+      clientRepository,
+      saleRepository,
+      paymentRepository,
+      productRepository,
+      new PdfkitPdfService(),
+    );
+
+    // Subscriber: escucha ClientNotifyRequested y envía email con PDF adjunto
+    new ClientNotifySubscriber(
+      globalEventEmitter,
+      clientRepository,
+      emailService.isEnabled ? emailService : null,
+      accountStatementUseCase,
+      globalLogger,
+    );
 
     const controller = new ClientController(
-      new CreateClientUseCase(repository),
-      new GetClientsUseCase(repository),
-      new GetClientByIdUseCase(repository),
-      new UpdateClientUseCase(repository),
-      new DeleteClientUseCase(repository),
+      new CreateClientUseCase(clientRepository),
+      new GetClientsUseCase(clientRepository),
+      new GetClientByIdUseCase(clientRepository),
+      new UpdateClientUseCase(clientRepository),
+      new DeleteClientUseCase(clientRepository),
+      new NotifyClientUseCase(clientRepository, globalEventEmitter),
     );
 
     const middleware = new AuthMiddleware(
@@ -44,6 +85,9 @@ export class ClientRouter {
 
     // DELETE /api/clients/:id
     router.delete('/:id', checkRole(Role.ADMIN), controller.delete);
+
+    // POST /api/clients/:id/notify — reenvía estado de cuenta por WhatsApp payload + email
+    router.post('/:id/notify', controller.notify);
 
     return router;
   }

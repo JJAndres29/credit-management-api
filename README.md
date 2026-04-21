@@ -36,8 +36,10 @@ This system allows a retail business to manage credit operations for its clients
 - Cash and credit sales with automatic stock deduction and client balance update (atomic transaction)
 - **Manual pricing at sale time** — the seller sets the unit price for each item when creating a sale. The server computes subtotals and total; the frontend cannot override them
 - Payment registration with automatic sale status update (PENDING → PARTIAL → PAID) and client balance reduction (atomic transaction)
-- Immutable audit log of every balance-changing operation (credit sales and payments), written atomically inside each transaction
+- **Payment correction** — Admins can modify the `amount` and/or `note` of any existing payment (`PUT /api/payments/:id`). The client balance is adjusted atomically using delta math, the associated sale status is recomputed, and a `PAYMENT_MODIFIED` audit entry is written — all in a single transaction
+- Immutable audit log of every balance-changing operation (credit sales, payments, and payment corrections), written atomically inside each transaction
 - **Automatic notifications** — Email (via Nodemailer/Gmail) sent after every payment and credit sale, with the PDF account statement attached. WhatsApp integration is **dormant**: the backend pre-builds a `whatsappPayload { phone, message }` returned in every `POST /api/payments` and `POST /api/sales` (201) response so the frontend can open a `wa.me` Deep Link for manual sending. The Meta Cloud API send blocks are commented out and can be reactivated without touching business logic. Notifications are optional and best-effort: if the provider fails or credentials are missing, the financial operation is not affected
+- **On-demand client notification** — Any authenticated user can trigger a notification to a client via `POST /api/clients/:id/notify`. Returns a `whatsappPayload` immediately for manual sending and asynchronously emails the client's full PDF account statement
 - **PDF account statements** — On-demand PDF generation for any client via `GET /api/reports/account-statement/:clientId`. The PDF is generated in memory and streamed directly to the browser — nothing is ever saved to disk
 
 ---
@@ -132,9 +134,9 @@ credit-management-system/
 │   │   │   └── ...                # JwtService, EmailService, NotificationService, PdfService, FileStorageService, InstallmentCalculatorService
 │   │   └── use-cases/
 │   │       ├── auth/              # LoginUseCase, RenewTokenUseCase
-│   │       ├── clients/           # CreateClient, GetClients, GetClientById, UpdateClient, DeleteClient
+│   │       ├── clients/           # CreateClient, GetClients, GetClientById, UpdateClient, DeleteClient, NotifyClient
 │   │       ├── audit-logs/        # GetAuditLogs, GetAuditLogsByClient
-│   │       ├── payments/          # CreatePayment, GetPayments, GetPaymentById, GetPaymentsByClient, GetPaymentsBySale
+│   │       ├── payments/          # CreatePayment, GetPayments, GetPaymentById, GetPaymentsByClient, GetPaymentsBySale, UpdatePayment
 │   │       ├── products/          # GetProducts, GetProductById, CreateProduct, UpdateProduct, AdjustStock, DeleteProduct, UploadProductImages, DeleteProductImage
 │   │       ├── reports/           # GenerateAccountStatement
 │   │       ├── sales/             # CreateSale, GetSales, GetSaleById, GetSalesByClient
@@ -653,6 +655,34 @@ Soft delete — sets `isActive = false`. Client history is preserved.
 
 ---
 
+#### POST `/api/clients/:id/notify`
+
+Send the client a reminder of their current account status. Returns a `whatsappPayload` synchronously for the frontend to open a `wa.me` deep link. Asynchronously generates the PDF account statement and emails it to the client (if email credentials are configured and the client has an email address).
+
+**Request body:** none required.
+
+**Response `200`:**
+```json
+{
+  "message": "Notificación enviada",
+  "whatsappPayload": {
+    "phone": "573001234567",
+    "message": "Hola María, te informamos que tu saldo actual es $150.000..."
+  }
+}
+```
+
+`whatsappPayload` is `null` if the client has no phone number.
+
+**Response `404`:** Client not found or inactive.
+
+**Business rules:**
+- Any authenticated user (ADMIN or SELLER) can trigger this endpoint — no ADMIN role required
+- The email is sent asynchronously after the HTTP response is returned — it never delays or blocks the response
+- If email is not configured or the client has no email address, the endpoint still returns `200` with the `whatsappPayload`
+
+---
+
 ### Sales
 
 All sales endpoints require `Authorization: Bearer <token>`. Any authenticated user (ADMIN or SELLER) can create and view sales.
@@ -891,6 +921,39 @@ Register a payment from a client. Optionally links the payment to a specific sal
 
 ---
 
+#### PUT `/api/payments/:id`
+
+Modify an existing payment's `amount` and/or `note`. All changes are applied atomically: the client balance is recalculated using delta math, the associated sale's status is recomputed, and a `PAYMENT_MODIFIED` audit log entry is written — all in a single database transaction.
+
+> **Requires `ADMIN` role.**
+
+**Request body (at least one field required):**
+```json
+{
+  "amount": 75000,
+  "note": "Corrección — monto ingresado incorrectamente"
+}
+```
+
+| Field | Type | Required | Validation |
+|-------|------|----------|-----------|
+| `amount` | number | No | Greater than 0, max 2 decimal places. Cannot exceed the client's adjusted balance |
+| `note` | string \| null | No | Max 500 characters. Pass `null` to clear the note |
+
+**Business rules applied:**
+- `delta = oldAmount - newAmount`. The client balance is adjusted by `balance + delta`. The resulting balance cannot go below 0 (rejects if new amount exceeds what the client actually owes)
+- If the payment is linked to a sale: the new amount cannot exceed the sale total minus other payments on that sale
+- If the payment is linked to a sale: the sale status is recomputed inside the transaction from the sum of all its payments (PENDING / PARTIAL / PAID)
+- An `AuditLog` entry with `action: PAYMENT_MODIFIED` is written inside the same transaction, recording `before` and `after` balance, `userId`, and request IP
+
+**Response `200`:** Updated payment object.
+
+**Response `400`:** Validation error, new amount exceeds client balance, or new amount exceeds sale's adjusted total.
+
+**Response `404`:** Payment not found.
+
+---
+
 ### Audit Logs
 
 All audit log endpoints require `Authorization: Bearer <token>` and **`ADMIN` role**.
@@ -945,6 +1008,7 @@ Returns audit log entries, sorted by creation date (newest first). Supports pagi
 |----------------|---------|
 | `CREDIT_SALE` | Client balance increased — a credit sale was registered |
 | `PAYMENT` | Client balance decreased — a payment was registered |
+| `PAYMENT_MODIFIED` | Client balance adjusted — an existing payment's amount was corrected by an admin |
 
 ---
 
@@ -1221,6 +1285,8 @@ npm run db:seed         # Create default admin user
 | 8 | Notifications (WhatsApp via Twilio + email via Nodemailer, Domain Events pattern) | ✅ Done |
 | 9 | PDF reports (on-demand account statements + auto-attach on payment emails) | ✅ Done |
 | 10 | API improvements (pagination, filters, search) | ✅ Done |
+| 11 | On-demand client notification (`POST /clients/:id/notify` — WhatsApp payload + async email with PDF) | ✅ Done |
+| 12 | Payment correction (`PUT /payments/:id` — ADMIN, atomic delta balance + sale status recompute + audit log) | ✅ Done |
 
 ---
 
@@ -1334,6 +1400,8 @@ The HTTP response is already returned at step 2. Notifications never block the A
 | Email | Payment registered | Amount, new balance, note, date, reference + **PDF account statement attached** |
 | WhatsApp Deep Link *(manual, frontend)* | Credit sale created | `whatsappPayload.message` pre-built by backend |
 | Email | Credit sale created | Total, new balance, date, sale reference + **PDF account statement attached** |
+| WhatsApp Deep Link *(manual, frontend)* | `POST /clients/:id/notify` | `whatsappPayload.message` pre-built by backend — current balance summary |
+| Email | `POST /clients/:id/notify` | Current balance summary + **PDF account statement attached** |
 
 > **WhatsApp via Meta Cloud API** (templates `abono_recibido`, `abono_estado_cuenta`, `compra_credito`, `credito_estado_cuenta`) is **dormant** — the send blocks are commented in `payment-notification.subscriber.ts` and `sale-notification.subscriber.ts`. To reactivate, uncomment those blocks.
 

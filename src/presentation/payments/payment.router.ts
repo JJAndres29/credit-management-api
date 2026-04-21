@@ -6,6 +6,7 @@ import {
   GetPaymentByIdUseCase,
   GetPaymentsByClientUseCase,
   GetPaymentsBySaleUseCase,
+  UpdatePaymentUseCase,
 } from '../../domain/use-cases/payments';
 import { PaymentRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaPaymentDatasource } from '../../infrastructure/datasources';
@@ -15,7 +16,8 @@ import { SaleRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaSaleDatasource } from '../../infrastructure/datasources';
 import { AuthRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaAuthDatasource } from '../../infrastructure/datasources';
-import { AuthMiddleware } from '../middlewares';
+import { AuthMiddleware, checkRole } from '../middlewares';
+import { Role } from '../../domain/entities';
 import { JwtAdapter, MetaWhatsAppService, NodemailerEmailService, PdfkitPdfService } from '../../infrastructure/services';
 import { globalLogger } from '../../infrastructure/services/pino-logger.service';
 import { globalEventEmitter } from '../../infrastructure/events';
@@ -64,6 +66,7 @@ export class PaymentRouter {
       new GetPaymentByIdUseCase(paymentRepository),
       new GetPaymentsByClientUseCase(paymentRepository, clientRepository),
       new GetPaymentsBySaleUseCase(paymentRepository, saleRepository),
+      new UpdatePaymentUseCase(paymentRepository, clientRepository, saleRepository),
     );
 
     const middleware = new AuthMiddleware(
@@ -90,6 +93,9 @@ export class PaymentRouter {
 
     // POST /api/payments  — cualquier usuario autenticado puede registrar pagos
     router.post('/', controller.create);
+
+    // PUT  /api/payments/:id  — solo ADMIN puede modificar pagos existentes
+    router.put('/:id', checkRole(Role.ADMIN), controller.update);
 
     return router;
   }

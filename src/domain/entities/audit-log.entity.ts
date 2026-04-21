@@ -3,8 +3,9 @@
  * Solo las operaciones que modifican el balance del cliente producen un log.
  */
 export const AuditAction = {
-  CREDIT_SALE: 'CREDIT_SALE', // Venta a crédito — incrementa el balance
-  PAYMENT: 'PAYMENT',         // Pago registrado — decrementa el balance
+  CREDIT_SALE: 'CREDIT_SALE',         // Venta a crédito — incrementa el balance
+  PAYMENT: 'PAYMENT',                  // Pago registrado — decrementa el balance
+  PAYMENT_MODIFIED: 'PAYMENT_MODIFIED', // Pago modificado por admin — ajusta el balance con delta
 } as const;
 
 export type AuditAction = (typeof AuditAction)[keyof typeof AuditAction];

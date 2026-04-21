@@ -1,5 +1,6 @@
 import { Request, Response } from 'express';
 import { CustomError } from '../../domain/errors';
+import { UserEntity } from '../../domain/entities';
 import { CreateClientDto, UpdateClientDto, FilterClientsDto } from '../../domain/dtos/clients';
 import { PaginationDto } from '../../domain/dtos/shared';
 import { CreateClientUseCase } from '../../domain/use-cases/clients/create-client.use-case';
@@ -7,6 +8,7 @@ import { GetClientsUseCase } from '../../domain/use-cases/clients/get-clients.us
 import { GetClientByIdUseCase } from '../../domain/use-cases/clients/get-client-by-id.use-case';
 import { UpdateClientUseCase } from '../../domain/use-cases/clients/update-client.use-case';
 import { DeleteClientUseCase } from '../../domain/use-cases/clients/delete-client.use-case';
+import { NotifyClientUseCase } from '../../domain/use-cases/clients/notify-client.use-case';
 
 export class ClientController {
   constructor(
@@ -15,6 +17,7 @@ export class ClientController {
     private readonly getClientByIdUseCase: GetClientByIdUseCase,
     private readonly updateClientUseCase: UpdateClientUseCase,
     private readonly deleteClientUseCase: DeleteClientUseCase,
+    private readonly notifyClientUseCase: NotifyClientUseCase,
   ) {}
 
   getAll = async (req: Request, res: Response): Promise<void> => {
@@ -77,6 +80,17 @@ export class ClientController {
     try {
       const client = await this.deleteClientUseCase.execute(req.params.id);
       res.json(client);
+    } catch (err) {
+      this.handleError(err, res);
+    }
+  };
+
+  notify = async (req: Request, res: Response): Promise<void> => {
+    const user = (req as Request & { user: UserEntity }).user;
+
+    try {
+      const result = await this.notifyClientUseCase.execute(req.params.id, user.name);
+      res.json(result);
     } catch (err) {
       this.handleError(err, res);
     }

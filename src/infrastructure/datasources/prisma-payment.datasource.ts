@@ -1,5 +1,5 @@
 import { prisma } from '../../config/prisma';
-import { PaymentDatasource, PaymentCreateData } from '../../domain/datasources/payment.datasource';
+import { PaymentDatasource, PaymentCreateData, PaymentUpdateData } from '../../domain/datasources/payment.datasource';
 import { PaymentEntity, SaleStatus } from '../../domain/entities';
 import { FilterPaymentsDto } from '../../domain/dtos/payments';
 import { PaginationDto } from '../../domain/dtos/shared';
@@ -138,6 +138,79 @@ export class PrismaPaymentDatasource implements PaymentDatasource {
       }
 
       return created;
+    });
+
+    return mapToEntity(payment as unknown as Record<string, unknown>);
+  }
+
+  async update(id: string, data: PaymentUpdateData): Promise<PaymentEntity> {
+    /**
+     * Transacción atómica: si cambia el amount se ajusta el balance del cliente
+     * y se recalcula el estado de la venta (si aplica). El AuditLog se escribe
+     * dentro de la misma transacción para garantizar trazabilidad completa.
+     */
+    const payment = await prisma.$transaction(async (tx) => {
+      const existing = await tx.payment.findUnique({ where: { id } });
+      if (!existing) throw new Error(`Pago ${id} no encontrado en la transacción`);
+
+      const updateData: Record<string, unknown> = {};
+      if (data.amount !== undefined) updateData.amount = data.amount;
+      if (data.note !== undefined) updateData.note = data.note;
+
+      const updated = await tx.payment.update({
+        where: { id },
+        data: updateData,
+        include: {
+          client: { select: { documentNumber: true } },
+          sale: { select: { saleNumber: true } },
+        },
+      });
+
+      if (data.amount !== undefined && data.auditLog) {
+        const oldAmount = Number(existing.amount);
+        const delta = oldAmount - data.amount; // positivo si pagó menos, negativo si pagó más
+
+        // Ajustar balance del cliente con el delta
+        await tx.client.update({
+          where: { id: existing.clientId },
+          data: { balance: { increment: delta } },
+        });
+
+        // Registrar en auditoría
+        await tx.auditLog.create({
+          data: {
+            clientId: existing.clientId,
+            userId: data.auditLog.userId,
+            action: data.auditLog.action,
+            before: data.auditLog.before,
+            after: data.auditLog.after,
+            ip: data.auditLog.ip,
+          },
+        });
+
+        // Recalcular estado de la venta si el pago está asociado a una
+        if (existing.saleId && data.saleTotal !== undefined) {
+          const aggregate = await tx.payment.aggregate({
+            where: { saleId: existing.saleId },
+            _sum: { amount: true },
+          });
+
+          const totalPaid = Number(aggregate._sum.amount ?? 0);
+          const newStatus =
+            totalPaid >= data.saleTotal
+              ? SaleStatus.PAID
+              : totalPaid > 0
+                ? SaleStatus.PARTIAL
+                : SaleStatus.PENDING;
+
+          await tx.sale.update({
+            where: { id: existing.saleId },
+            data: { status: newStatus },
+          });
+        }
+      }
+
+      return updated;
     });
 
     return mapToEntity(payment as unknown as Record<string, unknown>);

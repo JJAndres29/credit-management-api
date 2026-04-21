@@ -65,6 +65,7 @@ const mockPaymentRepo = {
   findAll: jest.fn(),
   findByClientId: jest.fn(),
   findBySaleId: jest.fn(),
+  update: jest.fn(),
 } as jest.Mocked<PaymentRepository>;
 
 const mockProductRepo = {
