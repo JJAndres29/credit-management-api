@@ -42,36 +42,51 @@ export class CreateSaleUseCase {
       unitPrice: number;
       subtotal: number;
       appliedRule: null;
+      newProduct?: { name: string; stock: number };
     }[] = [];
 
     for (const item of dto.items) {
-      const product = await this.productRepository.findById(item.productId);
-
-      if (!product) {
-        throw CustomError.notFound(`Producto con ID ${item.productId} no encontrado`);
-      }
-
-      if (!product.isActive) {
-        throw CustomError.badRequest(`El producto "${product.name}" no está disponible`);
-      }
-
-      if (product.stock < item.quantity) {
-        throw CustomError.badRequest(
-          `Stock insuficiente para "${product.name}": disponible ${product.stock}, solicitado ${item.quantity}`,
-        );
-      }
-
       const unitPrice = Math.round(item.unitPrice * 100) / 100;
       const subtotal = Math.round(unitPrice * item.quantity * 100) / 100;
 
-      enrichedItems.push({
-        productId: item.productId,
-        quantity: item.quantity,
-        basePrice: unitPrice,   // precio registrado al momento de la venta
-        unitPrice,
-        subtotal,
-        appliedRule: null,
-      });
+      if (item.newProduct) {
+        // Producto nuevo: el stock y existencia se validan a nivel de DTO.
+        // El datasource lo crea dentro de la transacción atómica.
+        enrichedItems.push({
+          productId: '',  // se asignará en la transacción del datasource
+          quantity: item.quantity,
+          basePrice: unitPrice,
+          unitPrice,
+          subtotal,
+          appliedRule: null,
+          newProduct: item.newProduct,
+        });
+      } else {
+        const product = await this.productRepository.findById(item.productId!);
+
+        if (!product) {
+          throw CustomError.notFound(`Producto con ID ${item.productId} no encontrado`);
+        }
+
+        if (!product.isActive) {
+          throw CustomError.badRequest(`El producto "${product.name}" no está disponible`);
+        }
+
+        if (product.stock < item.quantity) {
+          throw CustomError.badRequest(
+            `Stock insuficiente para "${product.name}": disponible ${product.stock}, solicitado ${item.quantity}`,
+          );
+        }
+
+        enrichedItems.push({
+          productId: item.productId!,
+          quantity: item.quantity,
+          basePrice: unitPrice,   // precio registrado al momento de la venta
+          unitPrice,
+          subtotal,
+          appliedRule: null,
+        });
+      }
     }
 
     // 3. Calcular el total de la venta

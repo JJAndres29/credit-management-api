@@ -20,6 +20,10 @@ export interface SaleCreateData {
   type: SaleType;
   total: number;
   items: {
+    /**
+     * ID de un producto existente. Vacío cuando `newProduct` está presente —
+     * el datasource lo completa al crear el producto dentro de la transacción.
+     */
     productId: string;
     quantity: number;
     /** Precio base del producto (Product.price) al momento de la venta */
@@ -29,6 +33,8 @@ export interface SaleCreateData {
     subtotal: number;
     /** Null desde que el precio se fija manualmente en el momento de la venta. */
     appliedRule: string | null;
+    /** Presente solo cuando el vendedor crea el producto inline al registrar la venta. */
+    newProduct?: { name: string; stock: number };
   }[];
   auditLog?: AuditLogData;
   /** Número de cuotas pactadas. Solo presente si la venta tiene plan de cuotas. */

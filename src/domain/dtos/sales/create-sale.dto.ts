@@ -1,7 +1,17 @@
 import { SaleType, InstallmentFrequency } from '../../entities';
 
+export interface NewProductInline {
+  /** Nombre del producto a crear. Mínimo 2 caracteres. */
+  name: string;
+  /** Stock inicial que se agrega al inventario. La cantidad vendida se descuenta de este valor. */
+  stock: number;
+}
+
 export interface CreateSaleItemDto {
-  productId: string;
+  /** ID de un producto existente en el inventario. Requerido si no se provee `newProduct`. */
+  productId?: string;
+  /** Producto nuevo a crear inline. Requerido si no se provee `productId`. */
+  newProduct?: NewProductInline;
   quantity: number;
   /** Precio unitario del producto fijado al momento de la venta. Debe ser mayor a 0. */
   unitPrice: number;
@@ -50,14 +60,40 @@ export class CreateSaleDto {
 
     for (let i = 0; i < items.length; i++) {
       const item = items[i] as Record<string, unknown>;
+      const hasProductId = item.productId && typeof item.productId === 'string' && (item.productId as string).trim().length > 0;
+      const hasNewProduct = item.newProduct && typeof item.newProduct === 'object';
 
-      if (!item.productId || typeof item.productId !== 'string' || (item.productId as string).trim().length === 0) {
-        return [`El producto en la posición ${i + 1} no tiene un ID válido`];
+      if (!hasProductId && !hasNewProduct) {
+        return [`El ítem en la posición ${i + 1} debe tener productId (existente) o newProduct (nuevo)`];
       }
 
-      const qty = item.quantity;
-      if (qty === undefined || typeof qty !== 'number' || !Number.isInteger(qty) || qty < 1) {
-        return [`La cantidad en la posición ${i + 1} debe ser un número entero mayor a 0`];
+      if (hasProductId && hasNewProduct) {
+        return [`El ítem en la posición ${i + 1} no puede tener productId y newProduct al mismo tiempo`];
+      }
+
+      if (hasNewProduct) {
+        const np = item.newProduct as Record<string, unknown>;
+        if (!np.name || typeof np.name !== 'string' || (np.name as string).trim().length < 2) {
+          return [`El nombre del producto nuevo en la posición ${i + 1} debe tener al menos 2 caracteres`];
+        }
+        const npStock = np.stock;
+        if (npStock === undefined || npStock === null || typeof npStock !== 'number' || !Number.isInteger(npStock) || (npStock as number) < 0) {
+          return [`El stock del producto nuevo en la posición ${i + 1} debe ser un número entero mayor o igual a 0`];
+        }
+        const qty = item.quantity;
+        if (qty === undefined || typeof qty !== 'number' || !Number.isInteger(qty) || qty < 1) {
+          return [`La cantidad en la posición ${i + 1} debe ser un número entero mayor a 0`];
+        }
+        if ((npStock as number) < (qty as number)) {
+          return [`El stock del producto nuevo en la posición ${i + 1} (${npStock}) debe ser mayor o igual a la cantidad a vender (${qty})`];
+        }
+      }
+
+      if (hasProductId) {
+        const qty = item.quantity;
+        if (qty === undefined || typeof qty !== 'number' || !Number.isInteger(qty) || qty < 1) {
+          return [`La cantidad en la posición ${i + 1} debe ser un número entero mayor a 0`];
+        }
       }
 
       const price = item.unitPrice;
@@ -66,10 +102,20 @@ export class CreateSaleDto {
       }
     }
 
-    // Detectar productos duplicados en la misma venta
-    const productIds = (items as Record<string, unknown>[]).map((i) => i.productId as string);
+    // Detectar productIds duplicados entre productos existentes
+    const productIds = (items as Record<string, unknown>[])
+      .filter((i) => i.productId)
+      .map((i) => (i.productId as string).trim());
     if (new Set(productIds).size !== productIds.length) {
       return ['No se pueden repetir productos en una misma venta'];
+    }
+
+    // Detectar nombres duplicados entre productos nuevos
+    const newProductNames = (items as Record<string, unknown>[])
+      .filter((i) => i.newProduct)
+      .map((i) => ((i.newProduct as Record<string, unknown>).name as string).trim().toLowerCase());
+    if (new Set(newProductNames).size !== newProductNames.length) {
+      return ['No se pueden repetir nombres de productos nuevos en una misma venta'];
     }
 
     // --- Validación de campos de cuotas ---
@@ -160,11 +206,17 @@ export class CreateSaleDto {
       new CreateSaleDto(
         clientId.trim(),
         type as SaleType,
-        (items as Record<string, unknown>[]).map((i) => ({
-          productId: (i.productId as string).trim(),
-          quantity: i.quantity as number,
-          unitPrice: i.unitPrice as number,
-        })),
+        (items as Record<string, unknown>[]).map((i) => {
+          const np = i.newProduct as Record<string, unknown> | undefined;
+          return {
+            productId: i.productId ? (i.productId as string).trim() : undefined,
+            newProduct: np
+              ? { name: (np.name as string).trim(), stock: np.stock as number }
+              : undefined,
+            quantity: i.quantity as number,
+            unitPrice: i.unitPrice as number,
+          };
+        }),
         parsedInstallmentsCount,
         parsedFrequency,
         parsedCollectionDay,

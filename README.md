@@ -723,9 +723,9 @@ Returns a single sale with its line items. Returns `404` if not found.
 
 #### POST `/api/sales`
 
-Create a new sale. The seller sets the unit price for each item at the time of the sale.
+Create a new sale. The seller sets the unit price for each item at the time of the sale. Each item can reference an **existing product** (`productId`) or create a **new product inline** (`newProduct`) — both are mutually exclusive per item.
 
-**Request body:**
+**Request body — existing products:**
 ```json
 {
   "clientId": "uuid",
@@ -741,12 +741,32 @@ Create a new sale. The seller sets the unit price for each item at the time of t
 }
 ```
 
+**Request body — inline product creation:**
+```json
+{
+  "clientId": "uuid",
+  "type": "CASH",
+  "items": [
+    {
+      "newProduct": { "name": "Camisa Azul", "stock": 20 },
+      "quantity": 3,
+      "unitPrice": 45.00
+    }
+  ]
+}
+```
+
+Items can be mixed — some referencing existing products and others creating new ones in the same request.
+
 | Field | Type | Required | Validation |
 |-------|------|----------|-----------|
 | `clientId` | string | Yes | Client must exist and be active |
 | `type` | string | Yes | `CASH` or `CREDIT` |
-| `items` | array | Yes | Min 1 item. No duplicate `productId` values |
-| `items[].productId` | string | Yes | Product must exist, be active, and have sufficient stock |
+| `items` | array | Yes | Min 1 item. Cannot mix `productId` and `newProduct` in the same item |
+| `items[].productId` | string | Yes* | Existing product — must exist, be active, and have sufficient stock. *Required if `newProduct` not provided |
+| `items[].newProduct` | object | Yes* | Inline product to create. *Required if `productId` not provided |
+| `items[].newProduct.name` | string | Yes | Min 2 characters. No duplicate names in same request |
+| `items[].newProduct.stock` | integer | Yes | Integer ≥ 0. Must be ≥ `quantity` (stock to add; quantity is deducted from it) |
 | `items[].quantity` | integer | Yes | Positive integer |
 | `items[].unitPrice` | number | Yes | Price per unit set by the seller (> 0) |
 | `installmentsCount` | integer | No | ≥ 2. Only for `CREDIT` sales. Requires `frequency` |
@@ -758,7 +778,8 @@ Create a new sale. The seller sets the unit price for each item at the time of t
 - Stock is verified before creating the sale — insufficient stock returns `400`
 - **`total` is always computed server-side** as `sum(unitPrice × quantity)` — the frontend cannot override it
 - For `CREDIT` sales: `client.creditLimit - client.balance >= total`, otherwise `400`
-- All operations (stock deduction, balance update, sale + items creation) run in a **single atomic database transaction**
+- All operations (new product creation, stock deduction, balance update, sale + items creation) run in a **single atomic database transaction** — if anything fails, no product is created and no stock is changed
+- Inline new products (`newProduct`) are created atomically within the sale transaction: the product lands in inventory with `stock - quantity` remaining after the sale
 - `CASH` sales are created with status `PAID`. `CREDIT` sales start as `PENDING`
 - Each `SaleItem` records `basePrice = unitPrice` and `appliedRule = null` for audit traceability
 

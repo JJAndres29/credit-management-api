@@ -85,6 +85,18 @@ export class PrismaSaleDatasource implements SaleDatasource {
      * Esto garantiza consistencia entre venta, stock e ítems.
      */
     const sale = await prisma.$transaction(async (tx) => {
+      // 0. Crear productos nuevos (inline) y asignar sus IDs a los ítems correspondientes.
+      //    Todo ocurre dentro de la transacción, por lo que si falla la venta se revierte
+      //    también la creación del producto.
+      for (const item of data.items) {
+        if (item.newProduct) {
+          const created = await tx.product.create({
+            data: { name: item.newProduct.name, stock: item.newProduct.stock },
+          });
+          item.productId = created.id;
+        }
+      }
+
       // 1. Descontar stock de cada producto
       for (const item of data.items) {
         await tx.product.update({
