@@ -35,6 +35,16 @@ export interface PaymentCreateData {
   auditLog: AuditLogData;
 }
 
+/**
+ * Datos para eliminar un pago existente.
+ * La transacción revierte el balance del cliente y recalcula el estado de la venta.
+ */
+export interface PaymentDeleteData {
+  /** Total de la venta — requerido cuando el pago tiene saleId */
+  saleTotal?: number;
+  auditLog: AuditLogData;
+}
+
 export interface PaymentDatasource {
   findAll(pagination: PaginationDto, filters: FilterPaymentsDto): Promise<PaginatedResult<PaymentEntity>>;
   findById(id: string): Promise<PaymentEntity | null>;
@@ -51,4 +61,10 @@ export interface PaymentDatasource {
    * Solo ADMIN puede invocar este flujo.
    */
   update(id: string, data: PaymentUpdateData): Promise<PaymentEntity>;
+  /**
+   * Elimina el pago, revierte el balance del cliente y (si hay saleId)
+   * recalcula el estado de la venta — todo en una transacción atómica.
+   * Solo ADMIN puede invocar este flujo.
+   */
+  delete(id: string, data: PaymentDeleteData): Promise<PaymentEntity>;
 }

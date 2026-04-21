@@ -1,5 +1,5 @@
 import { PaymentRepository } from '../../domain/repositories';
-import { PaymentDatasource, PaymentCreateData, PaymentUpdateData } from '../../domain/datasources/payment.datasource';
+import { PaymentDatasource, PaymentCreateData, PaymentUpdateData, PaymentDeleteData } from '../../domain/datasources/payment.datasource';
 import { PaymentEntity } from '../../domain/entities';
 import { FilterPaymentsDto } from '../../domain/dtos/payments';
 import { PaginationDto } from '../../domain/dtos/shared';
@@ -30,5 +30,9 @@ export class PaymentRepositoryImpl implements PaymentRepository {
 
   update(id: string, data: PaymentUpdateData): Promise<PaymentEntity> {
     return this.datasource.update(id, data);
+  }
+
+  delete(id: string, data: PaymentDeleteData): Promise<PaymentEntity> {
+    return this.datasource.delete(id, data);
   }
 }

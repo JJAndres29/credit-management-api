@@ -61,7 +61,7 @@ export class ClientRouter {
       new GetClientByIdUseCase(clientRepository),
       new UpdateClientUseCase(clientRepository),
       new DeleteClientUseCase(clientRepository),
-      new NotifyClientUseCase(clientRepository, globalEventEmitter),
+      new NotifyClientUseCase(clientRepository, globalEventEmitter, saleRepository, paymentRepository),
     );
 
     const middleware = new AuthMiddleware(

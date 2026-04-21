@@ -7,6 +7,7 @@ import {
   GetPaymentsByClientUseCase,
   GetPaymentsBySaleUseCase,
   UpdatePaymentUseCase,
+  DeletePaymentUseCase,
 } from '../../domain/use-cases/payments';
 import { PaymentRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaPaymentDatasource } from '../../infrastructure/datasources';
@@ -67,6 +68,7 @@ export class PaymentRouter {
       new GetPaymentsByClientUseCase(paymentRepository, clientRepository),
       new GetPaymentsBySaleUseCase(paymentRepository, saleRepository),
       new UpdatePaymentUseCase(paymentRepository, clientRepository, saleRepository),
+      new DeletePaymentUseCase(paymentRepository, clientRepository, saleRepository),
     );
 
     const middleware = new AuthMiddleware(
@@ -96,6 +98,9 @@ export class PaymentRouter {
 
     // PUT  /api/payments/:id  — solo ADMIN puede modificar pagos existentes
     router.put('/:id', checkRole(Role.ADMIN), controller.update);
+
+    // DELETE /api/payments/:id  — solo ADMIN puede eliminar pagos
+    router.delete('/:id', checkRole(Role.ADMIN), controller.delete);
 
     return router;
   }

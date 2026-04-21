@@ -1,5 +1,5 @@
 import { prisma } from '../../config/prisma';
-import { PaymentDatasource, PaymentCreateData, PaymentUpdateData } from '../../domain/datasources/payment.datasource';
+import { PaymentDatasource, PaymentCreateData, PaymentUpdateData, PaymentDeleteData } from '../../domain/datasources/payment.datasource';
 import { PaymentEntity, SaleStatus } from '../../domain/entities';
 import { FilterPaymentsDto } from '../../domain/dtos/payments';
 import { PaginationDto } from '../../domain/dtos/shared';
@@ -211,6 +211,59 @@ export class PrismaPaymentDatasource implements PaymentDatasource {
       }
 
       return updated;
+    });
+
+    return mapToEntity(payment as unknown as Record<string, unknown>);
+  }
+
+  async delete(id: string, data: PaymentDeleteData): Promise<PaymentEntity> {
+    const payment = await prisma.$transaction(async (tx) => {
+      const existing = await tx.payment.findUnique({ where: { id } });
+      if (!existing) throw new Error(`Pago ${id} no encontrado en la transacción`);
+
+      // Eliminar el pago
+      const deleted = await tx.payment.delete({ where: { id } });
+
+      // Revertir el balance del cliente (el pago ya no existe, vuelve a deber ese monto)
+      await tx.client.update({
+        where: { id: existing.clientId },
+        data: { balance: { increment: Number(existing.amount) } },
+      });
+
+      // Registrar en auditoría
+      await tx.auditLog.create({
+        data: {
+          clientId: existing.clientId,
+          userId: data.auditLog.userId,
+          action: data.auditLog.action,
+          before: data.auditLog.before,
+          after: data.auditLog.after,
+          ip: data.auditLog.ip,
+        },
+      });
+
+      // Recalcular estado de la venta si el pago estaba asociado a una
+      if (existing.saleId && data.saleTotal !== undefined) {
+        const aggregate = await tx.payment.aggregate({
+          where: { saleId: existing.saleId },
+          _sum: { amount: true },
+        });
+
+        const totalPaid = Number(aggregate._sum.amount ?? 0);
+        const newStatus =
+          totalPaid >= data.saleTotal
+            ? SaleStatus.PAID
+            : totalPaid > 0
+              ? SaleStatus.PARTIAL
+              : SaleStatus.PENDING;
+
+        await tx.sale.update({
+          where: { id: existing.saleId },
+          data: { status: newStatus },
+        });
+      }
+
+      return deleted;
     });
 
     return mapToEntity(payment as unknown as Record<string, unknown>);

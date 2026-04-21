@@ -9,6 +9,7 @@ import { GetPaymentByIdUseCase } from '../../domain/use-cases/payments/get-payme
 import { GetPaymentsByClientUseCase } from '../../domain/use-cases/payments/get-payments-by-client.use-case';
 import { GetPaymentsBySaleUseCase } from '../../domain/use-cases/payments/get-payments-by-sale.use-case';
 import { UpdatePaymentUseCase } from '../../domain/use-cases/payments/update-payment.use-case';
+import { DeletePaymentUseCase } from '../../domain/use-cases/payments/delete-payment.use-case';
 
 export class PaymentController {
   constructor(
@@ -18,6 +19,7 @@ export class PaymentController {
     private readonly getPaymentsByClientUseCase: GetPaymentsByClientUseCase,
     private readonly getPaymentsBySaleUseCase: GetPaymentsBySaleUseCase,
     private readonly updatePaymentUseCase: UpdatePaymentUseCase,
+    private readonly deletePaymentUseCase: DeletePaymentUseCase,
   ) {}
 
   getAll = async (req: Request, res: Response): Promise<void> => {
@@ -94,6 +96,18 @@ export class PaymentController {
 
     try {
       const payment = await this.updatePaymentUseCase.execute(req.params.id, dto!, user.id, ip);
+      res.json(payment);
+    } catch (err) {
+      this.handleError(err, res);
+    }
+  };
+
+  delete = async (req: Request, res: Response): Promise<void> => {
+    const user = (req as Request & { user: UserEntity }).user;
+    const ip = req.ip ?? req.socket.remoteAddress ?? 'unknown';
+
+    try {
+      const payment = await this.deletePaymentUseCase.execute(req.params.id, user.id, ip);
       res.json(payment);
     } catch (err) {
       this.handleError(err, res);
