@@ -7,6 +7,7 @@ export const AuditAction = {
   PAYMENT: 'PAYMENT',                  // Pago registrado — decrementa el balance
   PAYMENT_MODIFIED: 'PAYMENT_MODIFIED', // Pago modificado por admin — ajusta el balance con delta
   PAYMENT_DELETED: 'PAYMENT_DELETED',   // Pago eliminado por admin — revierte el decremento del balance
+  SALE_DELETED: 'SALE_DELETED',         // Venta a crédito eliminada por admin — revierte el incremento del balance
 } as const;
 
 export type AuditAction = (typeof AuditAction)[keyof typeof AuditAction];

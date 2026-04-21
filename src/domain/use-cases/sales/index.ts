@@ -3,3 +3,4 @@ export { GetSaleByIdUseCase } from './get-sale-by-id.use-case';
 export { GetSalesByClientUseCase } from './get-sales-by-client.use-case';
 export { CreateSaleUseCase } from './create-sale.use-case';
 export { UpdateSaleUseCase } from './update-sale.use-case';
+export { DeleteSaleUseCase } from './delete-sale.use-case';

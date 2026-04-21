@@ -78,8 +78,8 @@ export class UpdateSaleDto {
     let parsedInstallmentsCount: number | undefined;
     if (installmentsCount !== undefined) {
       const count = Number(installmentsCount);
-      if (!Number.isInteger(count) || count < 2) {
-        return ['installmentsCount debe ser un número entero mayor o igual a 2'];
+      if (!Number.isInteger(count) || count < 1) {
+        return ['installmentsCount debe ser un número entero mayor o igual a 1'];
       }
       parsedInstallmentsCount = count;
     }

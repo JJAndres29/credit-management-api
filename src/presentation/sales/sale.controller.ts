@@ -8,6 +8,7 @@ import { GetSalesUseCase } from '../../domain/use-cases/sales/get-sales.use-case
 import { GetSaleByIdUseCase } from '../../domain/use-cases/sales/get-sale-by-id.use-case';
 import { GetSalesByClientUseCase } from '../../domain/use-cases/sales/get-sales-by-client.use-case';
 import { UpdateSaleUseCase } from '../../domain/use-cases/sales/update-sale.use-case';
+import { DeleteSaleUseCase } from '../../domain/use-cases/sales/delete-sale.use-case';
 
 export class SaleController {
   constructor(
@@ -16,6 +17,7 @@ export class SaleController {
     private readonly getSaleByIdUseCase: GetSaleByIdUseCase,
     private readonly getSalesByClientUseCase: GetSalesByClientUseCase,
     private readonly updateSaleUseCase: UpdateSaleUseCase,
+    private readonly deleteSaleUseCase: DeleteSaleUseCase,
   ) {}
 
   getAll = async (req: Request, res: Response): Promise<void> => {
@@ -76,6 +78,18 @@ export class SaleController {
 
     try {
       const sale = await this.updateSaleUseCase.execute(req.params.id, dto!);
+      res.json(sale);
+    } catch (err) {
+      this.handleError(err, res);
+    }
+  };
+
+  delete = async (req: Request, res: Response): Promise<void> => {
+    const user = (req as Request & { user: UserEntity }).user;
+    const ip = req.ip ?? req.socket.remoteAddress ?? 'unknown';
+
+    try {
+      const sale = await this.deleteSaleUseCase.execute(req.params.id, user.id, ip);
       res.json(sale);
     } catch (err) {
       this.handleError(err, res);

@@ -298,7 +298,7 @@ NotificationLog  — Log of every notification attempt: channel (WHATSAPP|EMAIL)
 
 | Field | Description |
 |-------|-------------|
-| `installmentsCount` | Number of installments agreed (null if no plan) |
+| `installmentsCount` | Number of installments agreed (null if no plan). Minimum 1 — a single-installment plan is valid |
 | `frequency` | `MONTHLY` or `BIWEEKLY` (null if no plan) |
 | `installmentAmount` | `(total - initialPayment) / installmentsCount`, rounded to 2 decimals |
 | `initialPayment` | Down payment applied at sale creation time (null if none) |
@@ -753,6 +753,28 @@ Returns a single sale with its line items. Returns `404` if not found.
 
 ---
 
+#### DELETE `/api/sales/:id`
+
+Permanently delete a sale. Only allowed when the sale has **no associated payments** — this guarantees no complex balance cascade is needed. For CREDIT sales, the client balance is reverted and a `SALE_DELETED` audit log entry is written. For CASH sales, only the product stock is restored. All operations run in a single atomic transaction.
+
+> **Requires `ADMIN` role.**
+
+**Business rules applied:**
+- The sale must have no payments. If any payment exists, `400` is returned — delete the payments first
+- CREDIT sales: decrements the client balance by `sale.total` and writes a `SALE_DELETED` audit entry
+- CASH sales: restores product stock only (CASH sales never modify client balance)
+- Product stock is incremented by `item.quantity` for every line item, regardless of sale type
+
+**Response `200`:** The deleted sale object (with its items).
+
+**Response `400`:** Sale has existing payments and cannot be deleted.
+
+**Response `403`:** Authenticated but not ADMIN.
+
+**Response `404`:** Sale not found.
+
+---
+
 #### PUT `/api/sales/:id`
 
 Update non-financial metadata of a sale: collection days and/or sale date. Does not modify total, status, or line items.
@@ -834,7 +856,7 @@ Items can be mixed — some referencing existing products and others creating ne
 | `items[].newProduct.stock` | integer | Yes | Integer ≥ 0. Must be ≥ `quantity` (stock to add; quantity is deducted from it) |
 | `items[].quantity` | integer | Yes | Positive integer |
 | `items[].unitPrice` | number | Yes | Price per unit set by the seller (> 0) |
-| `installmentsCount` | integer | No | ≥ 2. Only for `CREDIT` sales. Requires `frequency` |
+| `installmentsCount` | integer | No | ≥ 1. Only for `CREDIT` sales. Requires `frequency` |
 | `frequency` | string | No | `MONTHLY` or `BIWEEKLY`. Requires `installmentsCount` |
 | `collectionDay` | integer | No | 1–31. Billing day. MONTHLY: only day; BIWEEKLY: first day. Requires plan |
 | `collectionDay2` | integer | No | 1–31. Second billing day. `BIWEEKLY` only. Requires `collectionDay` |
@@ -1065,6 +1087,7 @@ Returns audit log entries, sorted by creation date (newest first). Supports pagi
 | `PAYMENT` | Client balance decreased — a payment was registered |
 | `PAYMENT_MODIFIED` | Client balance adjusted — an existing payment's amount was corrected by an admin |
 | `PAYMENT_DELETED` | Client balance restored — a payment was permanently deleted by an admin |
+| `SALE_DELETED` | Client balance reverted — a credit sale with no payments was permanently deleted by an admin |
 
 ---
 
@@ -1346,6 +1369,7 @@ npm run db:seed         # Create default admin user
 | 13 | Payment deletion (`DELETE /payments/:id` — ADMIN, balance restored + sale status recompute + `PAYMENT_DELETED` audit log) + notify with installment detail (cuotas pagadas, valor crédito, cuota inicial) | ✅ Done |
 | 14 | Custom dates — optional `createdAt` (ISO 8601) on sale/payment creation; `createdAt` correction on payment update (`PUT /payments/:id`); `PUT /sales/:id` for collection days + sale date (ADMIN) | ✅ Done |
 | 15 | Timezone fix — `notify-client.use-case.ts` `fmtDate` now uses `Intl.DateTimeFormat` with `timeZone: 'America/Bogota'` (was calling `Date.getDate()` in UTC) | ✅ Done |
+| 16 | Sale deletion (`DELETE /api/sales/:id` — ADMIN, no-payments guard, stock restored, CREDIT balance reverted + `SALE_DELETED` audit log, atomic transaction) | ✅ Done |
 
 ---
 
@@ -1409,7 +1433,7 @@ Credit sales support optional installment plans:
 
 | Field | Description |
 |-------|-------------|
-| `installmentsCount` | Number of installments (integer ≥ 2) |
+| `installmentsCount` | Number of installments (integer ≥ 1). A single-installment plan (`1`) is valid |
 | `frequency` | `MONTHLY` or `BIWEEKLY` |
 | `collectionDay` | Day of month for billing (1–31). MONTHLY: only day; BIWEEKLY: first day |
 | `collectionDay2` | Second billing day (1–31), BIWEEKLY plans only |

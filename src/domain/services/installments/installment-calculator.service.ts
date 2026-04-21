@@ -21,12 +21,12 @@ export class InstallmentCalculatorService {
    * Calcula el monto de cada cuota.
    *
    * @param total            Total de la venta (con recargo de crédito ya aplicado)
-   * @param installmentsCount Número de cuotas — debe ser entero >= 2
+   * @param installmentsCount Número de cuotas — debe ser entero >= 1
    * @returns                Monto por cuota redondeado a 2 decimales
    */
   calculate(total: number, installmentsCount: number): number {
-    if (!Number.isInteger(installmentsCount) || installmentsCount < 2) {
-      throw CustomError.badRequest('El número de cuotas debe ser un entero mayor o igual a 2');
+    if (!Number.isInteger(installmentsCount) || installmentsCount < 1) {
+      throw CustomError.badRequest('El número de cuotas debe ser un entero mayor o igual a 1');
     }
 
     if (total <= 0) {

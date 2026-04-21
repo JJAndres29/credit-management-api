@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { SaleController } from './sale.controller';
-import { CreateSaleUseCase, GetSalesUseCase, GetSaleByIdUseCase, GetSalesByClientUseCase, UpdateSaleUseCase } from '../../domain/use-cases/sales';
+import { CreateSaleUseCase, GetSalesUseCase, GetSaleByIdUseCase, GetSalesByClientUseCase, UpdateSaleUseCase, DeleteSaleUseCase } from '../../domain/use-cases/sales';
 import { SaleRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaSaleDatasource } from '../../infrastructure/datasources';
 import { ClientRepositoryImpl } from '../../infrastructure/repositories';
@@ -69,6 +69,7 @@ export class SaleRouter {
       new GetSaleByIdUseCase(saleRepository),
       new GetSalesByClientUseCase(saleRepository, clientRepository),
       new UpdateSaleUseCase(saleRepository, installmentCalculator),
+      new DeleteSaleUseCase(saleRepository, clientRepository, paymentRepository),
     );
 
     const middleware = new AuthMiddleware(
@@ -95,6 +96,9 @@ export class SaleRouter {
 
     // PUT  /api/sales/:id  — solo ADMIN puede corregir fechas de cobro o fecha de la venta
     router.put('/:id', checkRole(Role.ADMIN), controller.update);
+
+    // DELETE /api/sales/:id  — solo ADMIN puede eliminar ventas sin pagos
+    router.delete('/:id', checkRole(Role.ADMIN), controller.delete);
 
     return router;
   }

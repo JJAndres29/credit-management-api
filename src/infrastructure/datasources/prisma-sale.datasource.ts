@@ -1,5 +1,5 @@
 import { prisma } from '../../config/prisma';
-import { SaleDatasource, SaleCreateData, SaleUpdateData } from '../../domain/datasources/sale.datasource';
+import { SaleDatasource, SaleCreateData, SaleUpdateData, SaleDeleteData } from '../../domain/datasources/sale.datasource';
 import { SaleEntity, SaleType, SaleStatus } from '../../domain/entities';
 import { FilterSalesDto } from '../../domain/dtos/sales';
 import { PaginationDto } from '../../domain/dtos/shared';
@@ -167,6 +167,55 @@ export class PrismaSaleDatasource implements SaleDatasource {
     });
 
     return mapToEntity(sale as unknown as Record<string, unknown>);
+  }
+
+  async delete(id: string, data: SaleDeleteData): Promise<SaleEntity> {
+    const isCreditSale = data.type === SaleType.CREDIT;
+
+    const deleted = await prisma.$transaction(async (tx) => {
+      // 1. Restaurar stock de cada producto vendido
+      for (const item of data.items) {
+        await tx.product.update({
+          where: { id: item.productId },
+          data: { stock: { increment: item.quantity } },
+        });
+      }
+
+      // 2. Si era venta a crédito: revertir el incremento de balance y registrar en auditoría
+      if (isCreditSale) {
+        await tx.client.update({
+          where: { id: data.clientId },
+          data: { balance: { decrement: data.total } },
+        });
+
+        if (data.auditLog) {
+          await tx.auditLog.create({
+            data: {
+              clientId: data.clientId,
+              userId: data.auditLog.userId,
+              action: data.auditLog.action,
+              before: data.auditLog.before,
+              after: data.auditLog.after,
+              ip: data.auditLog.ip,
+            },
+          });
+        }
+      }
+
+      // 3. Eliminar ítems de la venta y luego la venta (orden requerido por FK)
+      //    Se devuelve la venta con sus ítems antes de borrar para retornarla al caller.
+      const sale = await tx.sale.findUnique({
+        where: { id },
+        include: SALE_WITH_ITEMS,
+      });
+
+      await tx.saleItem.deleteMany({ where: { saleId: id } });
+      await tx.sale.delete({ where: { id } });
+
+      return sale;
+    });
+
+    return mapToEntity(deleted as unknown as Record<string, unknown>);
   }
 
   async update(id: string, data: SaleUpdateData): Promise<SaleEntity> {

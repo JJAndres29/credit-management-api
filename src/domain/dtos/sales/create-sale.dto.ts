@@ -141,8 +141,8 @@ export class CreateSaleDto {
     let parsedFrequency: InstallmentFrequency | undefined;
 
     if (hasInstallmentsCount) {
-      if (typeof installmentsCount !== 'number' || !Number.isInteger(installmentsCount) || installmentsCount < 2) {
-        return ['installmentsCount debe ser un número entero mayor o igual a 2'];
+      if (typeof installmentsCount !== 'number' || !Number.isInteger(installmentsCount) || installmentsCount < 1) {
+        return ['installmentsCount debe ser un número entero mayor o igual a 1'];
       }
 
       const validFrequencies = Object.values(InstallmentFrequency);

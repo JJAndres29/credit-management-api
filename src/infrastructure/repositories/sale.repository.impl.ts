@@ -1,4 +1,4 @@
-import { SaleDatasource, SaleCreateData, SaleUpdateData } from '../../domain/datasources/sale.datasource';
+import { SaleDatasource, SaleCreateData, SaleUpdateData, SaleDeleteData } from '../../domain/datasources/sale.datasource';
 import { SaleRepository } from '../../domain/repositories';
 import { SaleEntity } from '../../domain/entities';
 import { FilterSalesDto } from '../../domain/dtos/sales';
@@ -26,5 +26,9 @@ export class SaleRepositoryImpl implements SaleRepository {
 
   update(id: string, data: SaleUpdateData): Promise<SaleEntity> {
     return this.datasource.update(id, data);
+  }
+
+  delete(id: string, data: SaleDeleteData): Promise<SaleEntity> {
+    return this.datasource.delete(id, data);
   }
 }

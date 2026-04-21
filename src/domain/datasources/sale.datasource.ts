@@ -79,6 +79,24 @@ export interface SaleUpdateData {
   initialPayment?: number | null;
 }
 
+/**
+ * Datos necesarios para eliminar una venta atómicamente.
+ * El use case es responsable de verificar que no existen pagos antes de llamar al datasource.
+ * `auditLog` solo se incluye en ventas CREDIT (las únicas que modificaron el balance del cliente).
+ */
+export interface SaleDeleteData {
+  /** Ítems de la venta — para restaurar el stock de cada producto. */
+  items: { productId: string; quantity: number }[];
+  /** clientId — para decrementar el balance si es venta CREDIT. */
+  clientId: string;
+  /** Total de la venta — monto a revertir en el balance del cliente (solo CREDIT). */
+  total: number;
+  /** Tipo de venta — determina si se requiere ajuste de balance. */
+  type: SaleType;
+  /** Log de auditoría — solo presente en ventas CREDIT. */
+  auditLog?: AuditLogData;
+}
+
 export interface SaleDatasource {
   findAll(pagination: PaginationDto, filters: FilterSalesDto): Promise<PaginatedResult<SaleEntity>>;
   findById(id: string): Promise<SaleEntity | null>;
@@ -93,4 +111,11 @@ export interface SaleDatasource {
    * No modifica totales, estado ni ítems — eso sucede mediante pagos.
    */
   update(id: string, data: SaleUpdateData): Promise<SaleEntity>;
+  /**
+   * Elimina permanentemente una venta sin pagos.
+   * Restaura el stock de los productos, revierte el balance del cliente (solo CREDIT)
+   * y escribe un AuditLog — todo en una única transacción atómica.
+   * El llamador (use case) garantiza que la venta no tiene pagos antes de invocar este método.
+   */
+  delete(id: string, data: SaleDeleteData): Promise<SaleEntity>;
 }
