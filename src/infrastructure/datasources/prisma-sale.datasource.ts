@@ -176,6 +176,11 @@ export class PrismaSaleDatasource implements SaleDatasource {
     if (data.collectionDay !== undefined) updateData.collectionDay = data.collectionDay;
     if (data.collectionDay2 !== undefined) updateData.collectionDay2 = data.collectionDay2;
     if (data.createdAt !== undefined) updateData.createdAt = data.createdAt;
+    if (data.installmentsCount !== undefined) updateData.installmentsCount = data.installmentsCount;
+    if (data.frequency !== undefined) updateData.frequency = data.frequency;
+    if (data.installmentAmount !== undefined) updateData.installmentAmount = data.installmentAmount;
+    // initialPayment puede ser null para limpiar el campo
+    if (data.initialPayment !== undefined) updateData.initialPayment = data.initialPayment;
 
     const sale = await prisma.sale.update({
       where: { id },

@@ -69,6 +69,14 @@ export interface SaleUpdateData {
   collectionDay2?: number | null;
   /** Fecha real de la venta. Permite corregir errores de digitación. */
   createdAt?: Date;
+  /** Número de cuotas del plan. Recalcula installmentAmount. */
+  installmentsCount?: number;
+  /** Periodicidad del plan (MONTHLY | BIWEEKLY). */
+  frequency?: InstallmentFrequency;
+  /** Monto por cuota recalculado por el use case. */
+  installmentAmount?: number;
+  /** Cuota inicial. null para limpiar. Afecta el cálculo de installmentAmount. */
+  initialPayment?: number | null;
 }
 
 export interface SaleDatasource {

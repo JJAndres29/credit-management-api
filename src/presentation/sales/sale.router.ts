@@ -68,7 +68,7 @@ export class SaleRouter {
       new GetSalesUseCase(saleRepository),
       new GetSaleByIdUseCase(saleRepository),
       new GetSalesByClientUseCase(saleRepository, clientRepository),
-      new UpdateSaleUseCase(saleRepository),
+      new UpdateSaleUseCase(saleRepository, installmentCalculator),
     );
 
     const middleware = new AuthMiddleware(

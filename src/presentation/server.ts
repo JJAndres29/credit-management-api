@@ -9,6 +9,7 @@ import { SaleRouter } from './sales/sale.router';
 import { PaymentRouter } from './payments/payment.router';
 import { AuditLogRouter } from './audit-logs/audit-log.router';
 import { ReportRouter } from './reports/report.router';
+import { DashboardRouter } from './dashboard/dashboard.router';
 import { HealthRouter } from './health/health.router';
 import helmet from 'helmet';
 import cors from 'cors';
@@ -50,6 +51,7 @@ export class Server {
     this.app.use('/api/payments', PaymentRouter.routes);
     this.app.use('/api/audit-logs', AuditLogRouter.routes);
     this.app.use('/api/reports', ReportRouter.routes);
+    this.app.use('/api/dashboard', DashboardRouter.routes);
 
     this.app.use(this.handleError);
 

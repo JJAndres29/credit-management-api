@@ -5,3 +5,4 @@ export { UserRepository } from './user.repository';
 export { SaleRepository } from './sale.repository';
 export { PaymentRepository } from './payment.repository';
 export { AuditLogRepository } from './audit-log.repository';
+export { DashboardRepository } from './dashboard.repository';
