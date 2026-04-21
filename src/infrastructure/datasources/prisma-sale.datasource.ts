@@ -1,5 +1,5 @@
 import { prisma } from '../../config/prisma';
-import { SaleDatasource, SaleCreateData } from '../../domain/datasources/sale.datasource';
+import { SaleDatasource, SaleCreateData, SaleUpdateData } from '../../domain/datasources/sale.datasource';
 import { SaleEntity, SaleType, SaleStatus } from '../../domain/entities';
 import { FilterSalesDto } from '../../domain/dtos/sales';
 import { PaginationDto } from '../../domain/dtos/shared';
@@ -147,6 +147,8 @@ export class PrismaSaleDatasource implements SaleDatasource {
           ...(data.collectionDay2 !== undefined && { collectionDay2: data.collectionDay2 }),
           // Cuota inicial — null cuando no se dio cuota inicial
           ...(data.initialPayment !== undefined && { initialPayment: data.initialPayment }),
+          // Fecha real de la venta — si no se provee, Prisma usa now()
+          ...(data.createdAt !== undefined && { createdAt: data.createdAt }),
           items: {
             create: data.items.map((item) => ({
               productId: item.productId,
@@ -162,6 +164,23 @@ export class PrismaSaleDatasource implements SaleDatasource {
       });
 
       return created;
+    });
+
+    return mapToEntity(sale as unknown as Record<string, unknown>);
+  }
+
+  async update(id: string, data: SaleUpdateData): Promise<SaleEntity> {
+    const updateData: Record<string, unknown> = {};
+
+    // collectionDay / collectionDay2 pueden ser null para limpiar el campo
+    if (data.collectionDay !== undefined) updateData.collectionDay = data.collectionDay;
+    if (data.collectionDay2 !== undefined) updateData.collectionDay2 = data.collectionDay2;
+    if (data.createdAt !== undefined) updateData.createdAt = data.createdAt;
+
+    const sale = await prisma.sale.update({
+      where: { id },
+      data: updateData,
+      include: SALE_WITH_ITEMS,
     });
 
     return mapToEntity(sale as unknown as Record<string, unknown>);

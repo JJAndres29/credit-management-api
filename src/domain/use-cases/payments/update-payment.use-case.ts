@@ -78,6 +78,7 @@ export class UpdatePaymentUseCase {
     return await this.paymentRepository.update(id, {
       amount: dto.amount,
       note: dto.note,
+      createdAt: dto.createdAt,
       saleTotal,
       auditLog,
     });

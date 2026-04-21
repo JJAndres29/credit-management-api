@@ -36,6 +36,12 @@ export class CreateSaleDto {
      * sobre (total - initialPayment).
      */
     public readonly initialPayment: number | undefined,
+    /**
+     * Fecha real en que ocurrió la venta. Opcional — si no se provee
+     * se usa la fecha/hora actual del servidor (now()).
+     * Útil para registrar ventas realizadas en fechas anteriores.
+     */
+    public readonly createdAt: Date | undefined,
   ) {}
 
   static create(object: Record<string, unknown>): [string?, CreateSaleDto?] {
@@ -43,6 +49,7 @@ export class CreateSaleDto {
       clientId, type, items,
       installmentsCount, frequency,
       collectionDay, collectionDay2, initialPayment,
+      createdAt,
     } = object;
 
     if (!clientId || typeof clientId !== 'string' || clientId.trim().length === 0) {
@@ -201,6 +208,19 @@ export class CreateSaleDto {
       parsedInitialPayment = rounded;
     }
 
+    // --- Validación de fecha de la venta ---
+    let parsedCreatedAt: Date | undefined;
+    if (createdAt !== undefined && createdAt !== null) {
+      if (typeof createdAt !== 'string' || (createdAt as string).trim().length === 0) {
+        return ['La fecha (createdAt) debe ser una cadena de texto en formato ISO 8601'];
+      }
+      const d = new Date(createdAt as string);
+      if (isNaN(d.getTime())) {
+        return ['La fecha (createdAt) no es válida. Use formato ISO 8601 (ej. 2026-04-20T23:30:00-05:00)'];
+      }
+      parsedCreatedAt = d;
+    }
+
     return [
       undefined,
       new CreateSaleDto(
@@ -222,6 +242,7 @@ export class CreateSaleDto {
         parsedCollectionDay,
         parsedCollectionDay2,
         parsedInitialPayment,
+        parsedCreatedAt,
       ),
     ];
   }

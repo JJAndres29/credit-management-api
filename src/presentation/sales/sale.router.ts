@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import { SaleController } from './sale.controller';
-import { CreateSaleUseCase, GetSalesUseCase, GetSaleByIdUseCase, GetSalesByClientUseCase } from '../../domain/use-cases/sales';
+import { CreateSaleUseCase, GetSalesUseCase, GetSaleByIdUseCase, GetSalesByClientUseCase, UpdateSaleUseCase } from '../../domain/use-cases/sales';
 import { SaleRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaSaleDatasource } from '../../infrastructure/datasources';
 import { ClientRepositoryImpl } from '../../infrastructure/repositories';
@@ -11,7 +11,8 @@ import { PaymentRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaPaymentDatasource } from '../../infrastructure/datasources';
 import { AuthRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaAuthDatasource } from '../../infrastructure/datasources';
-import { AuthMiddleware } from '../middlewares';
+import { AuthMiddleware, checkRole } from '../middlewares';
+import { Role } from '../../domain/entities';
 import { JwtAdapter, MetaWhatsAppService, NodemailerEmailService, PdfkitPdfService } from '../../infrastructure/services';
 import { globalLogger } from '../../infrastructure/services/pino-logger.service';
 import { InstallmentCalculatorService } from '../../domain/services/installments';
@@ -67,6 +68,7 @@ export class SaleRouter {
       new GetSalesUseCase(saleRepository),
       new GetSaleByIdUseCase(saleRepository),
       new GetSalesByClientUseCase(saleRepository, clientRepository),
+      new UpdateSaleUseCase(saleRepository),
     );
 
     const middleware = new AuthMiddleware(
@@ -90,6 +92,9 @@ export class SaleRouter {
 
     // POST /api/sales  — cualquier usuario autenticado puede crear ventas
     router.post('/', controller.create);
+
+    // PUT  /api/sales/:id  — solo ADMIN puede corregir fechas de cobro o fecha de la venta
+    router.put('/:id', checkRole(Role.ADMIN), controller.update);
 
     return router;
   }

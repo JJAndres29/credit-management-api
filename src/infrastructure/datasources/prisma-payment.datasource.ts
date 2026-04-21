@@ -97,6 +97,8 @@ export class PrismaPaymentDatasource implements PaymentDatasource {
           saleId: data.saleId ?? null,
           amount: data.amount,
           note: data.note ?? null,
+          // Fecha real del pago — si no se provee, Prisma usa now()
+          ...(data.createdAt !== undefined && { createdAt: data.createdAt }),
         },
       });
 
@@ -156,6 +158,7 @@ export class PrismaPaymentDatasource implements PaymentDatasource {
       const updateData: Record<string, unknown> = {};
       if (data.amount !== undefined) updateData.amount = data.amount;
       if (data.note !== undefined) updateData.note = data.note;
+      if (data.createdAt !== undefined) updateData.createdAt = data.createdAt;
 
       const updated = await tx.payment.update({
         where: { id },

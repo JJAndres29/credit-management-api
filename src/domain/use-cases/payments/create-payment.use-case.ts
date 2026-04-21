@@ -96,6 +96,7 @@ export class CreatePaymentUseCase {
       amount: dto.amount,
       note: dto.note,
       saleTotal,
+      createdAt: dto.createdAt,
       auditLog: {
         userId,
         action: AuditAction.PAYMENT,

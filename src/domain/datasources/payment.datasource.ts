@@ -16,6 +16,8 @@ export interface PaymentUpdateData {
   saleTotal?: number;
   /** Requerido cuando amount cambia — registra el ajuste de balance */
   auditLog?: AuditLogData;
+  /** Fecha real en que se realizó el pago. Permite corregir errores de digitación. */
+  createdAt?: Date;
 }
 
 /**
@@ -33,6 +35,8 @@ export interface PaymentCreateData {
   /** Total de la venta, requerido cuando saleId está presente */
   saleTotal?: number;
   auditLog: AuditLogData;
+  /** Fecha real en que se realizó el pago. Si no se provee, Prisma usa now(). */
+  createdAt?: Date;
 }
 
 /**

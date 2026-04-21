@@ -1,4 +1,4 @@
-import { SaleDatasource, SaleCreateData } from '../../domain/datasources/sale.datasource';
+import { SaleDatasource, SaleCreateData, SaleUpdateData } from '../../domain/datasources/sale.datasource';
 import { SaleRepository } from '../../domain/repositories';
 import { SaleEntity } from '../../domain/entities';
 import { FilterSalesDto } from '../../domain/dtos/sales';
@@ -22,5 +22,9 @@ export class SaleRepositoryImpl implements SaleRepository {
 
   create(data: SaleCreateData): Promise<SaleEntity> {
     return this.datasource.create(data);
+  }
+
+  update(id: string, data: SaleUpdateData): Promise<SaleEntity> {
+    return this.datasource.update(id, data);
   }
 }

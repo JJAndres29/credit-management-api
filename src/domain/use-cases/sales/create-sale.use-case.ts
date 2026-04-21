@@ -143,6 +143,7 @@ export class CreateSaleUseCase {
       collectionDay: dto.collectionDay,
       collectionDay2: dto.collectionDay2,
       initialPayment: initialPayment > 0 ? initialPayment : undefined,
+      createdAt: dto.createdAt,
     });
 
     // 8. Registrar la cuota inicial como pago si se proporcionó.

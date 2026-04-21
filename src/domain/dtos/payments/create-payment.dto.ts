@@ -4,10 +4,16 @@ export class CreatePaymentDto {
     public readonly amount: number,
     public readonly saleId: string | null,
     public readonly note: string | null,
+    /**
+     * Fecha real en que se realizó el pago. Opcional — si no se provee
+     * se usa la fecha/hora actual del servidor.
+     * Útil para registrar pagos de días anteriores o corregir errores de digitación.
+     */
+    public readonly createdAt: Date | undefined,
   ) {}
 
   static create(object: Record<string, unknown>): [string?, CreatePaymentDto?] {
-    const { clientId, amount, saleId, note } = object;
+    const { clientId, amount, saleId, note, createdAt } = object;
 
     if (!clientId || typeof clientId !== 'string' || clientId.trim().length === 0) {
       return ['El ID del cliente es requerido'];
@@ -43,6 +49,18 @@ export class CreatePaymentDto {
       }
     }
 
+    let parsedCreatedAt: Date | undefined;
+    if (createdAt !== undefined && createdAt !== null) {
+      if (typeof createdAt !== 'string' || (createdAt as string).trim().length === 0) {
+        return ['La fecha (createdAt) debe ser una cadena de texto en formato ISO 8601'];
+      }
+      const d = new Date(createdAt as string);
+      if (isNaN(d.getTime())) {
+        return ['La fecha (createdAt) no es válida. Use formato ISO 8601 (ej. 2026-04-20T23:30:00-05:00)'];
+      }
+      parsedCreatedAt = d;
+    }
+
     return [
       undefined,
       new CreatePaymentDto(
@@ -50,6 +68,7 @@ export class CreatePaymentDto {
         parsedAmount,
         saleId ? (saleId as string).trim() : null,
         note ? (note as string).trim() : null,
+        parsedCreatedAt,
       ),
     ];
   }

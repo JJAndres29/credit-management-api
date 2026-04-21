@@ -36,10 +36,12 @@ This system allows a retail business to manage credit operations for its clients
 - Cash and credit sales with automatic stock deduction and client balance update (atomic transaction)
 - **Manual pricing at sale time** — the seller sets the unit price for each item when creating a sale. The server computes subtotals and total; the frontend cannot override them
 - Payment registration with automatic sale status update (PENDING → PARTIAL → PAID) and client balance reduction (atomic transaction)
-- **Payment correction** — Admins can modify the `amount` and/or `note` of any existing payment (`PUT /api/payments/:id`). The client balance is adjusted atomically using delta math, the associated sale status is recomputed, and a `PAYMENT_MODIFIED` audit entry is written — all in a single transaction
+- **Payment correction and deletion** — Admins can modify (`PUT /api/payments/:id`) or permanently delete (`DELETE /api/payments/:id`) any existing payment. Both operations atomically adjust the client balance, recompute the sale status, and write an audit entry (`PAYMENT_MODIFIED` / `PAYMENT_DELETED`) — all in a single transaction
+- **Custom dates on sales and payments** — Any authenticated user can pass an optional `createdAt` (ISO 8601) when registering a sale or payment to record the real date of the operation. Admins can also correct the date of an existing payment via `PUT /api/payments/:id` using the same `createdAt` field. No schema change required — Prisma accepts an explicit `createdAt` and skips the `@default(now())` only when a value is provided
+- **Sale metadata correction** — Admins can update collection-day fields (`collectionDay`, `collectionDay2`) and the sale date (`createdAt`) via `PUT /api/sales/:id`. This endpoint does not touch financial fields (total, status, items) — those only change through payments
 - Immutable audit log of every balance-changing operation (credit sales, payments, and payment corrections), written atomically inside each transaction
 - **Automatic notifications** — Email (via Nodemailer/Gmail) sent after every payment and credit sale, with the PDF account statement attached. WhatsApp integration is **dormant**: the backend pre-builds a `whatsappPayload { phone, message }` returned in every `POST /api/payments` and `POST /api/sales` (201) response so the frontend can open a `wa.me` Deep Link for manual sending. The Meta Cloud API send blocks are commented out and can be reactivated without touching business logic. Notifications are optional and best-effort: if the provider fails or credentials are missing, the financial operation is not affected
-- **On-demand client notification** — Any authenticated user can trigger a notification to a client via `POST /api/clients/:id/notify`. Returns a `whatsappPayload` immediately for manual sending and asynchronously emails the client's full PDF account statement
+- **On-demand client notification** — Any authenticated user can trigger a notification to a client via `POST /api/clients/:id/notify`. Returns a `whatsappPayload` immediately for manual `wa.me` sending — the message includes full installment detail (sale number, initial date, credit amount, initial payment, paid installments, current balance) when an active credit plan exists. Asynchronously emails the client's full PDF account statement
 - **PDF account statements** — On-demand PDF generation for any client via `GET /api/reports/account-statement/:clientId`. The PDF is generated in memory and streamed directly to the browser — nothing is ever saved to disk
 
 ---
@@ -136,7 +138,7 @@ credit-management-system/
 │   │       ├── auth/              # LoginUseCase, RenewTokenUseCase
 │   │       ├── clients/           # CreateClient, GetClients, GetClientById, UpdateClient, DeleteClient, NotifyClient
 │   │       ├── audit-logs/        # GetAuditLogs, GetAuditLogsByClient
-│   │       ├── payments/          # CreatePayment, GetPayments, GetPaymentById, GetPaymentsByClient, GetPaymentsBySale, UpdatePayment
+│   │       ├── payments/          # CreatePayment, GetPayments, GetPaymentById, GetPaymentsByClient, GetPaymentsBySale, UpdatePayment, DeletePayment
 │   │       ├── products/          # GetProducts, GetProductById, CreateProduct, UpdateProduct, AdjustStock, DeleteProduct, UploadProductImages, DeleteProductImage
 │   │       ├── reports/           # GenerateAccountStatement
 │   │       ├── sales/             # CreateSale, GetSales, GetSaleById, GetSalesByClient
@@ -751,6 +753,39 @@ Returns a single sale with its line items. Returns `404` if not found.
 
 ---
 
+#### PUT `/api/sales/:id`
+
+Update non-financial metadata of a sale: collection days and/or sale date. Does not modify total, status, or line items.
+
+> **Requires `ADMIN` role.**
+
+**Request body (at least one field required):**
+```json
+{
+  "collectionDay": 15,
+  "collectionDay2": 30,
+  "createdAt": "2026-04-20T23:30:00-05:00"
+}
+```
+
+| Field | Type | Validation |
+|-------|------|-----------|
+| `collectionDay` | integer \| null | 1–31. Pass `null` to clear |
+| `collectionDay2` | integer \| null | 1–31, BIWEEKLY plans only. Pass `null` to clear |
+| `createdAt` | string | ISO 8601. Corrects the recorded date of the sale |
+
+**Business rules:**
+- `collectionDay2` can only be set on sales with `frequency: BIWEEKLY`
+- Financial fields (total, status, items, client balance) are never touched by this endpoint
+
+**Response `200`:** Updated sale object.
+
+**Response `400`:** Validation error or `collectionDay2` on a non-BIWEEKLY sale.
+
+**Response `404`:** Sale not found.
+
+---
+
 #### POST `/api/sales`
 
 Create a new sale. The seller sets the unit price for each item at the time of the sale. Each item can reference an **existing product** (`productId`) or create a **new product inline** (`newProduct`) — both are mutually exclusive per item.
@@ -803,6 +838,7 @@ Items can be mixed — some referencing existing products and others creating ne
 | `frequency` | string | No | `MONTHLY` or `BIWEEKLY`. Requires `installmentsCount` |
 | `collectionDay` | integer | No | 1–31. Billing day. MONTHLY: only day; BIWEEKLY: first day. Requires plan |
 | `collectionDay2` | integer | No | 1–31. Second billing day. `BIWEEKLY` only. Requires `collectionDay` |
+| `createdAt` | string | No | ISO 8601. Records the real date of the sale (e.g. a backdated sale). If omitted, uses server time |
 
 **Business rules applied:**
 - Stock is verified before creating the sale — insufficient stock returns `400`
@@ -904,6 +940,7 @@ Register a payment from a client. Optionally links the payment to a specific sal
 | `amount` | number | Yes | Greater than 0, max 2 decimal places |
 | `saleId` | string | No | If provided, sale must exist, belong to the client, and not be `PAID` |
 | `note` | string | No | Max 500 characters |
+| `createdAt` | string | No | ISO 8601. Records the real date of the payment. If omitted, uses server time |
 
 **Business rules applied:**
 - `amount` cannot exceed the client's current `balance` (prevents overpayment)
@@ -939,6 +976,7 @@ Modify an existing payment's `amount` and/or `note`. All changes are applied ato
 |-------|------|----------|-----------|
 | `amount` | number | No | Greater than 0, max 2 decimal places. Cannot exceed the client's adjusted balance |
 | `note` | string \| null | No | Max 500 characters. Pass `null` to clear the note |
+| `createdAt` | string | No | ISO 8601. Corrects the recorded date of the payment |
 
 **Business rules applied:**
 - `delta = oldAmount - newAmount`. The client balance is adjusted by `balance + delta`. The resulting balance cannot go below 0 (rejects if new amount exceeds what the client actually owes)
@@ -949,6 +987,23 @@ Modify an existing payment's `amount` and/or `note`. All changes are applied ato
 **Response `200`:** Updated payment object.
 
 **Response `400`:** Validation error, new amount exceeds client balance, or new amount exceeds sale's adjusted total.
+
+**Response `404`:** Payment not found.
+
+---
+
+#### DELETE `/api/payments/:id`
+
+Permanently delete a payment. The client's balance is restored and the associated sale's status is recomputed, all in a single atomic transaction. A `PAYMENT_DELETED` audit log entry is written.
+
+> **Requires `ADMIN` role.**
+
+**Business rules applied:**
+- The client's balance is incremented by the deleted payment's amount (the client owes that amount again)
+- If the payment was linked to a sale: the sale status is recomputed from remaining payments (PENDING / PARTIAL / PAID)
+- An `AuditLog` entry with `action: PAYMENT_DELETED` is written inside the same transaction, recording `before` and `after` balance, `userId`, and request IP
+
+**Response `200`:** The deleted payment object.
 
 **Response `404`:** Payment not found.
 
@@ -1009,6 +1064,7 @@ Returns audit log entries, sorted by creation date (newest first). Supports pagi
 | `CREDIT_SALE` | Client balance increased — a credit sale was registered |
 | `PAYMENT` | Client balance decreased — a payment was registered |
 | `PAYMENT_MODIFIED` | Client balance adjusted — an existing payment's amount was corrected by an admin |
+| `PAYMENT_DELETED` | Client balance restored — a payment was permanently deleted by an admin |
 
 ---
 
@@ -1287,6 +1343,9 @@ npm run db:seed         # Create default admin user
 | 10 | API improvements (pagination, filters, search) | ✅ Done |
 | 11 | On-demand client notification (`POST /clients/:id/notify` — WhatsApp payload + async email with PDF) | ✅ Done |
 | 12 | Payment correction (`PUT /payments/:id` — ADMIN, atomic delta balance + sale status recompute + audit log) | ✅ Done |
+| 13 | Payment deletion (`DELETE /payments/:id` — ADMIN, balance restored + sale status recompute + `PAYMENT_DELETED` audit log) + notify with installment detail (cuotas pagadas, valor crédito, cuota inicial) | ✅ Done |
+| 14 | Custom dates — optional `createdAt` (ISO 8601) on sale/payment creation; `createdAt` correction on payment update (`PUT /payments/:id`); `PUT /sales/:id` for collection days + sale date (ADMIN) | ✅ Done |
+| 15 | Timezone fix — `notify-client.use-case.ts` `fmtDate` now uses `Intl.DateTimeFormat` with `timeZone: 'America/Bogota'` (was calling `Date.getDate()` in UTC) | ✅ Done |
 
 ---
 

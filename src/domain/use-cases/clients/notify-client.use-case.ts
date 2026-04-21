@@ -30,9 +30,16 @@ export class NotifyClientUseCase {
       new Intl.NumberFormat('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
 
     const fmtDate = (date: Date) => {
-      const d = date.getDate().toString().padStart(2, '0');
-      const m = (date.getMonth() + 1).toString().padStart(2, '0');
-      return `${d}-${m}-${date.getFullYear()}`;
+      const parts = new Intl.DateTimeFormat('es-CO', {
+        timeZone: 'America/Bogota',
+        day: '2-digit',
+        month: '2-digit',
+        year: 'numeric',
+      }).formatToParts(date);
+      const day = parts.find((p) => p.type === 'day')!.value;
+      const month = parts.find((p) => p.type === 'month')!.value;
+      const year = parts.find((p) => p.type === 'year')!.value;
+      return `${day}-${month}-${year}`;
     };
 
     let whatsappPayload: { phone: string; message: string } | null = null;

@@ -55,6 +55,20 @@ export interface SaleCreateData {
    * pueda calcular correctamente: paidInstallments = (totalPaid - initialPayment) / installmentAmount
    */
   initialPayment?: number;
+  /**
+   * Fecha real en que ocurrió la venta. Si no se provee, Prisma usa now().
+   * Permite registrar ventas de días anteriores o corregir la fecha por error de digitación.
+   */
+  createdAt?: Date;
+}
+
+export interface SaleUpdateData {
+  /** Día del mes para el cobro (1-31). null para limpiar el valor. */
+  collectionDay?: number | null;
+  /** Segundo día de cobro (1-31), solo planes BIWEEKLY. null para limpiar. */
+  collectionDay2?: number | null;
+  /** Fecha real de la venta. Permite corregir errores de digitación. */
+  createdAt?: Date;
 }
 
 export interface SaleDatasource {
@@ -66,4 +80,9 @@ export interface SaleDatasource {
    * todo en una única transacción atómica de base de datos.
    */
   create(data: SaleCreateData): Promise<SaleEntity>;
+  /**
+   * Actualiza campos no financieros de una venta: días de cobro y/o fecha.
+   * No modifica totales, estado ni ítems — eso sucede mediante pagos.
+   */
+  update(id: string, data: SaleUpdateData): Promise<SaleEntity>;
 }

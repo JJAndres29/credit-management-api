@@ -1,12 +1,13 @@
 import { Request, Response } from 'express';
 import { CustomError } from '../../domain/errors';
 import { UserEntity } from '../../domain/entities';
-import { CreateSaleDto, FilterSalesDto } from '../../domain/dtos/sales';
+import { CreateSaleDto, FilterSalesDto, UpdateSaleDto } from '../../domain/dtos/sales';
 import { PaginationDto } from '../../domain/dtos/shared';
 import { CreateSaleUseCase } from '../../domain/use-cases/sales/create-sale.use-case';
 import { GetSalesUseCase } from '../../domain/use-cases/sales/get-sales.use-case';
 import { GetSaleByIdUseCase } from '../../domain/use-cases/sales/get-sale-by-id.use-case';
 import { GetSalesByClientUseCase } from '../../domain/use-cases/sales/get-sales-by-client.use-case';
+import { UpdateSaleUseCase } from '../../domain/use-cases/sales/update-sale.use-case';
 
 export class SaleController {
   constructor(
@@ -14,6 +15,7 @@ export class SaleController {
     private readonly getSalesUseCase: GetSalesUseCase,
     private readonly getSaleByIdUseCase: GetSaleByIdUseCase,
     private readonly getSalesByClientUseCase: GetSalesByClientUseCase,
+    private readonly updateSaleUseCase: UpdateSaleUseCase,
   ) {}
 
   getAll = async (req: Request, res: Response): Promise<void> => {
@@ -63,6 +65,18 @@ export class SaleController {
     try {
       const { sale, whatsappPayload } = await this.createSaleUseCase.execute(dto!, user.id, ip);
       res.status(201).json({ ...sale, whatsappPayload });
+    } catch (err) {
+      this.handleError(err, res);
+    }
+  };
+
+  update = async (req: Request, res: Response): Promise<void> => {
+    const [error, dto] = UpdateSaleDto.create(req.body as Record<string, unknown>);
+    if (error) { res.status(400).json({ error }); return; }
+
+    try {
+      const sale = await this.updateSaleUseCase.execute(req.params.id, dto!);
+      res.json(sale);
     } catch (err) {
       this.handleError(err, res);
     }
