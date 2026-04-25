@@ -12,6 +12,7 @@ export enum SaleStatus {
 export enum InstallmentFrequency {
   MONTHLY = 'MONTHLY',
   BIWEEKLY = 'BIWEEKLY',
+  WEEKLY = 'WEEKLY',
 }
 
 export class SaleItemEntity {

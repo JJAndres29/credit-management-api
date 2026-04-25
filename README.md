@@ -298,8 +298,8 @@ NotificationLog  — Log of every notification attempt: channel (WHATSAPP|EMAIL)
 
 | Field | Description |
 |-------|-------------|
-| `installmentsCount` | Number of installments agreed (null if no plan). Minimum 1 — a single-installment plan is valid |
-| `frequency` | `MONTHLY` or `BIWEEKLY` (null if no plan) |
+| `installmentsCount` | Number of installments agreed (null if no plan) |
+| `frequency` | `MONTHLY`, `BIWEEKLY`, or `WEEKLY` (null if no plan) |
 | `installmentAmount` | `(total - initialPayment) / installmentsCount`, rounded to 2 decimals |
 | `initialPayment` | Down payment applied at sale creation time (null if none) |
 | `collectionDay` | Day of the month for billing (1-31). MONTHLY: the single day; BIWEEKLY: first day |
@@ -312,6 +312,7 @@ NotificationLog  — Log of every notification attempt: channel (WHATSAPP|EMAIL)
 | `Role` | `ADMIN`, `SELLER` |
 | `SaleType` | `CASH`, `CREDIT` |
 | `SaleStatus` | `PAID`, `PENDING`, `PARTIAL` |
+| `InstallmentFrequency` | `MONTHLY`, `BIWEEKLY`, `WEEKLY` |
 
 All entities use **soft deletes** (`isActive` flag) — no data is ever permanently removed.
 
@@ -856,11 +857,10 @@ Items can be mixed — some referencing existing products and others creating ne
 | `items[].newProduct.stock` | integer | Yes | Integer ≥ 0. Must be ≥ `quantity` (stock to add; quantity is deducted from it) |
 | `items[].quantity` | integer | Yes | Positive integer |
 | `items[].unitPrice` | number | Yes | Price per unit set by the seller (> 0) |
-| `installmentsCount` | integer | No | ≥ 1. Only for `CREDIT` sales. Requires `frequency` |
-| `frequency` | string | No | `MONTHLY` or `BIWEEKLY`. Requires `installmentsCount` |
-| `collectionDay` | integer | No | 1–31. Billing day. MONTHLY: only day; BIWEEKLY: first day. Requires plan |
-| `collectionDay2` | integer | No | 1–31. Second billing day. `BIWEEKLY` only. Requires `collectionDay` |
-| `createdAt` | string | No | ISO 8601. Records the real date of the sale (e.g. a backdated sale). If omitted, uses server time |
+| `installmentsCount` | integer | No | ≥ 2. Only for `CREDIT` sales. Requires `frequency` |
+| `frequency` | string | No | `MONTHLY`, `BIWEEKLY`, or `WEEKLY`. Requires `installmentsCount` |
+| `collectionDay` | integer | No | Billing day. MONTHLY/BIWEEKLY: day of month 1–31; WEEKLY: day of week 1–7 (1=Mon, 7=Sun). Requires plan |
+| `collectionDay2` | integer | No | 1–31. Second billing day of month. `BIWEEKLY` only. Requires `collectionDay` |
 
 **Business rules applied:**
 - Stock is verified before creating the sale — insufficient stock returns `400`
@@ -1433,10 +1433,10 @@ Credit sales support optional installment plans:
 
 | Field | Description |
 |-------|-------------|
-| `installmentsCount` | Number of installments (integer ≥ 1). A single-installment plan (`1`) is valid |
-| `frequency` | `MONTHLY` or `BIWEEKLY` |
-| `collectionDay` | Day of month for billing (1–31). MONTHLY: only day; BIWEEKLY: first day |
-| `collectionDay2` | Second billing day (1–31), BIWEEKLY plans only |
+| `installmentsCount` | Number of installments (integer ≥ 2) |
+| `frequency` | `MONTHLY`, `BIWEEKLY`, or `WEEKLY` |
+| `collectionDay` | Billing day. MONTHLY/BIWEEKLY: day of month 1–31. WEEKLY: day of week 1–7 (1=Mon, 7=Sun) |
+| `collectionDay2` | Second billing day of month (1–31), BIWEEKLY plans only |
 
 BIWEEKLY example — collect on the 15th and 30th every month:
 ```json
@@ -1445,6 +1445,15 @@ BIWEEKLY example — collect on the 15th and 30th every month:
   "frequency": "BIWEEKLY",
   "collectionDay": 15,
   "collectionDay2": 30
+}
+```
+
+WEEKLY example — collect every Monday (1):
+```json
+{
+  "installmentsCount": 12,
+  "frequency": "WEEKLY",
+  "collectionDay": 1
 }
 ```
 
