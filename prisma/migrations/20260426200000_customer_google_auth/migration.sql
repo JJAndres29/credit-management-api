@@ -1,6 +1,5 @@
--- Drop password management columns
-ALTER TABLE "Customer" DROP COLUMN IF EXISTS "password";
-ALTER TABLE "Customer" DROP COLUMN IF EXISTS "mustChangePassword";
+-- Drop legacy verification column; password and mustChangePassword stay because
+-- classic auth and reset-password flows still exist alongside Google auth.
 ALTER TABLE "Customer" DROP COLUMN IF EXISTS "emailVerifiedAt";
 
 -- Add Google OAuth identity
