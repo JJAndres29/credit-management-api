@@ -114,8 +114,16 @@ export class CreateSaleDto {
 
     if (hasCollectionDay) {
       const day = Number(collectionDay);
-      if (!Number.isInteger(day) || day < 1 || day > 31) {
-        return ['collectionDay debe ser un número entero entre 1 y 31'];
+      if (parsedFrequency === InstallmentFrequency.WEEKLY) {
+        // Para planes semanales, collectionDay es el día de la semana: 1=lunes … 7=domingo
+        if (!Number.isInteger(day) || day < 1 || day > 7) {
+          return ['Para planes WEEKLY, collectionDay debe ser un entero entre 1 (lunes) y 7 (domingo)'];
+        }
+      } else {
+        // Para MONTHLY y BIWEEKLY, collectionDay es el día del mes: 1–31
+        if (!Number.isInteger(day) || day < 1 || day > 31) {
+          return ['collectionDay debe ser un número entero entre 1 y 31'];
+        }
       }
       parsedCollectionDay = day;
     }
@@ -135,8 +143,11 @@ export class CreateSaleDto {
       return ['Para planes BIWEEKLY debes proporcionar tanto collectionDay como collectionDay2'];
     }
 
-    if (parsedFrequency === InstallmentFrequency.MONTHLY && hasCollectionDay2) {
-      return ['collectionDay2 no aplica a planes MONTHLY; usa solo collectionDay'];
+    if (
+      (parsedFrequency === InstallmentFrequency.MONTHLY || parsedFrequency === InstallmentFrequency.WEEKLY) &&
+      hasCollectionDay2
+    ) {
+      return ['collectionDay2 no aplica a planes MONTHLY ni WEEKLY; usa solo collectionDay'];
     }
 
     // --- Validación de cuota inicial ---
