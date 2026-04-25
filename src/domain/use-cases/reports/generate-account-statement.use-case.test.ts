@@ -81,6 +81,9 @@ const mockProductRepo = {
   delete: jest.fn(),
   addImages: jest.fn(),
   removeImage: jest.fn(),
+  assignAttributes: jest.fn(),
+  replaceAttributes: jest.fn(),
+  removeAttribute: jest.fn(),
 } as jest.Mocked<ProductRepository>;
 
 const mockPdfService: jest.Mocked<PdfService> = {

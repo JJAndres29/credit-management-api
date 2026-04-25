@@ -40,4 +40,16 @@ export class ProductRepositoryImpl implements ProductRepository {
   removeImage(productId: string, imageId: string): Promise<ProductEntity> {
     return this.datasource.removeImage(productId, imageId);
   }
+
+  assignAttributes(productId: string, valueIds: string[]): Promise<ProductEntity> {
+    return this.datasource.assignAttributes(productId, valueIds);
+  }
+
+  replaceAttributes(productId: string, valueIds: string[]): Promise<ProductEntity> {
+    return this.datasource.replaceAttributes(productId, valueIds);
+  }
+
+  removeAttribute(productId: string, valueId: string): Promise<ProductEntity> {
+    return this.datasource.removeAttribute(productId, valueId);
+  }
 }

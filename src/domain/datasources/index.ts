@@ -12,3 +12,4 @@ export { DashboardDatasource } from './dashboard.datasource';
 export type { DashboardRawMetrics, DashboardActiveCreditSale } from './dashboard.datasource';
 export { CustomerDatasource } from './customer.datasource';
 export type { CustomerCreateData, CustomerUpdateData, FilterCustomersData } from './customer.datasource';
+export { CategoryDatasource } from './category.datasource';

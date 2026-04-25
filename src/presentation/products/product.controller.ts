@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { CustomError } from '../../domain/errors';
 import { CreateProductDto, UpdateProductDto, AdjustStockDto, FilterProductsDto } from '../../domain/dtos/products';
+import { AssignProductAttributesDto, ReplaceProductAttributesDto } from '../../domain/dtos/categories';
 import { PaginationDto } from '../../domain/dtos/shared';
 import { GetProductsUseCase } from '../../domain/use-cases/products/get-products.use-case';
 import { GetProductByIdUseCase } from '../../domain/use-cases/products/get-product-by-id.use-case';
@@ -10,6 +11,9 @@ import { AdjustStockUseCase } from '../../domain/use-cases/products/adjust-stock
 import { DeleteProductUseCase } from '../../domain/use-cases/products/delete-product.use-case';
 import { UploadProductImagesUseCase } from '../../domain/use-cases/products/upload-product-images.use-case';
 import { DeleteProductImageUseCase } from '../../domain/use-cases/products/delete-product-image.use-case';
+import { AssignProductAttributesUseCase } from '../../domain/use-cases/categories/assign-product-attributes.use-case';
+import { RemoveProductAttributeUseCase } from '../../domain/use-cases/categories/remove-product-attribute.use-case';
+import { ReplaceProductAttributesUseCase } from '../../domain/use-cases/categories/replace-product-attributes.use-case';
 
 export class ProductController {
   constructor(
@@ -21,6 +25,9 @@ export class ProductController {
     private readonly deleteProductUseCase: DeleteProductUseCase,
     private readonly uploadProductImagesUseCase: UploadProductImagesUseCase,
     private readonly deleteProductImageUseCase: DeleteProductImageUseCase,
+    private readonly assignProductAttributesUseCase: AssignProductAttributesUseCase,
+    private readonly replaceProductAttributesUseCase: ReplaceProductAttributesUseCase,
+    private readonly removeProductAttributeUseCase: RemoveProductAttributeUseCase,
   ) {}
 
   getAll = async (req: Request, res: Response): Promise<void> => {
@@ -126,6 +133,45 @@ export class ProductController {
         req.params.id,
         req.params.imageId,
       );
+      res.json(product);
+    } catch (err) {
+      this.handleError(err, res);
+    }
+  };
+
+  assignAttributes = async (req: Request, res: Response): Promise<void> => {
+    const [error, dto] = AssignProductAttributesDto.create(req.body as Record<string, unknown>);
+    if (error) {
+      res.status(400).json({ error });
+      return;
+    }
+
+    try {
+      const product = await this.assignProductAttributesUseCase.execute(req.params.id, dto!.valueIds);
+      res.json(product);
+    } catch (err) {
+      this.handleError(err, res);
+    }
+  };
+
+  replaceAttributes = async (req: Request, res: Response): Promise<void> => {
+    const [error, dto] = ReplaceProductAttributesDto.create(req.body as Record<string, unknown>);
+    if (error) {
+      res.status(400).json({ error });
+      return;
+    }
+
+    try {
+      const product = await this.replaceProductAttributesUseCase.execute(req.params.id, dto!.valueIds);
+      res.json(product);
+    } catch (err) {
+      this.handleError(err, res);
+    }
+  };
+
+  deleteAttribute = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const product = await this.removeProductAttributeUseCase.execute(req.params.id, req.params.valueId);
       res.json(product);
     } catch (err) {
       this.handleError(err, res);

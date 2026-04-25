@@ -10,8 +10,9 @@ import {
   UploadProductImagesUseCase,
   DeleteProductImageUseCase,
 } from '../../domain/use-cases/products';
-import { ProductRepositoryImpl } from '../../infrastructure/repositories';
-import { PrismaProductDatasource } from '../../infrastructure/datasources';
+import { AssignProductAttributesUseCase, RemoveProductAttributeUseCase, ReplaceProductAttributesUseCase } from '../../domain/use-cases/categories';
+import { CategoryRepositoryImpl, ProductRepositoryImpl } from '../../infrastructure/repositories';
+import { PrismaCategoryDatasource, PrismaProductDatasource } from '../../infrastructure/datasources';
 import { CloudinaryAdapter } from '../../infrastructure/services';
 import { AuthMiddleware, checkRole, uploadImages } from '../middlewares';
 import { JwtAdapter } from '../../infrastructure/services';
@@ -24,17 +25,21 @@ export class ProductRouter {
     const router = Router();
 
     const repository = new ProductRepositoryImpl(new PrismaProductDatasource());
+    const categoryRepository = new CategoryRepositoryImpl(new PrismaCategoryDatasource());
     const cloudinary = new CloudinaryAdapter();
 
     const controller = new ProductController(
       new GetProductsUseCase(repository),
       new GetProductByIdUseCase(repository),
-      new CreateProductUseCase(repository),
-      new UpdateProductUseCase(repository),
+      new CreateProductUseCase(repository, categoryRepository),
+      new UpdateProductUseCase(repository, categoryRepository),
       new AdjustStockUseCase(repository),
       new DeleteProductUseCase(repository),
       new UploadProductImagesUseCase(repository, cloudinary),
       new DeleteProductImageUseCase(repository, cloudinary),
+      new AssignProductAttributesUseCase(repository, categoryRepository),
+      new ReplaceProductAttributesUseCase(repository, categoryRepository),
+      new RemoveProductAttributeUseCase(repository),
     );
 
     const middleware = new AuthMiddleware(
@@ -50,6 +55,15 @@ export class ProductRouter {
 
     // GET /api/products/:id
     router.get('/:id', controller.getById);
+
+    // POST /api/products/:id/attributes
+    router.post('/:id/attributes', checkRole(Role.ADMIN), controller.assignAttributes);
+
+    // PUT /api/products/:id/attributes
+    router.put('/:id/attributes', checkRole(Role.ADMIN), controller.replaceAttributes);
+
+    // DELETE /api/products/:id/attributes/:valueId
+    router.delete('/:id/attributes/:valueId', checkRole(Role.ADMIN), controller.deleteAttribute);
 
     // POST /api/products
     router.post('/', checkRole(Role.ADMIN), controller.create);

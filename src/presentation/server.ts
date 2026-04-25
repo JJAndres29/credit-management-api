@@ -12,6 +12,8 @@ import { ReportRouter } from './reports/report.router';
 import { DashboardRouter } from './dashboard/dashboard.router';
 import { HealthRouter } from './health/health.router';
 import { CustomerAuthRouter } from './customer-auth/customer-auth.router';
+import { CategoryRouter } from './categories/category.router';
+import { AttributeRouter } from './categories/attribute.router';
 import helmet from 'helmet';
 import cors from 'cors';
 
@@ -54,6 +56,8 @@ export class Server {
     this.app.use('/api/reports', ReportRouter.routes);
     this.app.use('/api/dashboard', DashboardRouter.routes);
     this.app.use('/api/customer-auth', CustomerAuthRouter.routes);
+    this.app.use('/api/categories', CategoryRouter.routes);
+    this.app.use('/api', AttributeRouter.routes);
 
     this.app.use(this.handleError);
 

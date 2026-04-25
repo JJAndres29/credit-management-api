@@ -22,6 +22,7 @@
 - [Pricing System](#pricing-system)
 - [Notification System](#notification-system)
 - [PDF Report System](#pdf-report-system)
+- [Product Categorization & Dynamic Attributes](#product-categorization--dynamic-attributes)
 
 ---
 
@@ -1654,4 +1655,115 @@ GET /api/reports/account-statement/:clientId
 ### Extending the PDF
 
 To add new sections to the PDF, edit only `src/infrastructure/services/pdfkit-pdf.service.ts`. The interface in `src/domain/services/pdf.service.ts` only changes if the data contract changes (e.g. adding a new field to `AccountStatementData`).
+
+---
+
+## Product Categorization & Dynamic Attributes
+
+The product catalog now supports **extensible categorization and dynamic attributes** with zero hardcoded fields (`color`, `size`, etc.).  
+`Product` remains generic; category metadata is modeled in separate tables and linked by relations.
+
+### Data model
+
+- `Category` → category catalog (`name`)
+- `CategoryAttribute` → attributes per category (`Color`, `Tamaño`, `Material`, ...)
+- `AttributeValue` → allowed values per attribute (`Rojo`, `Queen`, `Algodón`, ...)
+- `ProductAttribute` → many-to-many link between product and selected values
+- `Product.categoryId` (nullable) → optional category assigned to each product
+
+### API endpoints
+
+All routes require JWT. `ADMIN` is required for create/update/delete operations.
+
+#### Categories
+- `POST /api/categories` (ADMIN) — create category
+- `GET /api/categories` — list categories
+- `PUT /api/categories/:id` (ADMIN) — rename category
+- `DELETE /api/categories/:id` (ADMIN) — delete category
+
+#### Category attributes
+- `POST /api/categories/:id/attributes` (ADMIN) — create attribute in category
+- `GET /api/categories/:id/attributes` — list attributes by category
+- `PUT /api/attributes/:id` (ADMIN) — rename attribute
+- `DELETE /api/attributes/:id` (ADMIN) — delete attribute
+
+#### Attribute values
+- `POST /api/attributes/:id/values` (ADMIN) — create value in attribute
+- `GET /api/attributes/:id/values` — list values by attribute
+- `PUT /api/values/:id` (ADMIN) — rename value
+- `DELETE /api/values/:id` (ADMIN) — delete value
+
+#### Product ↔ attributes
+- `POST /api/products/:id/attributes` (ADMIN) — append values to product (non-destructive)
+- `PUT /api/products/:id/attributes` (ADMIN) — replace full attribute set (destructive sync)
+- `DELETE /api/products/:id/attributes/:valueId` (ADMIN) — remove one value from product
+
+### Product payload changes
+
+`GET /api/products/:id` and `GET /api/products` now include:
+
+```json
+{
+  "id": "product-id",
+  "name": "Sabana Premium",
+  "categoryId": "category-id-or-null",
+  "categoryName": "Sabanas",
+  "attributes": [
+    { "attribute": "Color", "value": "Rojo" },
+    { "attribute": "Tamano", "value": "Queen" }
+  ]
+}
+```
+
+`POST /api/products` accepts optional `categoryId`:
+
+```json
+{
+  "name": "Sabana Premium",
+  "stock": 10,
+  "categoryId": "uuid-opcional"
+}
+```
+
+`PUT /api/products/:id` supports partial update of:
+- `name?: string`
+- `categoryId?: string | null`
+
+### Critical business rules
+
+1. A product can have multiple values for the same attribute (e.g. multiple colors).
+2. Attribute values are category-scoped; there are no global attributes.
+3. New attributes can be added without code changes.
+4. A product cannot receive values from a different category.
+5. When product category changes:
+   - if new category is set, old value links outside the new category are auto-cleaned
+   - if category becomes `null`, all product value links are removed
+
+### Frontend integration guide
+
+Recommended admin UI flow:
+
+1. Load categories (`GET /api/categories`)
+2. For selected category, load attributes (`GET /api/categories/:id/attributes`)
+3. For each attribute, load values (`GET /api/attributes/:id/values`)
+4. On product edit:
+   - update base product (`PUT /api/products/:id` with `name` and/or `categoryId`)
+   - then sync selections using `PUT /api/products/:id/attributes` with complete `valueIds`
+5. Render product chips from `product.attributes`
+
+`PUT /api/products/:id/attributes` body:
+
+```json
+{
+  "valueIds": ["uuid-color-rojo", "uuid-size-queen"]
+}
+```
+
+To clear all attributes:
+
+```json
+{
+  "valueIds": []
+}
+```
 

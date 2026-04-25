@@ -13,4 +13,7 @@ export interface ProductDatasource {
   delete(id: string): Promise<ProductEntity>;
   addImages(productId: string, images: UploadResult[]): Promise<ProductEntity>;
   removeImage(productId: string, imageId: string): Promise<ProductEntity>;
+  assignAttributes(productId: string, valueIds: string[]): Promise<ProductEntity>;
+  replaceAttributes(productId: string, valueIds: string[]): Promise<ProductEntity>;
+  removeAttribute(productId: string, valueId: string): Promise<ProductEntity>;
 }

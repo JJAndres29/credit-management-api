@@ -10,6 +10,16 @@ const includeImages = {
   images: {
     orderBy: { order: 'asc' as const },
   },
+  category: true,
+  attributes: {
+    include: {
+      value: {
+        include: {
+          attribute: true,
+        },
+      },
+    },
+  },
 };
 
 function buildWhere(filters: FilterProductsDto) {
@@ -70,6 +80,7 @@ export class PrismaProductDatasource implements ProductDatasource {
       data: {
         name: dto.name,
         stock: dto.stock,
+        categoryId: dto.categoryId,
       },
       include: includeImages,
     });
@@ -78,12 +89,36 @@ export class PrismaProductDatasource implements ProductDatasource {
   }
 
   async update(id: string, dto: UpdateProductDto): Promise<ProductEntity> {
-    const product = await prisma.product.update({
-      where: { id },
-      data: {
-        name: dto.name,
-      },
-      include: includeImages,
+    const product = await prisma.$transaction(async (tx) => {
+      const updated = await tx.product.update({
+        where: { id },
+        data: {
+          ...(dto.name !== undefined && { name: dto.name }),
+          ...(dto.categoryId !== undefined && { categoryId: dto.categoryId }),
+        },
+      });
+
+      if (dto.categoryId !== undefined) {
+        if (dto.categoryId === null) {
+          await tx.productAttribute.deleteMany({ where: { productId: id } });
+        } else {
+          await tx.productAttribute.deleteMany({
+            where: {
+              productId: id,
+              value: {
+                attribute: {
+                  categoryId: { not: dto.categoryId },
+                },
+              },
+            },
+          });
+        }
+      }
+
+      return tx.product.findUniqueOrThrow({
+        where: { id: updated.id },
+        include: includeImages,
+      });
     });
 
     return ProductEntity.fromObject(product as unknown as Record<string, unknown>);
@@ -131,6 +166,53 @@ export class PrismaProductDatasource implements ProductDatasource {
 
   async removeImage(productId: string, imageId: string): Promise<ProductEntity> {
     await prisma.productImage.delete({ where: { id: imageId } });
+
+    const product = await prisma.product.findUniqueOrThrow({
+      where: { id: productId },
+      include: includeImages,
+    });
+
+    return ProductEntity.fromObject(product as unknown as Record<string, unknown>);
+  }
+
+  async assignAttributes(productId: string, valueIds: string[]): Promise<ProductEntity> {
+    await prisma.productAttribute.createMany({
+      data: valueIds.map((valueId) => ({ productId, valueId })),
+      skipDuplicates: true,
+    });
+
+    const product = await prisma.product.findUniqueOrThrow({
+      where: { id: productId },
+      include: includeImages,
+    });
+
+    return ProductEntity.fromObject(product as unknown as Record<string, unknown>);
+  }
+
+  async replaceAttributes(productId: string, valueIds: string[]): Promise<ProductEntity> {
+    await prisma.$transaction(async (tx) => {
+      await tx.productAttribute.deleteMany({ where: { productId } });
+
+      if (valueIds.length > 0) {
+        await tx.productAttribute.createMany({
+          data: valueIds.map((valueId) => ({ productId, valueId })),
+          skipDuplicates: true,
+        });
+      }
+    });
+
+    const product = await prisma.product.findUniqueOrThrow({
+      where: { id: productId },
+      include: includeImages,
+    });
+
+    return ProductEntity.fromObject(product as unknown as Record<string, unknown>);
+  }
+
+  async removeAttribute(productId: string, valueId: string): Promise<ProductEntity> {
+    await prisma.productAttribute.deleteMany({
+      where: { productId, valueId },
+    });
 
     const product = await prisma.product.findUniqueOrThrow({
       where: { id: productId },
