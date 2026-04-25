@@ -5,10 +5,12 @@ export class CustomerEntity {
     public readonly id: string,
     public readonly name: string,
     public readonly email: string,
-    public readonly password: string,
     public readonly phone: string,
-    public readonly emailVerifiedAt: Date | null,
+    public readonly password: string | null,
+    public readonly googleId: string | null,
     public readonly isActive: boolean,
+    public readonly clientId: string | null,
+    public readonly mustChangePassword: boolean,
     public readonly createdAt: Date,
     public readonly updatedAt: Date,
   ) {}
@@ -19,30 +21,33 @@ export class CustomerEntity {
       name: this.name,
       email: this.email,
       phone: this.phone,
-      emailVerifiedAt: this.emailVerifiedAt,
+      googleId: this.googleId,
       isActive: this.isActive,
+      clientId: this.clientId,
+      mustChangePassword: this.mustChangePassword,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
     };
   }
 
   static fromObject(object: Record<string, unknown>): CustomerEntity {
-    const { id, name, email, password, phone, emailVerifiedAt, isActive, createdAt, updatedAt } = object;
+    const { id, name, email, phone, password, googleId, isActive, clientId, mustChangePassword, createdAt, updatedAt } = object;
 
     if (!id) throw CustomError.internalServer('Customer id is required');
     if (!name) throw CustomError.internalServer('Customer name is required');
     if (!email) throw CustomError.internalServer('Customer email is required');
-    if (!password) throw CustomError.internalServer('Customer password is required');
     if (!phone) throw CustomError.internalServer('Customer phone is required');
 
     return new CustomerEntity(
       id as string,
       name as string,
       email as string,
-      password as string,
       phone as string,
-      (emailVerifiedAt as Date | null) ?? null,
+      (password as string | null) ?? null,
+      (googleId as string | null) ?? null,
       (isActive as boolean) ?? true,
+      (clientId as string | null) ?? null,
+      (mustChangePassword as boolean) ?? false,
       (createdAt as Date) ?? new Date(),
       (updatedAt as Date) ?? new Date(),
     );

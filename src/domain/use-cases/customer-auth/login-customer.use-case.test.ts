@@ -15,10 +15,12 @@ const makeCustomer = (isActive = true): CustomerEntity =>
     'cust-id-1',
     'Ana García',
     'ana@example.com',
-    hashedPassword,
     '+573001234567',
+    hashedPassword,
     null,
     isActive,
+    null,
+    false,
     new Date(),
     new Date(),
   );
@@ -29,9 +31,14 @@ const makeDto = (email = 'ana@example.com', password = 'Secret1!'): LoginCustome
 // --- Mocks -------------------------------------------------------------------
 
 const mockRepository: jest.Mocked<CustomerRepository> = {
+  findAll: jest.fn(),
   findByEmail: jest.fn(),
   findById: jest.fn(),
+  findByGoogleId: jest.fn(),
+  findByClientId: jest.fn(),
   create: jest.fn(),
+  update: jest.fn(),
+  linkToClient: jest.fn(),
 };
 
 const mockJwtService: jest.Mocked<CustomerJwtService> = {
@@ -116,6 +123,7 @@ describe('LoginCustomerUseCase', () => {
           name: 'Ana García',
           email: 'ana@example.com',
           phone: '+573001234567',
+          mustChangePassword: false,
         },
       });
     });

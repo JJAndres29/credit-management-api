@@ -13,10 +13,12 @@ const makeCustomer = (): CustomerEntity =>
     'cust-id-1',
     'Ana García',
     'ana@example.com',
-    bcryptjs.hashSync('Secret1!', 10),
     '+573001234567',
+    bcryptjs.hashSync('Secret1!', 10),
     null,
     true,
+    null,
+    false,
     new Date(),
     new Date(),
   );
@@ -33,9 +35,14 @@ const makeDto = (overrides: Partial<Record<string, unknown>> = {}): RegisterCust
 // --- Mocks -------------------------------------------------------------------
 
 const mockRepository: jest.Mocked<CustomerRepository> = {
+  findAll: jest.fn(),
   findByEmail: jest.fn(),
   findById: jest.fn(),
+  findByGoogleId: jest.fn(),
+  findByClientId: jest.fn(),
   create: jest.fn(),
+  update: jest.fn(),
+  linkToClient: jest.fn(),
 };
 
 const mockJwtService: jest.Mocked<CustomerJwtService> = {
@@ -125,6 +132,7 @@ describe('RegisterCustomerUseCase', () => {
           name: 'Ana García',
           email: 'ana@example.com',
           phone: '+573001234567',
+          mustChangePassword: false,
         },
       });
     });
@@ -148,7 +156,7 @@ describe('RegisterCustomerUseCase', () => {
 
       const createCall = mockRepository.create.mock.calls[0][0];
       expect(createCall.password).not.toBe('Secret1!');
-      expect(bcryptjs.compareSync('Secret1!', createCall.password)).toBe(true);
+      expect(bcryptjs.compareSync('Secret1!', createCall.password as string)).toBe(true);
     });
 
     it('genera el token con el id del customer', async () => {

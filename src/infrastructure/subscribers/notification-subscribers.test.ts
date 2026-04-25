@@ -91,6 +91,7 @@ function makeMocks() {
   const mockClientRepo = {
     findById: jest.fn(),
     findByEmail: jest.fn(),
+    findByDocument: jest.fn(),
     create: jest.fn(),
     update: jest.fn(),
     delete: jest.fn(),

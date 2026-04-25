@@ -5,3 +5,5 @@ export { FileStorageService } from './file-storage.service';
 export { PdfService, AccountStatementData } from './pdf.service';
 export { LoggerService } from './logger.service';
 export { CustomerJwtService } from './customer-jwt.service';
+export { ClientLookupPort } from './client-lookup.port';
+export type { ClientSummary } from './client-lookup.port';

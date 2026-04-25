@@ -4,13 +4,14 @@ import { CustomError } from '../../errors';
 import { CustomerRepository } from '../../repositories';
 import { CustomerJwtService } from '../../services';
 
-interface RegisterCustomerResponse {
+interface CustomerAuthResponse {
   token: string;
   customer: {
     id: string;
     name: string;
     email: string;
     phone: string;
+    mustChangePassword: boolean;
   };
 }
 
@@ -20,9 +21,14 @@ export class RegisterCustomerUseCase {
     private readonly jwtService: CustomerJwtService,
   ) {}
 
-  async execute(dto: RegisterCustomerDto): Promise<RegisterCustomerResponse> {
+  async execute(dto: RegisterCustomerDto): Promise<CustomerAuthResponse> {
     const existing = await this.customerRepository.findByEmail(dto.email);
-    if (existing) throw CustomError.conflict('El email ya está registrado');
+    if (existing) {
+      if (existing.googleId && !existing.password) {
+        throw CustomError.conflict('El email ya está registrado mediante Google. Inicia sesión con Google o recupera tu contraseña.');
+      }
+      throw CustomError.conflict('El email ya está registrado');
+    }
 
     const hashedPassword = bcryptjs.hashSync(dto.password, 10);
     const customer = await this.customerRepository.create({
@@ -41,6 +47,7 @@ export class RegisterCustomerUseCase {
         name: customer.name,
         email: customer.email,
         phone: customer.phone,
+        mustChangePassword: customer.mustChangePassword,
       },
     };
   }

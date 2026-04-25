@@ -386,6 +386,86 @@ Exchange a valid JWT for a new one (extends session).
 
 ---
 
+### Customer Authentication
+
+These endpoints are for the E-commerce platform (customers).
+
+#### POST `/api/customer-auth/register`
+
+Register a new customer account using local credentials.
+
+> Rate limited: **10 requests per 15 minutes**.
+
+**Request body:**
+```json
+{
+  "name": "Ana García",
+  "email": "ana@example.com",
+  "password": "StrongPassword1!",
+  "phone": "+573001234567"
+}
+```
+
+**Response `201`:** Returns token and customer data.
+**Response `409`:** Returns conflict error. If the email is already registered via Google without a password, it will indicate the user should sign in via Google or recover their password.
+
+#### POST `/api/customer-auth/login`
+
+Authenticate a customer using email and password.
+
+> Rate limited: **10 requests per 15 minutes**.
+
+**Response `401`:** `{ "error": "Credenciales inválidas" }` — Anti-enumeration protection.
+
+#### POST `/api/customer-auth/google`
+
+Authenticate or register a customer using Google OAuth 2.0.
+
+> Rate limited: **10 requests per 15 minutes**.
+
+**Request body:**
+```json
+{
+  "idToken": "eyJhbG..."
+}
+```
+
+**Response `200`:** Returns token and customer data.
+
+#### POST `/api/customer-auth/forgot-password`
+
+Request a password reset for a local account.
+
+**Request body:**
+```json
+{
+  "email": "ana@example.com"
+}
+```
+
+**Response `200`:** Returns success message regardless of whether the email exists (anti-enumeration).
+
+#### PATCH `/api/customer-auth/change-password`
+
+Change the password for the currently authenticated customer.
+
+> Requires Customer JWT.
+
+**Request body:**
+```json
+{
+  "currentPassword": "OldPassword1!",
+  "newPassword": "NewPassword1!"
+}
+```
+
+#### GET `/api/customer-auth/me`
+
+Get the authenticated customer's profile and linked client summary (if any).
+
+> Requires Customer JWT.
+
+---
 ### Products
 
 All product endpoints require `Authorization: Bearer <token>`.

@@ -17,6 +17,10 @@ if (!process.env.JWT_CUSTOMER_SECRET) {
   console.warn('[envs] JWT_CUSTOMER_SECRET not set — customer auth disabled');
 }
 
+if (!process.env.GOOGLE_CLIENT_ID) {
+  console.warn('[envs] GOOGLE_CLIENT_ID not set — Google OAuth disabled');
+}
+
 export const envs = {
   port: Number(process.env.PORT),
   nodeEnv: process.env.NODE_ENV ?? 'development',
@@ -39,4 +43,5 @@ export const envs = {
     token: process.env.META_WHATSAPP_TOKEN ?? '',
     phoneNumberId: process.env.META_WHATSAPP_PHONE_NUMBER_ID ?? '',
   },
+  googleClientId: process.env.GOOGLE_CLIENT_ID ?? '',
 };

@@ -20,6 +20,10 @@ export class ClientRepositoryImpl implements ClientRepository {
     return this.datasource.findByEmail(email);
   }
 
+  findByDocument(documentType: string, documentNumber: string): Promise<ClientEntity | null> {
+    return this.datasource.findByDocument(documentType, documentNumber);
+  }
+
   create(dto: CreateClientDto): Promise<ClientEntity> {
     return this.datasource.create(dto);
   }

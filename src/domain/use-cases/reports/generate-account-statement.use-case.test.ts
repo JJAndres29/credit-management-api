@@ -46,6 +46,7 @@ function makePayment(id: string, clientId: string): PaymentEntity {
 const mockClientRepo = {
   findById: jest.fn(),
   findByEmail: jest.fn(),
+  findByDocument: jest.fn(),
   create: jest.fn(),
   update: jest.fn(),
   delete: jest.fn(),

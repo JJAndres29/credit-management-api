@@ -5,3 +5,4 @@ export { NodemailerEmailService } from './nodemailer-email.service';
 export { PdfkitPdfService } from './pdfkit-pdf.service';
 export { PinoLoggerService, globalLogger } from './pino-logger.service';
 export { CustomerJwtAdapter } from './customer-jwt.adapter';
+export { ClientLookupAdapter } from './client-lookup.adapter';

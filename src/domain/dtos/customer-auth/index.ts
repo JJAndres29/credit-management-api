@@ -1,2 +1,8 @@
+export { GoogleAuthDto } from './google-auth.dto';
+export { ClaimClientDto } from './claim-client.dto';
+export { UpdateCustomerDto } from './update-customer.dto';
+export { FilterCustomersDto } from './filter-customers.dto';
 export { RegisterCustomerDto } from './register-customer.dto';
 export { LoginCustomerDto } from './login-customer.dto';
+export { ChangePasswordDto } from './change-password.dto';
+export { ForgotPasswordDto } from './forgot-password.dto';

@@ -77,6 +77,16 @@ export class PrismaClientDatasource implements ClientDatasource {
     return ClientEntity.fromObject(client as unknown as Record<string, unknown>);
   }
 
+  async findByDocument(documentType: string, documentNumber: string): Promise<ClientEntity | null> {
+    const client = await prisma.client.findFirst({
+      where: { documentType: documentType as 'CC' | 'CE', documentNumber, isActive: true },
+    });
+
+    if (!client) return null;
+
+    return ClientEntity.fromObject(client as unknown as Record<string, unknown>);
+  }
+
   async create(dto: CreateClientDto): Promise<ClientEntity> {
     const client = await prisma.client.create({
       data: {

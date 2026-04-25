@@ -1,3 +1,11 @@
+export { GoogleAuthUseCase } from './google-auth.use-case';
+export { RenewCustomerTokenUseCase } from './renew-customer-token.use-case';
+export { ClaimClientUseCase } from './claim-client.use-case';
+export { GetCustomerProfileUseCase } from './get-customer-profile.use-case';
+export { GetCustomersUseCase } from './get-customers.use-case';
+export { UpdateCustomerUseCase } from './update-customer.use-case';
 export { RegisterCustomerUseCase } from './register-customer.use-case';
 export { LoginCustomerUseCase } from './login-customer.use-case';
-export { RenewCustomerTokenUseCase } from './renew-customer-token.use-case';
+export { ChangeCustomerPasswordUseCase } from './change-customer-password.use-case';
+export { ForgotCustomerPasswordUseCase } from './forgot-customer-password.use-case';
+export { ResetCustomerPasswordUseCase } from './reset-customer-password.use-case';
