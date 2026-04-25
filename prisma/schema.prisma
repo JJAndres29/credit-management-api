@@ -5,6 +5,7 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
 enum Role {
@@ -161,4 +162,16 @@ model NotificationLog {
   sentAt       DateTime @default(now())
 
   client Client @relation(fields: [clientId], references: [id])
+}
+
+model Customer {
+  id              String    @id @default(uuid())
+  name            String
+  email           String    @unique
+  password        String
+  phone           String
+  emailVerifiedAt DateTime?
+  isActive        Boolean   @default(true)
+  createdAt       DateTime  @default(now())
+  updatedAt       DateTime  @updatedAt
 }

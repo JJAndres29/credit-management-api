@@ -4,3 +4,4 @@ export { NotificationService } from './notification.service';
 export { FileStorageService } from './file-storage.service';
 export { PdfService, AccountStatementData } from './pdf.service';
 export { LoggerService } from './logger.service';
+export { CustomerJwtService } from './customer-jwt.service';

@@ -6,3 +6,4 @@ export { PrismaSaleDatasource } from './prisma-sale.datasource';
 export { PrismaPaymentDatasource } from './prisma-payment.datasource';
 export { PrismaAuditLogDatasource } from './prisma-audit-log.datasource';
 export { PrismaDashboardDatasource } from './prisma-dashboard.datasource';
+export { PrismaCustomerDatasource } from './prisma-customer.datasource';

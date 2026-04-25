@@ -6,3 +6,4 @@ export { SaleRepositoryImpl } from './sale.repository.impl';
 export { PaymentRepositoryImpl } from './payment.repository.impl';
 export { AuditLogRepositoryImpl } from './audit-log.repository.impl';
 export { DashboardRepositoryImpl } from './dashboard.repository.impl';
+export { CustomerRepositoryImpl } from './customer.repository.impl';

@@ -10,3 +10,5 @@ export { AuditLogDatasource } from './audit-log.datasource';
 export type { AuditLogData } from './audit-log.datasource';
 export { DashboardDatasource } from './dashboard.datasource';
 export type { DashboardRawMetrics, DashboardActiveCreditSale } from './dashboard.datasource';
+export { CustomerDatasource } from './customer.datasource';
+export type { CustomerCreateData } from './customer.datasource';
