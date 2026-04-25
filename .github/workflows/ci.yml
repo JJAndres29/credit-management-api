@@ -18,8 +18,11 @@ jobs:
           --health-retries 5
     env:
       DATABASE_URL: postgresql://test:test@localhost:5432/credit_test
+      PORT: 3000
       JWT_SECRET: test-secret-minimum-64-chars-long-aaaaaaaaaaaaaaaaaaaaaaaaaaaa
       JWT_EXPIRES_IN: 1h
+      JWT_CUSTOMER_SECRET: test-customer-secret-minimum-32-chars-long-aaaaaaaaaa
+      JWT_CUSTOMER_EXPIRES_IN: 1h
       NODE_ENV: test
     steps:
       - uses: actions/checkout@v4
