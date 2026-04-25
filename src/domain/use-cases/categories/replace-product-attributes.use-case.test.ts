@@ -28,6 +28,7 @@ const mockProductRepo = {
   assignAttributes: jest.fn(),
   replaceAttributes: jest.fn(),
   removeAttribute: jest.fn(),
+  updateRetailPrice: jest.fn(),
 } as jest.Mocked<ProductRepository>;
 
 const mockCategoryRepo = {

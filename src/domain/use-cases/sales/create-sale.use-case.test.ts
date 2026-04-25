@@ -53,6 +53,7 @@ function makeProduct(overrides: Partial<{
     overrides.id ?? 'prod-1',
     'Producto Test',
     overrides.stock ?? 50,
+    null,
     [],
     null,
     null,
@@ -112,6 +113,7 @@ const mockProductRepo = {
   assignAttributes: jest.fn(),
   replaceAttributes: jest.fn(),
   removeAttribute: jest.fn(),
+  updateRetailPrice: jest.fn(),
 } as jest.Mocked<ProductRepository>;
 
 const mockSaleRepo = {
