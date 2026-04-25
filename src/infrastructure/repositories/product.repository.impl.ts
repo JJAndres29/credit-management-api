@@ -41,6 +41,10 @@ export class ProductRepositoryImpl implements ProductRepository {
     return this.datasource.removeImage(productId, imageId);
   }
 
+  updateRetailPrice(id: string, retailPrice: number | null): Promise<ProductEntity> {
+    return this.datasource.updateRetailPrice(id, retailPrice);
+  }
+
   assignAttributes(productId: string, valueIds: string[]): Promise<ProductEntity> {
     return this.datasource.assignAttributes(productId, valueIds);
   }

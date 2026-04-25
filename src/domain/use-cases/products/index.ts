@@ -3,6 +3,7 @@ export { GetProductByIdUseCase } from './get-product-by-id.use-case';
 export { CreateProductUseCase } from './create-product.use-case';
 export { UpdateProductUseCase } from './update-product.use-case';
 export { AdjustStockUseCase } from './adjust-stock.use-case';
+export { UpdateRetailPriceUseCase } from './update-retail-price.use-case';
 export { DeleteProductUseCase } from './delete-product.use-case';
 export { UploadProductImagesUseCase } from './upload-product-images.use-case';
 export { DeleteProductImageUseCase } from './delete-product-image.use-case';

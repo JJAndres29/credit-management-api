@@ -175,6 +175,16 @@ export class PrismaProductDatasource implements ProductDatasource {
     return ProductEntity.fromObject(product as unknown as Record<string, unknown>);
   }
 
+  async updateRetailPrice(id: string, retailPrice: number | null): Promise<ProductEntity> {
+    const product = await prisma.product.update({
+      where: { id },
+      data: { retailPrice },
+      include: includeImages,
+    });
+
+    return ProductEntity.fromObject(product as unknown as Record<string, unknown>);
+  }
+
   async assignAttributes(productId: string, valueIds: string[]): Promise<ProductEntity> {
     await prisma.productAttribute.createMany({
       data: valueIds.map((valueId) => ({ productId, valueId })),

@@ -6,6 +6,7 @@ import {
   CreateProductUseCase,
   UpdateProductUseCase,
   AdjustStockUseCase,
+  UpdateRetailPriceUseCase,
   DeleteProductUseCase,
   UploadProductImagesUseCase,
   DeleteProductImageUseCase,
@@ -34,6 +35,7 @@ export class ProductRouter {
       new CreateProductUseCase(repository, categoryRepository),
       new UpdateProductUseCase(repository, categoryRepository),
       new AdjustStockUseCase(repository),
+      new UpdateRetailPriceUseCase(repository),
       new DeleteProductUseCase(repository),
       new UploadProductImagesUseCase(repository, cloudinary),
       new DeleteProductImageUseCase(repository, cloudinary),
@@ -73,6 +75,9 @@ export class ProductRouter {
 
     // PATCH /api/products/:id/stock
     router.patch('/:id/stock', checkRole(Role.ADMIN), controller.adjustStock);
+
+    // PATCH /api/products/:id/retail-price
+    router.patch('/:id/retail-price', checkRole(Role.ADMIN), controller.updateRetailPrice);
 
     // POST /api/products/:id/images  — sube 1 a 5 imágenes
     router.post('/:id/images', checkRole(Role.ADMIN), uploadImages, controller.uploadImages);

@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { CustomError } from '../../domain/errors';
-import { CreateProductDto, UpdateProductDto, AdjustStockDto, FilterProductsDto } from '../../domain/dtos/products';
+import { CreateProductDto, UpdateProductDto, AdjustStockDto, FilterProductsDto, UpdateRetailPriceDto } from '../../domain/dtos/products';
 import { AssignProductAttributesDto, ReplaceProductAttributesDto } from '../../domain/dtos/categories';
 import { PaginationDto } from '../../domain/dtos/shared';
 import { GetProductsUseCase } from '../../domain/use-cases/products/get-products.use-case';
@@ -8,6 +8,7 @@ import { GetProductByIdUseCase } from '../../domain/use-cases/products/get-produ
 import { CreateProductUseCase } from '../../domain/use-cases/products/create-product.use-case';
 import { UpdateProductUseCase } from '../../domain/use-cases/products/update-product.use-case';
 import { AdjustStockUseCase } from '../../domain/use-cases/products/adjust-stock.use-case';
+import { UpdateRetailPriceUseCase } from '../../domain/use-cases/products/update-retail-price.use-case';
 import { DeleteProductUseCase } from '../../domain/use-cases/products/delete-product.use-case';
 import { UploadProductImagesUseCase } from '../../domain/use-cases/products/upload-product-images.use-case';
 import { DeleteProductImageUseCase } from '../../domain/use-cases/products/delete-product-image.use-case';
@@ -22,6 +23,7 @@ export class ProductController {
     private readonly createProductUseCase: CreateProductUseCase,
     private readonly updateProductUseCase: UpdateProductUseCase,
     private readonly adjustStockUseCase: AdjustStockUseCase,
+    private readonly updateRetailPriceUseCase: UpdateRetailPriceUseCase,
     private readonly deleteProductUseCase: DeleteProductUseCase,
     private readonly uploadProductImagesUseCase: UploadProductImagesUseCase,
     private readonly deleteProductImageUseCase: DeleteProductImageUseCase,
@@ -96,6 +98,22 @@ export class ProductController {
 
     try {
       const product = await this.adjustStockUseCase.execute(req.params.id, dto!.quantity);
+      res.json(product);
+    } catch (err) {
+      this.handleError(err, res);
+    }
+  };
+
+  updateRetailPrice = async (req: Request, res: Response): Promise<void> => {
+    const [error, dto] = UpdateRetailPriceDto.create(req.body as Record<string, unknown>);
+
+    if (error) {
+      res.status(400).json({ error });
+      return;
+    }
+
+    try {
+      const product = await this.updateRetailPriceUseCase.execute(req.params.id, dto!.retailPrice);
       res.json(product);
     } catch (err) {
       this.handleError(err, res);

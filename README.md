@@ -278,7 +278,7 @@ API available at: `http://localhost:3000`
 ```
 User             — System staff with role (ADMIN | SELLER)
 Client           — Credit customers: credit limit, current balance, contact info
-Product          — Inventory items: name, stock count (no fixed price — price is set at sale time)
+Product          — Inventory items: name, stock count, optional retailPrice (suggested display price — not used in sale calculations)
 ProductImage     — Product photos: Cloudinary URL, publicId, display order (one product → many images)
 Sale             — Orders per client: type (CASH | CREDIT), status (PAID | PENDING | PARTIAL), optional installment plan and collection days
 SaleItem         — Line items per sale: product, quantity, basePrice (price at sale time), unitPrice, subtotal
@@ -495,6 +495,7 @@ Returns active products with their images, sorted by creation date (newest first
       "id": "uuid",
       "name": "Camisa Azul",
       "stock": 100,
+      "retailPrice": 59900,
       "images": [
         {
           "id": "uuid",
@@ -549,8 +550,9 @@ Create a new product. Images are added separately via `POST /:id/images`.
 |-------|------|----------|-----------|
 | `name` | string | Yes | Min 2 characters |
 | `stock` | number | No | Integer >= 0, defaults to `0` |
+| `categoryId` | string | No | Must reference an existing category |
 
-> Products have no fixed price. The seller sets the price per unit when creating each sale.
+> Products have no fixed price. The seller sets the price per unit when creating each sale. `retailPrice` is an optional reference price set separately via `PATCH /:id/retail-price`.
 
 **Response `201`:** Created product object with empty `images` array.
 
@@ -589,6 +591,34 @@ Adjust stock by a positive or negative integer. The use case validates the resul
 | `quantity` | integer | Non-zero. Positive to add, negative to subtract |
 
 **Response `400`:** Insufficient stock (would result in negative stock).
+
+**Response `404`:** Product not found or inactive.
+
+---
+
+#### PATCH `/api/products/:id/retail-price`
+
+Set or clear the suggested retail price (precio de vitrina) for a product. This is a reference price shown to staff — the actual sale price is still set manually per item when creating a sale.
+
+> **Requires `ADMIN` role.**
+
+**Request body:**
+```json
+{ "retailPrice": 59900 }
+```
+
+To clear the price:
+```json
+{ "retailPrice": null }
+```
+
+| Field | Type | Validation |
+|-------|------|-----------|
+| `retailPrice` | number \| null | Required field. If number: must be > 0, max 2 decimal places. Pass `null` to clear |
+
+**Response `200`:** Updated product object with the new `retailPrice`.
+
+**Response `400`:** Validation error (missing field, negative value, more than 2 decimals).
 
 **Response `404`:** Product not found or inactive.
 
@@ -1451,6 +1481,7 @@ npm run db:seed         # Create default admin user
 | 14 | Custom dates — optional `createdAt` (ISO 8601) on sale/payment creation; `createdAt` correction on payment update (`PUT /payments/:id`); `PUT /sales/:id` for collection days + sale date (ADMIN) | ✅ Done |
 | 15 | Timezone fix — `notify-client.use-case.ts` `fmtDate` now uses `Intl.DateTimeFormat` with `timeZone: 'America/Bogota'` (was calling `Date.getDate()` in UTC) | ✅ Done |
 | 16 | Sale deletion (`DELETE /api/sales/:id` — ADMIN, no-payments guard, stock restored, CREDIT balance reverted + `SALE_DELETED` audit log, atomic transaction) | ✅ Done |
+| 17 | Product retail price (`PATCH /api/products/:id/retail-price` — ADMIN, sets/clears optional suggested display price `retailPrice Decimal?` on Product; pure reference field, never affects sale calculations) | ✅ Done |
 
 ---
 
