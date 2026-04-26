@@ -61,6 +61,8 @@ export class OnlineOrderEntity {
     public readonly paidAt: Date | null,
     public readonly createdAt: Date,
     public readonly items: OnlineOrderItemEntity[],
+    public readonly paymentGatewayReference: string | null,
+    public readonly paymentUrl: string | null,
   ) {}
 
   toJSON() {
@@ -75,6 +77,8 @@ export class OnlineOrderEntity {
       status: this.status,
       totalAmount: this.totalAmount,
       paymentMethod: this.paymentMethod,
+      paymentGatewayReference: this.paymentGatewayReference,
+      paymentUrl: this.paymentUrl,
       expiresAt: this.expiresAt,
       paidAt: this.paidAt,
       createdAt: this.createdAt,
@@ -86,6 +90,7 @@ export class OnlineOrderEntity {
     const {
       id, orderNumber, customerId, guestName, guestPhone, guestEmail,
       shippingAddress, status, totalAmount, paymentMethod,
+      paymentGatewayReference, paymentUrl,
       expiresAt, paidAt, createdAt, items,
     } = object;
 
@@ -110,6 +115,8 @@ export class OnlineOrderEntity {
       paidAt ? new Date(paidAt as string | Date) : null,
       new Date(createdAt as string | Date),
       parsedItems,
+      (paymentGatewayReference as string | null | undefined) ?? null,
+      (paymentUrl as string | null | undefined) ?? null,
     );
   }
 }

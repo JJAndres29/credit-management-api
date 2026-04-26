@@ -21,6 +21,10 @@ if (!process.env.GOOGLE_CLIENT_ID) {
   console.warn('[envs] GOOGLE_CLIENT_ID not set — Google OAuth disabled');
 }
 
+if (!process.env.MP_ACCESS_TOKEN || !process.env.MP_WEBHOOK_SECRET) {
+  console.warn('[envs] MP_ACCESS_TOKEN or MP_WEBHOOK_SECRET not set — Mercado Pago gateway disabled');
+}
+
 export const envs = {
   port: Number(process.env.PORT),
   nodeEnv: process.env.NODE_ENV ?? 'development',
@@ -44,4 +48,15 @@ export const envs = {
     phoneNumberId: process.env.META_WHATSAPP_PHONE_NUMBER_ID ?? '',
   },
   googleClientId: process.env.GOOGLE_CLIENT_ID ?? '',
+  mercadopago: {
+    accessToken: process.env.MP_ACCESS_TOKEN ?? '',
+    webhookSecret: process.env.MP_WEBHOOK_SECRET ?? '',
+    baseUrl: process.env.MP_BASE_URL ?? 'https://api.mercadopago.com',
+    appUrl: process.env.APP_URL ?? '',
+    backUrls: {
+      success: process.env.MP_BACK_URL_SUCCESS ?? '',
+      failure: process.env.MP_BACK_URL_FAILURE ?? '',
+      pending: process.env.MP_BACK_URL_PENDING ?? '',
+    },
+  },
 };

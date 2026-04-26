@@ -7,3 +7,4 @@ export { PinoLoggerService, globalLogger } from './pino-logger.service';
 export { CustomerJwtAdapter } from './customer-jwt.adapter';
 export { ClientLookupAdapter } from './client-lookup.adapter';
 export { ProductCatalogAdapter } from './product-catalog.adapter';
+export { MercadoPagoGatewayAdapter } from './mercadopago-gateway.adapter';

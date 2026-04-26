@@ -2,6 +2,7 @@ import { CreateOnlineOrderUseCase } from './create-online-order.use-case';
 import { CreateOnlineOrderDto } from '../../dtos/online-orders';
 import { OnlineOrderRepository } from '../../repositories/online-order.repository';
 import { ProductCatalogPort, ProductForOrder } from '../../services/product-catalog.port';
+import { IPaymentGateway } from '../../services/payment-gateway.port';
 import { OnlineOrderEntity, OrderStatus, OrderPaymentMethod } from '../../entities/online-order.entity';
 import { PaginationDto } from '../../dtos/shared';
 import { FilterOnlineOrdersDto } from '../../dtos/online-orders';
@@ -34,6 +35,8 @@ const makeOrder = (): OnlineOrderEntity =>
     null,
     new Date(),
     [],
+    null,
+    null,
   );
 
 const makeGuestDto = (overrides: Partial<Record<string, unknown>> = {}): CreateOnlineOrderDto =>
@@ -54,11 +57,23 @@ const mockCatalog: jest.Mocked<ProductCatalogPort> = {
   incrementStock: jest.fn(),
 };
 
+const mockGateway: jest.Mocked<IPaymentGateway> = {
+  generatePaymentLink: jest.fn(),
+  verifyTransaction: jest.fn(),
+  verifyWebhookSignature: jest.fn(),
+  parseWebhookEvent: jest.fn(),
+};
+
 const mockRepo: jest.Mocked<OnlineOrderRepository> = {
   create: jest.fn(),
   findById: jest.fn(),
   findByOrderNumberAndEmail: jest.fn(),
   findAll: jest.fn(),
+  updatePaymentLink: jest.fn(),
+  markAsPaid: jest.fn(),
+  markAsCancelled: jest.fn(),
+  webhookExists: jest.fn(),
+  saveProcessedWebhook: jest.fn(),
 };
 
 // ─── DTO validation tests ────────────────────────────────────────────────────
@@ -259,8 +274,12 @@ describe('CreateOnlineOrderUseCase', () => {
         guestEmail: 'ana@test.com',
       })[1]!;
 
+      mockGateway.generatePaymentLink.mockResolvedValue({ url: 'https://mp.com/pay', gatewayReference: 'pref-1' });
+      mockRepo.updatePaymentLink.mockResolvedValue(makeOrder());
+      const useCaseWithGateway = new CreateOnlineOrderUseCase(mockRepo, mockCatalog, mockGateway);
+
       const before = Date.now();
-      await useCase.execute(dto, null);
+      await useCaseWithGateway.execute(dto, null);
       const after = Date.now();
 
       const createArg = mockRepo.create.mock.calls[0][0];
@@ -278,10 +297,15 @@ describe('CreateOnlineOrderUseCase', () => {
   });
 
   describe('éxito como customer autenticado', () => {
+    let useCaseWithGateway: CreateOnlineOrderUseCase;
+
     beforeEach(() => {
       mockCatalog.getForOrder.mockResolvedValue(makeProduct({ retailPrice: 30 }));
       mockCatalog.decrementStockAtomic.mockResolvedValue(true);
       mockRepo.create.mockResolvedValue(makeOrder());
+      mockGateway.generatePaymentLink.mockResolvedValue({ url: 'https://mp.com/pay', gatewayReference: 'pref-1' });
+      mockRepo.updatePaymentLink.mockResolvedValue(makeOrder());
+      useCaseWithGateway = new CreateOnlineOrderUseCase(mockRepo, mockCatalog, mockGateway);
     });
 
     it('pasa customerId al repositorio y no guestEmail', async () => {
@@ -291,7 +315,7 @@ describe('CreateOnlineOrderUseCase', () => {
         shippingAddress: 'Av. 10',
       })[1]!;
 
-      await useCase.execute(dto, 'customer-uuid-123');
+      await useCaseWithGateway.execute(dto, 'customer-uuid-123');
 
       const createArg = mockRepo.create.mock.calls[0][0];
       expect(createArg.customerId).toBe('customer-uuid-123');

@@ -1798,3 +1798,67 @@ To clear all attributes:
 }
 ```
 
+---
+
+## Payment Gateway (Mercado Pago)
+
+### Flujo completo
+
+```
+POST /api/online-orders   (paymentMethod: ONLINE_GATEWAY)
+  → CreateOnlineOrderUseCase
+      → reserva stock
+      → crea OnlineOrder en BD
+      → MercadoPagoGatewayAdapter.generatePaymentLink(order)
+           POST /checkout/preferences { external_reference: order.id, ... }
+           ← { id: prefId, sandbox_init_point, init_point }
+      → onlineOrderRepository.updatePaymentLink(order.id, url, prefId)
+  ← { order, paymentUrl: "https://sandbox.mercadopago.com/..." }
+
+El usuario paga en la URL de Mercado Pago.
+MP llama al webhook del servidor:
+
+POST /api/ecommerce/webhooks/mercadopago
+  → verifyWebhookSignature(rawBody, headers)  → 401 si falla
+  → parseWebhookEvent(rawBody)
+      → { eventId: body.id, paymentId: body.data.id }
+  → ProcessPaymentWebhookUseCase.execute({ provider: 'mercadopago', eventId, paymentId })
+      → idempotencia: ProcessedWebhook lookup
+      → verifyTransaction(paymentId)  →  GET /v1/payments/{paymentId}
+           ← { status, transaction_amount, external_reference: order.id }
+      → findById(external_reference)
+      APPROVED + monto ok  → markAsPaid (transacción atómica + ProcessedWebhook)
+      APPROVED + mismatch  → log crítico + saveProcessedWebhook
+      DECLINED             → markAsCancelled + restaurar stock vía ProductCatalogPort
+      PENDING              → ignorar (MP reintenta; no escribe ProcessedWebhook)
+  ← 200 siempre (evitar reintentos dobles de MP)
+```
+
+### Variables de entorno
+
+| Variable | Requerida | Default | Descripción |
+|---|---|---|---|
+| `MP_ACCESS_TOKEN` | Sí | — | Access token de producción o sandbox |
+| `MP_WEBHOOK_SECRET` | Sí | — | Secret para verificar firmas HMAC |
+| `MP_BASE_URL` | No | `https://api.mercadopago.com` | URL base de la API |
+| `APP_URL` | Sí | — | URL pública del servidor (para `notification_url`) |
+| `MP_BACK_URL_SUCCESS` | No | — | Redirección tras pago exitoso |
+| `MP_BACK_URL_FAILURE` | No | — | Redirección tras pago fallido |
+| `MP_BACK_URL_PENDING` | No | — | Redirección para pago pendiente |
+
+Si faltan `MP_ACCESS_TOKEN` o `MP_WEBHOOK_SECRET` el servidor arranca con `console.warn` y la pasarela queda deshabilitada. Usar `paymentMethod: ONLINE_GATEWAY` retorna `400`.
+
+### Seguridad
+
+- **Firma HMAC SHA256**: `id:{dataId};request-id:{xRequestId};ts:{ts};` comparado con `timingSafeEqual`.
+- **Idempotencia**: `ProcessedWebhook @@unique([provider, eventId])` previene doble procesamiento.
+- **Trust-but-verify**: el monto final viene de `GET /v1/payments/{id}`, nunca del payload del webhook.
+- **Transacción atómica**: `markAsPaid` / `markAsCancelled` escriben orden + `ProcessedWebhook` en un solo `prisma.$transaction`.
+
+### Pruebas en sandbox
+
+1. Obtener credenciales en [MP Developers](https://www.mercadopago.com.co/developers/).
+2. Configurar `.env` con `MP_ACCESS_TOKEN=TEST-...` y `APP_URL=https://<ngrok>`.
+3. Exponer con `ngrok http 3000` y registrar el webhook en el panel de MP.
+4. [Tarjetas de prueba oficiales de MP](https://www.mercadopago.com.co/developers/es/docs/checkout-pro/additional-content/your-integrations/test/cards).
+

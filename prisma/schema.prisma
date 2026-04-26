@@ -245,22 +245,33 @@ enum OrderPaymentMethod {
 }
 
 model OnlineOrder {
-  id              String             @id @default(uuid())
-  orderNumber     Int                @unique @default(autoincrement())
-  customerId      String?
-  guestName       String?
-  guestPhone      String?
-  guestEmail      String?
-  shippingAddress String
-  status          OrderStatus        @default(PENDING_PAYMENT)
-  totalAmount     Decimal            @db.Decimal(10, 2)
-  paymentMethod   OrderPaymentMethod
-  expiresAt       DateTime?
-  paidAt          DateTime?
-  createdAt       DateTime           @default(now())
+  id                      String             @id @default(uuid())
+  orderNumber             Int                @unique @default(autoincrement())
+  customerId              String?
+  guestName               String?
+  guestPhone              String?
+  guestEmail              String?
+  shippingAddress         String
+  status                  OrderStatus        @default(PENDING_PAYMENT)
+  totalAmount             Decimal            @db.Decimal(10, 2)
+  paymentMethod           OrderPaymentMethod
+  paymentGatewayReference String?            @unique
+  paymentUrl              String?
+  expiresAt               DateTime?
+  paidAt                  DateTime?
+  createdAt               DateTime           @default(now())
 
   customer Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
   items    OnlineOrderItem[]
+}
+
+model ProcessedWebhook {
+  id          String   @id @default(uuid())
+  provider    String
+  eventId     String
+  processedAt DateTime @default(now())
+
+  @@unique([provider, eventId])
 }
 
 model OnlineOrderItem {

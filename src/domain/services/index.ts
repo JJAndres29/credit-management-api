@@ -9,3 +9,5 @@ export { ClientLookupPort } from './client-lookup.port';
 export type { ClientSummary } from './client-lookup.port';
 export { ProductCatalogPort } from './product-catalog.port';
 export type { ProductForOrder } from './product-catalog.port';
+export { IPaymentGateway } from './payment-gateway.port';
+export type { GatewayTransactionStatus } from './payment-gateway.port';

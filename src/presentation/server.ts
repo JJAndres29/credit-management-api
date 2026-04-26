@@ -15,6 +15,7 @@ import { CustomerAuthRouter } from './customer-auth/customer-auth.router';
 import { CategoryRouter } from './categories/category.router';
 import { AttributeRouter } from './categories/attribute.router';
 import { OnlineOrderRouter } from './online-orders/online-order.router';
+import { EcommerceRouter } from './ecommerce/ecommerce.router';
 import helmet from 'helmet';
 import cors from 'cors';
 
@@ -41,6 +42,9 @@ export class Server {
       allowedHeaders: ['Content-Type', 'Authorization'],
       credentials: true,
     }));
+
+    // Register webhook route BEFORE express.json() so rawBody is preserved for HMAC verification
+    this.app.use('/api/ecommerce', EcommerceRouter.routes);
 
     this.app.use(express.json({ limit: '10kb' }) );
     this.app.use(express.urlencoded({ extended: true, limit: '10kb' }));

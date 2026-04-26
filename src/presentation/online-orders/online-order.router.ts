@@ -7,7 +7,7 @@ import {
 } from '../../domain/use-cases/online-orders';
 import { OnlineOrderRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaOnlineOrderDatasource } from '../../infrastructure/datasources';
-import { ProductCatalogAdapter, CustomerJwtAdapter } from '../../infrastructure/services';
+import { ProductCatalogAdapter, CustomerJwtAdapter, MercadoPagoGatewayAdapter } from '../../infrastructure/services';
 import { CustomerRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaCustomerDatasource } from '../../infrastructure/datasources';
 import { AuthMiddleware, checkRole } from '../middlewares';
@@ -46,6 +46,7 @@ export class OnlineOrderRouter {
 
     const orderRepository = new OnlineOrderRepositoryImpl(new PrismaOnlineOrderDatasource());
     const productCatalog = new ProductCatalogAdapter();
+    const paymentGateway = new MercadoPagoGatewayAdapter();
 
     const customerRepository = new CustomerRepositoryImpl(new PrismaCustomerDatasource());
     const customerJwt = new CustomerJwtAdapter();
@@ -57,7 +58,7 @@ export class OnlineOrderRouter {
     );
 
     const controller = new OnlineOrderController(
-      new CreateOnlineOrderUseCase(orderRepository, productCatalog),
+      new CreateOnlineOrderUseCase(orderRepository, productCatalog, paymentGateway),
       new GetOnlineOrderByIdUseCase(orderRepository),
       new GetOnlineOrdersUseCase(orderRepository),
     );

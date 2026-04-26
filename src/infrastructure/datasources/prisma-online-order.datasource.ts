@@ -1,6 +1,11 @@
 import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma';
-import { OnlineOrderDatasource, OnlineOrderCreateData, OnlineOrderFilters } from '../../domain/datasources/online-order.datasource';
+import {
+  OnlineOrderDatasource,
+  OnlineOrderCreateData,
+  OnlineOrderFilters,
+  WebhookData,
+} from '../../domain/datasources/online-order.datasource';
 import { OnlineOrderEntity } from '../../domain/entities/online-order.entity';
 import { PaginationDto } from '../../domain/dtos/shared';
 import { PaginatedResult } from '../../domain/types/paginated.type';
@@ -99,5 +104,59 @@ export class PrismaOnlineOrderDatasource implements OnlineOrderDatasource {
         hasPrevPage: pagination.page > 1,
       },
     };
+  }
+
+  async updatePaymentLink(
+    id: string,
+    paymentUrl: string,
+    gatewayReference: string,
+  ): Promise<OnlineOrderEntity> {
+    const order = await prisma.onlineOrder.update({
+      where: { id },
+      data: { paymentUrl, paymentGatewayReference: gatewayReference },
+      include: includeItems,
+    });
+    return mapToEntity(order as unknown as Record<string, unknown>);
+  }
+
+  async markAsPaid(id: string, webhookData: WebhookData): Promise<OnlineOrderEntity> {
+    return await prisma.$transaction(async (tx) => {
+      const order = await tx.onlineOrder.update({
+        where: { id },
+        data: { status: 'PAID', paidAt: new Date() },
+        include: includeItems,
+      });
+      await tx.processedWebhook.create({
+        data: { provider: webhookData.provider, eventId: webhookData.eventId },
+      });
+      return mapToEntity(order as unknown as Record<string, unknown>);
+    });
+  }
+
+  async markAsCancelled(id: string, webhookData: WebhookData): Promise<OnlineOrderEntity> {
+    return await prisma.$transaction(async (tx) => {
+      const order = await tx.onlineOrder.update({
+        where: { id },
+        data: { status: 'CANCELLED' },
+        include: includeItems,
+      });
+      await tx.processedWebhook.create({
+        data: { provider: webhookData.provider, eventId: webhookData.eventId },
+      });
+      return mapToEntity(order as unknown as Record<string, unknown>);
+    });
+  }
+
+  async webhookExists(provider: string, eventId: string): Promise<boolean> {
+    const found = await prisma.processedWebhook.findUnique({
+      where: { provider_eventId: { provider, eventId } },
+    });
+    return found !== null;
+  }
+
+  async saveProcessedWebhook(data: WebhookData): Promise<void> {
+    await prisma.processedWebhook.create({
+      data: { provider: data.provider, eventId: data.eventId },
+    });
   }
 }
