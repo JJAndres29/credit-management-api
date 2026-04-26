@@ -13,3 +13,5 @@ export type { DashboardRawMetrics, DashboardActiveCreditSale } from './dashboard
 export { CustomerDatasource } from './customer.datasource';
 export type { CustomerCreateData, CustomerUpdateData, FilterCustomersData } from './customer.datasource';
 export { CategoryDatasource } from './category.datasource';
+export { OnlineOrderDatasource } from './online-order.datasource';
+export type { OnlineOrderCreateData, OnlineOrderFilters, OnlineOrderItemCreateData } from './online-order.datasource';

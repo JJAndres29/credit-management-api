@@ -7,3 +7,5 @@ export { LoggerService } from './logger.service';
 export { CustomerJwtService } from './customer-jwt.service';
 export { ClientLookupPort } from './client-lookup.port';
 export type { ClientSummary } from './client-lookup.port';
+export { ProductCatalogPort } from './product-catalog.port';
+export type { ProductForOrder } from './product-catalog.port';

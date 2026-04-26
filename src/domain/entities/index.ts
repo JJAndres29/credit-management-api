@@ -10,3 +10,4 @@ export { PaymentEntity } from './payment.entity';
 export { AuditLogEntity, AuditAction } from './audit-log.entity';
 export type { AuditAction as AuditActionType } from './audit-log.entity';
 export { CustomerEntity } from './customer.entity';
+export { OnlineOrderEntity, OnlineOrderItemEntity, OrderStatus, OrderPaymentMethod } from './online-order.entity';

@@ -80,10 +80,11 @@ model Product {
   createdAt   DateTime @default(now())
   updatedAt   DateTime @updatedAt
 
-  category   Category?         @relation(fields: [categoryId], references: [id])
-  images     ProductImage[]
-  saleItems  SaleItem[]
-  attributes ProductAttribute[]
+  category         Category?         @relation(fields: [categoryId], references: [id])
+  images           ProductImage[]
+  saleItems        SaleItem[]
+  attributes       ProductAttribute[]
+  onlineOrderItems OnlineOrderItem[]
 }
 
 model Category {
@@ -227,5 +228,49 @@ model Customer {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  client             Client?  @relation(fields: [clientId], references: [id])
+  client             Client?       @relation(fields: [clientId], references: [id])
+  onlineOrders       OnlineOrder[]
+}
+
+enum OrderStatus {
+  PENDING_PAYMENT
+  PAID
+  EXPIRED
+  CANCELLED
+}
+
+enum OrderPaymentMethod {
+  ONLINE_GATEWAY
+  WHATSAPP_MANUAL
+}
+
+model OnlineOrder {
+  id              String             @id @default(uuid())
+  orderNumber     Int                @unique @default(autoincrement())
+  customerId      String?
+  guestName       String?
+  guestPhone      String?
+  guestEmail      String?
+  shippingAddress String
+  status          OrderStatus        @default(PENDING_PAYMENT)
+  totalAmount     Decimal            @db.Decimal(10, 2)
+  paymentMethod   OrderPaymentMethod
+  expiresAt       DateTime?
+  paidAt          DateTime?
+  createdAt       DateTime           @default(now())
+
+  customer Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  items    OnlineOrderItem[]
+}
+
+model OnlineOrderItem {
+  id                  String  @id @default(uuid())
+  orderId             String
+  productId           String
+  quantity            Int
+  unitPrice           Decimal @db.Decimal(10, 2)
+  productNameSnapshot String
+
+  order   OnlineOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product     @relation(fields: [productId], references: [id])
 }

@@ -14,6 +14,7 @@ import { HealthRouter } from './health/health.router';
 import { CustomerAuthRouter } from './customer-auth/customer-auth.router';
 import { CategoryRouter } from './categories/category.router';
 import { AttributeRouter } from './categories/attribute.router';
+import { OnlineOrderRouter } from './online-orders/online-order.router';
 import helmet from 'helmet';
 import cors from 'cors';
 
@@ -58,6 +59,7 @@ export class Server {
     this.app.use('/api/customer-auth', CustomerAuthRouter.routes);
     this.app.use('/api/categories', CategoryRouter.routes);
     this.app.use('/api', AttributeRouter.routes);
+    this.app.use('/api/online-orders', OnlineOrderRouter.routes);
 
     this.app.use(this.handleError);
 

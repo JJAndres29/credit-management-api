@@ -1,0 +1,313 @@
+import { CreateOnlineOrderUseCase } from './create-online-order.use-case';
+import { CreateOnlineOrderDto } from '../../dtos/online-orders';
+import { OnlineOrderRepository } from '../../repositories/online-order.repository';
+import { ProductCatalogPort, ProductForOrder } from '../../services/product-catalog.port';
+import { OnlineOrderEntity, OrderStatus, OrderPaymentMethod } from '../../entities/online-order.entity';
+import { PaginationDto } from '../../dtos/shared';
+import { FilterOnlineOrdersDto } from '../../dtos/online-orders';
+import { PaginatedResult } from '../../types/paginated.type';
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+
+const makeProduct = (overrides: Partial<ProductForOrder> = {}): ProductForOrder => ({
+  id: 'prod-1',
+  name: 'Camisa Azul',
+  retailPrice: 50,
+  stock: 10,
+  isActive: true,
+  ...overrides,
+});
+
+const makeOrder = (): OnlineOrderEntity =>
+  new OnlineOrderEntity(
+    'order-uuid-1',
+    1001,
+    null,
+    'Juan Guest',
+    '+57300',
+    'juan@example.com',
+    'Calle 1 #2-3',
+    OrderStatus.PENDING_PAYMENT,
+    100,
+    OrderPaymentMethod.WHATSAPP_MANUAL,
+    new Date(Date.now() + 24 * 60 * 60 * 1000),
+    null,
+    new Date(),
+    [],
+  );
+
+const makeGuestDto = (overrides: Partial<Record<string, unknown>> = {}): CreateOnlineOrderDto =>
+  CreateOnlineOrderDto.create({
+    items: [{ productId: 'prod-1', quantity: 2 }],
+    paymentMethod: OrderPaymentMethod.WHATSAPP_MANUAL,
+    shippingAddress: 'Calle 1 #2-3',
+    guestName: 'Juan Guest',
+    guestEmail: 'juan@example.com',
+    ...overrides,
+  })[1]!;
+
+// ─── Mocks ───────────────────────────────────────────────────────────────────
+
+const mockCatalog: jest.Mocked<ProductCatalogPort> = {
+  getForOrder: jest.fn(),
+  decrementStockAtomic: jest.fn(),
+  incrementStock: jest.fn(),
+};
+
+const mockRepo: jest.Mocked<OnlineOrderRepository> = {
+  create: jest.fn(),
+  findById: jest.fn(),
+  findByOrderNumberAndEmail: jest.fn(),
+  findAll: jest.fn(),
+};
+
+// ─── DTO validation tests ────────────────────────────────────────────────────
+
+describe('CreateOnlineOrderDto.create()', () => {
+  it('rechaza items vacío', () => {
+    const [error] = CreateOnlineOrderDto.create({
+      items: [],
+      paymentMethod: OrderPaymentMethod.WHATSAPP_MANUAL,
+      shippingAddress: 'Dir 1',
+      guestName: 'A',
+      guestEmail: 'a@b.com',
+    });
+    expect(error).toMatch(/items/i);
+  });
+
+  it('rechaza quantity <= 0', () => {
+    const [error] = CreateOnlineOrderDto.create({
+      items: [{ productId: 'p1', quantity: 0 }],
+      paymentMethod: OrderPaymentMethod.WHATSAPP_MANUAL,
+      shippingAddress: 'Dir 1',
+      guestName: 'Ana',
+      guestEmail: 'a@b.com',
+    });
+    expect(error).toMatch(/quantity/i);
+  });
+
+  it('rechaza paymentMethod inválido', () => {
+    const [error] = CreateOnlineOrderDto.create({
+      items: [{ productId: 'p1', quantity: 1 }],
+      paymentMethod: 'INVALID',
+      shippingAddress: 'Dir 1',
+      guestName: 'Ana',
+      guestEmail: 'a@b.com',
+    });
+    expect(error).toMatch(/paymentMethod/i);
+  });
+
+  it('rechaza guestEmail inválido cuando hay campos de invitado', () => {
+    const [error] = CreateOnlineOrderDto.create({
+      items: [{ productId: 'p1', quantity: 1 }],
+      paymentMethod: OrderPaymentMethod.WHATSAPP_MANUAL,
+      shippingAddress: 'Dir 1',
+      guestName: 'Ana',
+      guestEmail: 'no-es-email',
+    });
+    expect(error).toMatch(/guestEmail/i);
+  });
+
+  it('rechaza productos duplicados', () => {
+    const [error] = CreateOnlineOrderDto.create({
+      items: [
+        { productId: 'p1', quantity: 1 },
+        { productId: 'p1', quantity: 2 },
+      ],
+      paymentMethod: OrderPaymentMethod.WHATSAPP_MANUAL,
+      shippingAddress: 'Dir 1',
+      guestName: 'Ana',
+      guestEmail: 'ana@test.com',
+    });
+    expect(error).toMatch(/mismo producto/i);
+  });
+
+  it('crea DTO válido para invitado', () => {
+    const [error, dto] = CreateOnlineOrderDto.create({
+      items: [{ productId: 'p1', quantity: 3 }],
+      paymentMethod: OrderPaymentMethod.ONLINE_GATEWAY,
+      shippingAddress: '  Carrera 5 #10  ',
+      guestName: '  Ana  ',
+      guestEmail: '  Ana@EXAMPLE.COM  ',
+    });
+    expect(error).toBeUndefined();
+    expect(dto!.guestEmail).toBe('ana@example.com');
+    expect(dto!.guestName).toBe('Ana');
+    expect(dto!.shippingAddress).toBe('Carrera 5 #10');
+    expect(dto!.items[0].quantity).toBe(3);
+  });
+});
+
+// ─── Use case tests ──────────────────────────────────────────────────────────
+
+describe('CreateOnlineOrderUseCase', () => {
+  let useCase: CreateOnlineOrderUseCase;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    useCase = new CreateOnlineOrderUseCase(mockRepo, mockCatalog);
+  });
+
+  describe('retailPrice null → 400', () => {
+    it('lanza badRequest si el producto no tiene retailPrice configurado', async () => {
+      mockCatalog.getForOrder.mockResolvedValue(makeProduct({ retailPrice: null }));
+
+      await expect(useCase.execute(makeGuestDto(), null)).rejects.toMatchObject({
+        statusCode: 400,
+        message: expect.stringContaining('precio de venta en línea'),
+      });
+      expect(mockCatalog.decrementStockAtomic).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('producto no encontrado → 404', () => {
+    it('lanza notFound si getForOrder retorna null', async () => {
+      mockCatalog.getForOrder.mockResolvedValue(null);
+
+      await expect(useCase.execute(makeGuestDto(), null)).rejects.toMatchObject({
+        statusCode: 404,
+      });
+    });
+  });
+
+  describe('producto inactivo → 400', () => {
+    it('lanza badRequest si el producto no está activo', async () => {
+      mockCatalog.getForOrder.mockResolvedValue(makeProduct({ isActive: false }));
+
+      await expect(useCase.execute(makeGuestDto(), null)).rejects.toMatchObject({
+        statusCode: 400,
+      });
+    });
+  });
+
+  describe('stock insuficiente → 409 + rollback', () => {
+    it('lanza conflict y llama incrementStock de los items ya reservados', async () => {
+      const dto = CreateOnlineOrderDto.create({
+        items: [
+          { productId: 'prod-1', quantity: 2 },
+          { productId: 'prod-2', quantity: 3 },
+        ],
+        paymentMethod: OrderPaymentMethod.WHATSAPP_MANUAL,
+        shippingAddress: 'Calle 1',
+        guestName: 'Juan',
+        guestEmail: 'juan@test.com',
+      })[1]!;
+
+      mockCatalog.getForOrder.mockImplementation(async (id) =>
+        makeProduct({ id, name: `Product ${id}`, retailPrice: 10 }),
+      );
+      // prod-1 reserves OK, prod-2 fails
+      mockCatalog.decrementStockAtomic
+        .mockResolvedValueOnce(true)
+        .mockResolvedValueOnce(false);
+      mockCatalog.incrementStock.mockResolvedValue(undefined);
+
+      await expect(useCase.execute(dto, null)).rejects.toMatchObject({ statusCode: 409 });
+
+      // Must rollback prod-1
+      expect(mockCatalog.incrementStock).toHaveBeenCalledWith('prod-1', 2);
+      expect(mockRepo.create).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('éxito como invitado', () => {
+    beforeEach(() => {
+      mockCatalog.getForOrder.mockResolvedValue(makeProduct({ retailPrice: 50 }));
+      mockCatalog.decrementStockAtomic.mockResolvedValue(true);
+      mockRepo.create.mockResolvedValue(makeOrder());
+    });
+
+    it('retorna { order, paymentUrl: null }', async () => {
+      const result = await useCase.execute(makeGuestDto(), null);
+      expect(result.paymentUrl).toBeNull();
+      expect(result.order).toBeInstanceOf(OnlineOrderEntity);
+    });
+
+    it('total = sum(retailPrice × qty) calculado server-side', async () => {
+      await useCase.execute(makeGuestDto(), null);
+
+      const createArg = mockRepo.create.mock.calls[0][0];
+      // items: 1 item, quantity=2, retailPrice=50 → total=100
+      expect(createArg.totalAmount).toBe(100);
+    });
+
+    it('guarda productNameSnapshot del catálogo', async () => {
+      await useCase.execute(makeGuestDto(), null);
+
+      const createArg = mockRepo.create.mock.calls[0][0];
+      expect(createArg.items[0].productNameSnapshot).toBe('Camisa Azul');
+    });
+
+    it('expiresAt = now+24h para WHATSAPP_MANUAL', async () => {
+      const before = Date.now();
+      await useCase.execute(makeGuestDto(), null);
+      const after = Date.now();
+
+      const createArg = mockRepo.create.mock.calls[0][0];
+      const expiryMs = createArg.expiresAt.getTime();
+      const twentyFourH = 24 * 60 * 60 * 1000;
+      expect(expiryMs).toBeGreaterThanOrEqual(before + twentyFourH - 100);
+      expect(expiryMs).toBeLessThanOrEqual(after + twentyFourH + 100);
+    });
+
+    it('expiresAt = now+30min para ONLINE_GATEWAY', async () => {
+      const dto = CreateOnlineOrderDto.create({
+        items: [{ productId: 'prod-1', quantity: 2 }],
+        paymentMethod: OrderPaymentMethod.ONLINE_GATEWAY,
+        shippingAddress: 'Calle 1',
+        guestName: 'Ana',
+        guestEmail: 'ana@test.com',
+      })[1]!;
+
+      const before = Date.now();
+      await useCase.execute(dto, null);
+      const after = Date.now();
+
+      const createArg = mockRepo.create.mock.calls[0][0];
+      const thirtyMin = 30 * 60 * 1000;
+      expect(createArg.expiresAt.getTime()).toBeGreaterThanOrEqual(before + thirtyMin - 100);
+      expect(createArg.expiresAt.getTime()).toBeLessThanOrEqual(after + thirtyMin + 100);
+    });
+
+    it('pasa guestEmail en createData', async () => {
+      await useCase.execute(makeGuestDto(), null);
+      const createArg = mockRepo.create.mock.calls[0][0];
+      expect(createArg.guestEmail).toBe('juan@example.com');
+      expect(createArg.customerId).toBeNull();
+    });
+  });
+
+  describe('éxito como customer autenticado', () => {
+    beforeEach(() => {
+      mockCatalog.getForOrder.mockResolvedValue(makeProduct({ retailPrice: 30 }));
+      mockCatalog.decrementStockAtomic.mockResolvedValue(true);
+      mockRepo.create.mockResolvedValue(makeOrder());
+    });
+
+    it('pasa customerId al repositorio y no guestEmail', async () => {
+      const dto = CreateOnlineOrderDto.create({
+        items: [{ productId: 'prod-1', quantity: 1 }],
+        paymentMethod: OrderPaymentMethod.ONLINE_GATEWAY,
+        shippingAddress: 'Av. 10',
+      })[1]!;
+
+      await useCase.execute(dto, 'customer-uuid-123');
+
+      const createArg = mockRepo.create.mock.calls[0][0];
+      expect(createArg.customerId).toBe('customer-uuid-123');
+      expect(createArg.guestEmail).toBeNull();
+    });
+  });
+
+  describe('rollback de stock si falla la persistencia', () => {
+    it('libera el stock reservado si onlineOrderRepository.create lanza error', async () => {
+      mockCatalog.getForOrder.mockResolvedValue(makeProduct({ retailPrice: 20 }));
+      mockCatalog.decrementStockAtomic.mockResolvedValue(true);
+      mockCatalog.incrementStock.mockResolvedValue(undefined);
+      mockRepo.create.mockRejectedValue(new Error('DB error'));
+
+      await expect(useCase.execute(makeGuestDto(), null)).rejects.toThrow('DB error');
+      expect(mockCatalog.incrementStock).toHaveBeenCalledWith('prod-1', 2);
+    });
+  });
+});
