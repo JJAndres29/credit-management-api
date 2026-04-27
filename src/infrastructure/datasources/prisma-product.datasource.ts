@@ -33,6 +33,7 @@ function buildWhere(filters: FilterProductsDto) {
       name: { contains: filters.search, mode: 'insensitive' as const },
     }),
     ...(Object.keys(stockFilter).length > 0 && { stock: stockFilter }),
+    ...(filters.categoryId && { categoryId: filters.categoryId }),
   };
 }
 

@@ -35,15 +35,15 @@ export class CategoryRouter {
       new AuthRepositoryImpl(new PrismaAuthDatasource()),
     );
 
-    router.use(middleware.validateJwt);
-
-    router.post('/', checkRole(Role.ADMIN), controller.create);
+    // Público
     router.get('/', controller.getAll);
-    router.put('/:id', checkRole(Role.ADMIN), controller.update);
-    router.delete('/:id', checkRole(Role.ADMIN), controller.delete);
-
-    router.post('/:id/attributes', checkRole(Role.ADMIN), controller.createAttribute);
     router.get('/:id/attributes', controller.getCategoryAttributes);
+
+    // Staff JWT + ADMIN
+    router.post('/', middleware.validateJwt, checkRole(Role.ADMIN), controller.create);
+    router.put('/:id', middleware.validateJwt, checkRole(Role.ADMIN), controller.update);
+    router.delete('/:id', middleware.validateJwt, checkRole(Role.ADMIN), controller.delete);
+    router.post('/:id/attributes', middleware.validateJwt, checkRole(Role.ADMIN), controller.createAttribute);
 
     return router;
   }

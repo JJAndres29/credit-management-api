@@ -49,44 +49,21 @@ export class ProductRouter {
       new AuthRepositoryImpl(new PrismaAuthDatasource()),
     );
 
-    // Todas las rutas requieren autenticación
-    router.use(middleware.validateJwt);
-
-    // GET /api/products
+    // Público
     router.get('/', controller.getAll);
-
-    // GET /api/products/:id
     router.get('/:id', controller.getById);
 
-    // POST /api/products/:id/attributes
-    router.post('/:id/attributes', checkRole(Role.ADMIN), controller.assignAttributes);
-
-    // PUT /api/products/:id/attributes
-    router.put('/:id/attributes', checkRole(Role.ADMIN), controller.replaceAttributes);
-
-    // DELETE /api/products/:id/attributes/:valueId
-    router.delete('/:id/attributes/:valueId', checkRole(Role.ADMIN), controller.deleteAttribute);
-
-    // POST /api/products
-    router.post('/', checkRole(Role.ADMIN), controller.create);
-
-    // PUT /api/products/:id
-    router.put('/:id', checkRole(Role.ADMIN), controller.update);
-
-    // PATCH /api/products/:id/stock
-    router.patch('/:id/stock', checkRole(Role.ADMIN), controller.adjustStock);
-
-    // PATCH /api/products/:id/retail-price
-    router.patch('/:id/retail-price', checkRole(Role.ADMIN), controller.updateRetailPrice);
-
-    // POST /api/products/:id/images  — sube 1 a 5 imágenes
-    router.post('/:id/images', checkRole(Role.ADMIN), uploadImages, controller.uploadImages);
-
-    // DELETE /api/products/:id/images/:imageId
-    router.delete('/:id/images/:imageId', checkRole(Role.ADMIN), controller.deleteImage);
-
-    // DELETE /api/products/:id
-    router.delete('/:id', checkRole(Role.ADMIN), controller.delete);
+    // Staff JWT + ADMIN
+    router.post('/:id/attributes', middleware.validateJwt, checkRole(Role.ADMIN), controller.assignAttributes);
+    router.put('/:id/attributes', middleware.validateJwt, checkRole(Role.ADMIN), controller.replaceAttributes);
+    router.delete('/:id/attributes/:valueId', middleware.validateJwt, checkRole(Role.ADMIN), controller.deleteAttribute);
+    router.post('/', middleware.validateJwt, checkRole(Role.ADMIN), controller.create);
+    router.put('/:id', middleware.validateJwt, checkRole(Role.ADMIN), controller.update);
+    router.patch('/:id/stock', middleware.validateJwt, checkRole(Role.ADMIN), controller.adjustStock);
+    router.patch('/:id/retail-price', middleware.validateJwt, checkRole(Role.ADMIN), controller.updateRetailPrice);
+    router.post('/:id/images', middleware.validateJwt, checkRole(Role.ADMIN), uploadImages, controller.uploadImages);
+    router.delete('/:id/images/:imageId', middleware.validateJwt, checkRole(Role.ADMIN), controller.deleteImage);
+    router.delete('/:id', middleware.validateJwt, checkRole(Role.ADMIN), controller.delete);
 
     return router;
   }

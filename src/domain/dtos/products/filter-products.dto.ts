@@ -1,12 +1,15 @@
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export class FilterProductsDto {
   private constructor(
     public readonly search?: string,
     public readonly minStock?: number,
     public readonly maxStock?: number,
+    public readonly categoryId?: string,
   ) {}
 
   static create(object: Record<string, unknown>): [string?, FilterProductsDto?] {
-    const { search, minStock, maxStock } = object;
+    const { search, minStock, maxStock, categoryId } = object;
 
     if (search !== undefined && typeof search !== 'string') {
       return ['search debe ser una cadena de texto'];
@@ -32,12 +35,21 @@ export class FilterProductsDto {
       return ['minStock no puede ser mayor que maxStock'];
     }
 
+    let categoryIdStr: string | undefined;
+    if (categoryId !== undefined) {
+      if (typeof categoryId !== 'string' || !UUID_V4.test(categoryId)) {
+        return ['categoryId debe ser un UUID v4 válido'];
+      }
+      categoryIdStr = categoryId;
+    }
+
     return [
       undefined,
       new FilterProductsDto(
         search ? (search as string).trim() : undefined,
         minStockNum,
         maxStockNum,
+        categoryIdStr,
       ),
     ];
   }
