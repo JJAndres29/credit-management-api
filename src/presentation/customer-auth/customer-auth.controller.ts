@@ -4,6 +4,7 @@ import {
   GoogleAuthDto,
   ClaimClientDto,
   UpdateCustomerDto,
+  UpdateCustomerProfileDto,
   FilterCustomersDto,
   RegisterCustomerDto,
   LoginCustomerDto,
@@ -18,6 +19,7 @@ import {
   GetCustomerProfileUseCase,
   GetCustomersUseCase,
   UpdateCustomerUseCase,
+  UpdateCustomerProfileUseCase,
   RegisterCustomerUseCase,
   LoginCustomerUseCase,
   ChangeCustomerPasswordUseCase,
@@ -36,6 +38,7 @@ export class CustomerAuthController {
     private readonly getProfileUseCase: GetCustomerProfileUseCase,
     private readonly getCustomersUseCase: GetCustomersUseCase,
     private readonly updateCustomerUseCase: UpdateCustomerUseCase,
+    private readonly updateCustomerProfileUseCase: UpdateCustomerProfileUseCase,
     private readonly registerCustomerUseCase: RegisterCustomerUseCase,
     private readonly loginCustomerUseCase: LoginCustomerUseCase,
     private readonly changeCustomerPasswordUseCase: ChangeCustomerPasswordUseCase,
@@ -106,6 +109,14 @@ export class CustomerAuthController {
     try {
       await this.changeCustomerPasswordUseCase.execute(req.customer!.id, dto!);
       res.json({ message: 'Contraseña actualizada correctamente' });
+    } catch (err) { this.handleError(err, res); }
+  };
+
+  updateProfile = async (req: CustomerRequest, res: Response): Promise<void> => {
+    const [error, dto] = UpdateCustomerProfileDto.create(req.body as Record<string, unknown>);
+    if (error) { res.status(400).json({ error }); return; }
+    try {
+      res.json(await this.updateCustomerProfileUseCase.execute(req.customer!.id, dto!));
     } catch (err) { this.handleError(err, res); }
   };
 

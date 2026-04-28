@@ -7,6 +7,7 @@ import {
   GetCustomerProfileUseCase,
   GetCustomersUseCase,
   UpdateCustomerUseCase,
+  UpdateCustomerProfileUseCase,
   RegisterCustomerUseCase,
   LoginCustomerUseCase,
   ChangeCustomerPasswordUseCase,
@@ -75,6 +76,7 @@ export class CustomerAuthRouter {
       new GetCustomerProfileUseCase(customerRepository, clientLookupPort),
       new GetCustomersUseCase(customerRepository),
       new UpdateCustomerUseCase(customerRepository),
+      new UpdateCustomerProfileUseCase(customerRepository),
       new RegisterCustomerUseCase(customerRepository, customerJwtService),
       new LoginCustomerUseCase(customerRepository, customerJwtService),
       new ChangeCustomerPasswordUseCase(customerRepository),
@@ -94,6 +96,7 @@ export class CustomerAuthRouter {
     router.post('/renew', customerMiddleware.validateCustomerJwt, controller.renewToken);
     router.post('/claim-client', customerMiddleware.validateCustomerJwt, controller.claimClient);
     router.get('/me', customerMiddleware.validateCustomerJwt, controller.getProfile);
+    router.patch('/me', customerMiddleware.validateCustomerJwt, controller.updateProfile);
     router.patch('/change-password', customerMiddleware.validateCustomerJwt, controller.changePassword);
 
     // Admin (staff JWT + ADMIN role)

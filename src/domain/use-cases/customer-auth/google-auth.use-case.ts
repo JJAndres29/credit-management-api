@@ -34,12 +34,18 @@ export class GoogleAuthUseCase {
     let customer = await this.customerRepository.findByGoogleId(payload.sub);
 
     if (!customer) {
-      customer = await this.customerRepository.create({
-        name: payload.name,
-        email: payload.email,
-        phone: '',
-        googleId: payload.sub,
-      });
+      // Email may already exist from a classic registration — link instead of create
+      const existing = await this.customerRepository.findByEmail(payload.email);
+      if (existing) {
+        customer = await this.customerRepository.update(existing.id, { googleId: payload.sub });
+      } else {
+        customer = await this.customerRepository.create({
+          name: payload.name,
+          email: payload.email,
+          phone: '',
+          googleId: payload.sub,
+        });
+      }
     }
 
     if (!customer.isActive) {

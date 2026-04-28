@@ -2,24 +2,13 @@ import { CustomError } from '../../errors';
 import { CustomerRepository } from '../../repositories';
 import { CustomerJwtService } from '../../services';
 
-interface CustomerAuthResponse {
-  token: string;
-  customer: {
-    id: string;
-    name: string;
-    email: string;
-    phone: string;
-    mustChangePassword: boolean;
-  };
-}
-
 export class RenewCustomerTokenUseCase {
   constructor(
     private readonly customerRepository: CustomerRepository,
     private readonly jwtService: CustomerJwtService,
   ) {}
 
-  async execute(customerId: string): Promise<CustomerAuthResponse> {
+  async execute(customerId: string) {
     const customer = await this.customerRepository.findById(customerId);
 
     if (!customer || !customer.isActive) {
@@ -28,15 +17,6 @@ export class RenewCustomerTokenUseCase {
 
     const token = await this.jwtService.generateToken({ id: customer.id });
 
-    return {
-      token,
-      customer: {
-        id: customer.id,
-        name: customer.name,
-        email: customer.email,
-        phone: customer.phone,
-        mustChangePassword: customer.mustChangePassword,
-      },
-    };
+    return { token, customer: customer.toJSON() };
   }
 }

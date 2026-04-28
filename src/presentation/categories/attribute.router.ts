@@ -33,14 +33,12 @@ export class AttributeRouter {
       new AuthRepositoryImpl(new PrismaAuthDatasource()),
     );
 
-    router.use(middleware.validateJwt);
-
-    router.delete('/attributes/:id', checkRole(Role.ADMIN), controller.deleteAttribute);
-    router.put('/attributes/:id', checkRole(Role.ADMIN), controller.updateAttribute);
-    router.post('/attributes/:id/values', checkRole(Role.ADMIN), controller.createValue);
+    router.delete('/attributes/:id', middleware.validateJwt, checkRole(Role.ADMIN), controller.deleteAttribute);
+    router.put('/attributes/:id', middleware.validateJwt, checkRole(Role.ADMIN), controller.updateAttribute);
+    router.post('/attributes/:id/values', middleware.validateJwt, checkRole(Role.ADMIN), controller.createValue);
     router.get('/attributes/:id/values', controller.getValues);
-    router.put('/values/:id', checkRole(Role.ADMIN), controller.updateValue);
-    router.delete('/values/:id', checkRole(Role.ADMIN), controller.deleteValue);
+    router.put('/values/:id', middleware.validateJwt, checkRole(Role.ADMIN), controller.updateValue);
+    router.delete('/values/:id', middleware.validateJwt, checkRole(Role.ADMIN), controller.deleteValue);
 
     return router;
   }

@@ -34,7 +34,9 @@ export class Server {
 
   start(): void {
 
-    this.app.use(helmet());
+    this.app.use(helmet({
+      crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
+    }));
 
     this.app.use(cors({
       origin: this.getAllowedOrigins(),
@@ -62,8 +64,8 @@ export class Server {
     this.app.use('/api/dashboard', DashboardRouter.routes);
     this.app.use('/api/customer-auth', CustomerAuthRouter.routes);
     this.app.use('/api/categories', CategoryRouter.routes);
-    this.app.use('/api', AttributeRouter.routes);
     this.app.use('/api/online-orders', OnlineOrderRouter.routes);
+    this.app.use('/api', AttributeRouter.routes);
 
     this.app.use(this.handleError);
 

@@ -4,24 +4,13 @@ import { CustomError } from '../../errors';
 import { CustomerRepository } from '../../repositories';
 import { CustomerJwtService } from '../../services';
 
-interface CustomerAuthResponse {
-  token: string;
-  customer: {
-    id: string;
-    name: string;
-    email: string;
-    phone: string;
-    mustChangePassword: boolean;
-  };
-}
-
 export class LoginCustomerUseCase {
   constructor(
     private readonly customerRepository: CustomerRepository,
     private readonly jwtService: CustomerJwtService,
   ) {}
 
-  async execute(dto: LoginCustomerDto): Promise<CustomerAuthResponse> {
+  async execute(dto: LoginCustomerDto) {
     const customer = await this.customerRepository.findByEmail(dto.email);
 
     // Anti-enumeration: mismo mensaje para email inexistente, inactivo o password incorrecto
@@ -40,15 +29,6 @@ export class LoginCustomerUseCase {
 
     const token = await this.jwtService.generateToken({ id: customer.id });
 
-    return {
-      token,
-      customer: {
-        id: customer.id,
-        name: customer.name,
-        email: customer.email,
-        phone: customer.phone,
-        mustChangePassword: customer.mustChangePassword,
-      },
-    };
+    return { token, customer: customer.toJSON() };
   }
 }

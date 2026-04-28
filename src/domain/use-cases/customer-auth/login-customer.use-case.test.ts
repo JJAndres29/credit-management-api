@@ -21,6 +21,7 @@ const makeCustomer = (isActive = true): CustomerEntity =>
     isActive,
     null,
     false,
+    null,
     new Date(),
     new Date(),
   );
@@ -116,7 +117,7 @@ describe('LoginCustomerUseCase', () => {
 
       const result = await useCase.execute(makeDto());
 
-      expect(result).toEqual({
+      expect(result).toMatchObject({
         token: 'customer-jwt-token',
         customer: {
           id: 'cust-id-1',

@@ -95,9 +95,11 @@ export class PrismaCustomerDatasource implements CustomerDatasource {
         ...(data.name !== undefined && { name: data.name }),
         ...(data.email !== undefined && { email: data.email }),
         ...(data.phone !== undefined && { phone: data.phone }),
+        ...(data.address !== undefined && { address: data.address }),
         ...(data.password !== undefined && { password: data.password }),
         ...(data.mustChangePassword !== undefined && { mustChangePassword: data.mustChangePassword }),
         ...(data.isActive !== undefined && { isActive: data.isActive }),
+        ...(data.googleId !== undefined && { googleId: data.googleId }),
       },
     });
     return mapToEntity(row as unknown as Record<string, unknown>);

@@ -11,6 +11,7 @@ export class CustomerEntity {
     public readonly isActive: boolean,
     public readonly clientId: string | null,
     public readonly mustChangePassword: boolean,
+    public readonly address: string | null,
     public readonly createdAt: Date,
     public readonly updatedAt: Date,
   ) {}
@@ -25,18 +26,19 @@ export class CustomerEntity {
       isActive: this.isActive,
       clientId: this.clientId,
       mustChangePassword: this.mustChangePassword,
+      address: this.address,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
     };
   }
 
   static fromObject(object: Record<string, unknown>): CustomerEntity {
-    const { id, name, email, phone, password, googleId, isActive, clientId, mustChangePassword, createdAt, updatedAt } = object;
+    const { id, name, email, phone, password, googleId, isActive, clientId, mustChangePassword, address, createdAt, updatedAt } = object;
 
     if (!id) throw CustomError.internalServer('Customer id is required');
     if (!name) throw CustomError.internalServer('Customer name is required');
     if (!email) throw CustomError.internalServer('Customer email is required');
-    if (!phone) throw CustomError.internalServer('Customer phone is required');
+    if (phone === undefined || phone === null) throw CustomError.internalServer('Customer phone is required');
 
     return new CustomerEntity(
       id as string,
@@ -48,6 +50,7 @@ export class CustomerEntity {
       (isActive as boolean) ?? true,
       (clientId as string | null) ?? null,
       (mustChangePassword as boolean) ?? false,
+      (address as string | null) ?? null,
       (createdAt as Date) ?? new Date(),
       (updatedAt as Date) ?? new Date(),
     );

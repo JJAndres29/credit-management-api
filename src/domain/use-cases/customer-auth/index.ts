@@ -9,3 +9,4 @@ export { LoginCustomerUseCase } from './login-customer.use-case';
 export { ChangeCustomerPasswordUseCase } from './change-customer-password.use-case';
 export { ForgotCustomerPasswordUseCase } from './forgot-customer-password.use-case';
 export { ResetCustomerPasswordUseCase } from './reset-customer-password.use-case';
+export { UpdateCustomerProfileUseCase } from './update-customer-profile.use-case';

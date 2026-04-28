@@ -6,3 +6,4 @@ export { RegisterCustomerDto } from './register-customer.dto';
 export { LoginCustomerDto } from './login-customer.dto';
 export { ChangePasswordDto } from './change-password.dto';
 export { ForgotPasswordDto } from './forgot-password.dto';
+export { UpdateCustomerProfileDto } from './update-customer-profile.dto';

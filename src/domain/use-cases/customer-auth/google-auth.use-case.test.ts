@@ -17,6 +17,7 @@ const makeCustomer = (overrides: Partial<{ isActive: boolean }> = {}): CustomerE
     overrides.isActive ?? true,
     null,
     false,
+    null,
     new Date(),
     new Date(),
   );
@@ -118,6 +119,7 @@ describe('GoogleAuthUseCase', () => {
   describe('customer nuevo (primer login)', () => {
     it('crea customer con datos de Google si no existe', async () => {
       mockCustomerRepo.findByGoogleId.mockResolvedValue(null);
+      mockCustomerRepo.findByEmail.mockResolvedValue(null);
       mockCustomerRepo.create.mockResolvedValue(makeCustomer());
       mockJwtService.generateToken.mockResolvedValue('jwt-token');
 
@@ -130,12 +132,31 @@ describe('GoogleAuthUseCase', () => {
 
     it('retorna token y customer recién creado', async () => {
       mockCustomerRepo.findByGoogleId.mockResolvedValue(null);
+      mockCustomerRepo.findByEmail.mockResolvedValue(null);
       mockCustomerRepo.create.mockResolvedValue(makeCustomer());
       mockJwtService.generateToken.mockResolvedValue('jwt-token');
 
       const result = await useCase.execute(makeDto());
 
       expect(result).toMatchObject({ token: 'jwt-token' });
+    });
+  });
+
+  describe('email ya existe (registro clásico previo)', () => {
+    it('vincula googleId al customer existente en lugar de crear uno nuevo', async () => {
+      const existing = makeCustomer();
+      mockCustomerRepo.findByGoogleId.mockResolvedValue(null);
+      mockCustomerRepo.findByEmail.mockResolvedValue(existing);
+      mockCustomerRepo.update.mockResolvedValue(makeCustomer());
+      mockJwtService.generateToken.mockResolvedValue('jwt-token');
+
+      await useCase.execute(makeDto());
+
+      expect(mockCustomerRepo.create).not.toHaveBeenCalled();
+      expect(mockCustomerRepo.update).toHaveBeenCalledWith(
+        'cust-id-1',
+        expect.objectContaining({ googleId: 'google-sub-123' }),
+      );
     });
   });
 

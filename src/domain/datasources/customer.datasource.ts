@@ -14,9 +14,11 @@ export interface CustomerUpdateData {
   name?: string;
   email?: string;
   phone?: string;
+  address?: string | null;
   password?: string | null;
   mustChangePassword?: boolean;
   isActive?: boolean;
+  googleId?: string | null;
 }
 
 export interface FilterCustomersData {

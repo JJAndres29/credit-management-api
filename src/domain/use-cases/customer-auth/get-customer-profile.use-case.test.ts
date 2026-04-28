@@ -16,6 +16,7 @@ const makeCustomer = (overrides: Partial<{ clientId: string | null; isActive: bo
     overrides.isActive ?? true,
     overrides.clientId ?? null,
     false,
+    null,
     new Date(),
     new Date(),
   );
