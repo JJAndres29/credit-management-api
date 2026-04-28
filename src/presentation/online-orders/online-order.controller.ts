@@ -1,11 +1,12 @@
 import { Request, Response } from 'express';
 import { CustomError } from '../../domain/errors';
 import { CustomerEntity } from '../../domain/entities';
-import { CreateOnlineOrderDto, FilterOnlineOrdersDto } from '../../domain/dtos/online-orders';
+import { CreateOnlineOrderDto, FilterOnlineOrdersDto, UpdateOnlineOrderStatusDto } from '../../domain/dtos/online-orders';
 import { PaginationDto } from '../../domain/dtos/shared';
 import { CreateOnlineOrderUseCase } from '../../domain/use-cases/online-orders/create-online-order.use-case';
 import { GetOnlineOrderByIdUseCase } from '../../domain/use-cases/online-orders/get-online-order-by-id.use-case';
 import { GetOnlineOrdersUseCase } from '../../domain/use-cases/online-orders/get-online-orders.use-case';
+import { UpdateOnlineOrderStatusUseCase } from '../../domain/use-cases/online-orders/update-online-order-status.use-case';
 
 type MaybeCustomerRequest = Request & { customer?: CustomerEntity };
 
@@ -14,6 +15,7 @@ export class OnlineOrderController {
     private readonly createOnlineOrderUseCase: CreateOnlineOrderUseCase,
     private readonly getOnlineOrderByIdUseCase: GetOnlineOrderByIdUseCase,
     private readonly getOnlineOrdersUseCase: GetOnlineOrdersUseCase,
+    private readonly updateOnlineOrderStatusUseCase: UpdateOnlineOrderStatusUseCase,
   ) {}
 
   create = async (req: MaybeCustomerRequest, res: Response): Promise<void> => {
@@ -58,6 +60,18 @@ export class OnlineOrderController {
     try {
       const result = await this.getOnlineOrdersUseCase.execute(pagination!, filters!);
       res.json(result);
+    } catch (err) {
+      this.handleError(err, res);
+    }
+  };
+
+  updateStatus = async (req: Request, res: Response): Promise<void> => {
+    const [error, dto] = UpdateOnlineOrderStatusDto.create(req.body as Record<string, unknown>);
+    if (error) { res.status(400).json({ error }); return; }
+
+    try {
+      const order = await this.updateOnlineOrderStatusUseCase.execute(req.params.id, dto!);
+      res.json(order);
     } catch (err) {
       this.handleError(err, res);
     }

@@ -43,4 +43,5 @@ export interface OnlineOrderDatasource {
   markAsCancelled(id: string, webhookData: WebhookData): Promise<OnlineOrderEntity>;
   webhookExists(provider: string, eventId: string): Promise<boolean>;
   saveProcessedWebhook(data: WebhookData): Promise<void>;
+  updateStatus(id: string, status: string): Promise<OnlineOrderEntity>;
 }

@@ -159,4 +159,13 @@ export class PrismaOnlineOrderDatasource implements OnlineOrderDatasource {
       data: { provider: data.provider, eventId: data.eventId },
     });
   }
+
+  async updateStatus(id: string, status: string): Promise<OnlineOrderEntity> {
+    const order = await prisma.onlineOrder.update({
+      where: { id },
+      data: { status: status as never },
+      include: includeItems,
+    });
+    return mapToEntity(order as unknown as Record<string, unknown>);
+  }
 }

@@ -47,4 +47,8 @@ export class OnlineOrderRepositoryImpl implements OnlineOrderRepository {
   saveProcessedWebhook(data: WebhookData): Promise<void> {
     return this.datasource.saveProcessedWebhook(data);
   }
+
+  updateStatus(id: string, status: string): Promise<OnlineOrderEntity> {
+    return this.datasource.updateStatus(id, status);
+  }
 }

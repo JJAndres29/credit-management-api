@@ -4,6 +4,7 @@ import {
   CreateOnlineOrderUseCase,
   GetOnlineOrderByIdUseCase,
   GetOnlineOrdersUseCase,
+  UpdateOnlineOrderStatusUseCase,
 } from '../../domain/use-cases/online-orders';
 import { OnlineOrderRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaOnlineOrderDatasource } from '../../infrastructure/datasources';
@@ -61,6 +62,7 @@ export class OnlineOrderRouter {
       new CreateOnlineOrderUseCase(orderRepository, productCatalog, paymentGateway),
       new GetOnlineOrderByIdUseCase(orderRepository),
       new GetOnlineOrdersUseCase(orderRepository),
+      new UpdateOnlineOrderStatusUseCase(orderRepository),
     );
 
     // POST /api/online-orders — público, customer JWT opcional
@@ -71,6 +73,9 @@ export class OnlineOrderRouter {
 
     // GET /api/online-orders — Admin staff
     router.get('/', staffMiddleware.validateJwt, checkRole(Role.ADMIN), controller.getAll);
+
+    // PATCH /api/online-orders/:id/status — solo ADMIN
+    router.patch('/:id/status', staffMiddleware.validateJwt, checkRole(Role.ADMIN), controller.updateStatus);
 
     return router;
   }
