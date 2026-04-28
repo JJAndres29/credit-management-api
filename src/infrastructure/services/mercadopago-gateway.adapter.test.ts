@@ -43,6 +43,7 @@ function makeOrder(): OnlineOrderEntity {
     [item],
     null,
     null,
+    null,
   );
 }
 

@@ -38,6 +38,7 @@ function makeOrder(overrides: Partial<{
     overrides.items ?? [makeItem()],
     'pref-123',
     'https://mp.com/pay',
+    null,
   );
 }
 
@@ -65,6 +66,7 @@ const mockRepo: jest.Mocked<OnlineOrderRepository> = {
   markAsCancelled: jest.fn(),
   webhookExists: jest.fn(),
   saveProcessedWebhook: jest.fn(),
+  updateStatus: jest.fn(),
 };
 
 const mockGateway: jest.Mocked<IPaymentGateway> = {

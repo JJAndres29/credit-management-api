@@ -37,6 +37,7 @@ const makeOrder = (): OnlineOrderEntity =>
     [],
     null,
     null,
+    null,
   );
 
 const makeGuestDto = (overrides: Partial<Record<string, unknown>> = {}): CreateOnlineOrderDto =>
@@ -74,6 +75,7 @@ const mockRepo: jest.Mocked<OnlineOrderRepository> = {
   markAsCancelled: jest.fn(),
   webhookExists: jest.fn(),
   saveProcessedWebhook: jest.fn(),
+  updateStatus: jest.fn(),
 };
 
 // ─── DTO validation tests ────────────────────────────────────────────────────
