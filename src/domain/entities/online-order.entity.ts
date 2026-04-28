@@ -45,6 +45,13 @@ export class OnlineOrderItemEntity {
   }
 }
 
+export type OrderCustomerSnapshot = {
+  id: string;
+  name: string;
+  email: string;
+  phone: string | null;
+};
+
 export class OnlineOrderEntity {
   constructor(
     public readonly id: string,
@@ -63,6 +70,7 @@ export class OnlineOrderEntity {
     public readonly items: OnlineOrderItemEntity[],
     public readonly paymentGatewayReference: string | null,
     public readonly paymentUrl: string | null,
+    public readonly customer: OrderCustomerSnapshot | null,
   ) {}
 
   toJSON() {
@@ -70,6 +78,7 @@ export class OnlineOrderEntity {
       id: this.id,
       orderNumber: this.orderNumber,
       customerId: this.customerId,
+      customer: this.customer,
       guestName: this.guestName,
       guestPhone: this.guestPhone,
       guestEmail: this.guestEmail,
@@ -91,7 +100,7 @@ export class OnlineOrderEntity {
       id, orderNumber, customerId, guestName, guestPhone, guestEmail,
       shippingAddress, status, totalAmount, paymentMethod,
       paymentGatewayReference, paymentUrl,
-      expiresAt, paidAt, createdAt, items,
+      expiresAt, paidAt, createdAt, items, customer,
     } = object;
 
     if (!id) throw new Error('OnlineOrder id is required');
@@ -99,6 +108,10 @@ export class OnlineOrderEntity {
     const parsedItems = Array.isArray(items)
       ? items.map((i) => OnlineOrderItemEntity.fromObject(i as Record<string, unknown>))
       : [];
+
+    const parsedCustomer = customer && typeof customer === 'object'
+      ? (customer as OrderCustomerSnapshot)
+      : null;
 
     return new OnlineOrderEntity(
       id as string,
@@ -117,6 +130,7 @@ export class OnlineOrderEntity {
       parsedItems,
       (paymentGatewayReference as string | null | undefined) ?? null,
       (paymentUrl as string | null | undefined) ?? null,
+      parsedCustomer,
     );
   }
 }

@@ -10,7 +10,10 @@ import { OnlineOrderEntity } from '../../domain/entities/online-order.entity';
 import { PaginationDto } from '../../domain/dtos/shared';
 import { PaginatedResult } from '../../domain/types/paginated.type';
 
-const includeItems = { items: true } as const;
+const includeItems = {
+  items: true,
+  customer: { select: { id: true, name: true, email: true, phone: true } },
+} as const;
 
 function mapToEntity(raw: Record<string, unknown>): OnlineOrderEntity {
   return OnlineOrderEntity.fromObject(raw);
