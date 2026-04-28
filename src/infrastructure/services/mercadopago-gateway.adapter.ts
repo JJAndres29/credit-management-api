@@ -74,6 +74,9 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
     });
 
     if (!response.ok) {
+      if (response.status === 404) {
+        return { status: 'PENDING', amount: 0, externalReference: '' };
+      }
       const text = await response.text().catch(() => '');
       throw CustomError.internalServer(
         `Mercado Pago payment lookup failed (${response.status}): ${text}`,
