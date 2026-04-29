@@ -276,6 +276,55 @@ describe('MercadoPagoGatewayAdapter', () => {
 
       expect(result).toBe(true);
     });
+
+    // ── Pragmatic fallback for legacy IPN ─────────────────────────────────
+    it('IPN legacy con firma desconocida pero body {resource, topic} → true (fallback)', () => {
+      // Mercado Pago's IPN signature scheme for topic=merchant_order is
+      // undocumented and routinely fails to match any documented manifest.
+      // Since these events have no financial impact (parseWebhookEvent
+      // returns paymentId='' → use case ignores), we accept them with a
+      // warning so the simulator/production don't constantly retry.
+      const requestId = 'req-undocumented-ipn';
+      const ts = '1777439078';
+      // A signature that no documented manifest will produce
+      const xSignature = `ts=${ts},v1=${'0'.repeat(64)}`;
+      const body = JSON.stringify({
+        resource: 'https://api.mercadopago.com/merchant_orders/40397006332',
+        topic: 'merchant_order',
+      });
+
+      const result = adapter.verifyWebhookSignature(
+        Buffer.from(body),
+        {
+          'x-signature': xSignature,
+          'x-request-id': requestId,
+        },
+        { id: '40397006332', topic: 'merchant_order' },
+      );
+
+      expect(result).toBe(true);
+    });
+
+    it('cuerpo type=payment con firma inválida → false (NO aplica fallback)', () => {
+      // The pragmatic fallback ONLY applies to legacy IPN bodies. Modern
+      // `type=payment` webhooks must have a valid signature because they
+      // trigger real financial state changes.
+      const requestId = 'req-payment-bad-sig';
+      const ts = '1777439078';
+      const xSignature = `ts=${ts},v1=${'0'.repeat(64)}`;
+      const body = JSON.stringify({ type: 'payment', data: { id: '999' }, id: 'evt-1' });
+
+      const result = adapter.verifyWebhookSignature(
+        Buffer.from(body),
+        {
+          'x-signature': xSignature,
+          'x-request-id': requestId,
+        },
+        { 'data.id': '999' },
+      );
+
+      expect(result).toBe(false);
+    });
   });
 
   // ── parseWebhookEvent ─────────────────────────────────────────────────────

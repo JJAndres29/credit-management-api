@@ -244,7 +244,7 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
     // Use a Set-like dedupe via array.includes to keep insertion order.
     const manifests: string[] = [];
     const pushManifest = (m: string): void => {
-      if (!manifests.includes(m)) manifests.push(m);
+      if (m && !manifests.includes(m)) manifests.push(m);
     };
 
     // 1) Standard manifest with the `id:` segment for every candidate.
@@ -256,9 +256,20 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
     // 2) Manifest WITHOUT the `id:` segment.
     //    MP docs: "If any of the values shown in the above template are not
     //    present in your notification, you should remove them." For legacy
-    //    topic-based notifications (merchant_order/IPN), the body lacks
-    //    `data.id` and MP often signs without that segment.
+    //    topic-based notifications (merchant_order/IPN) the body lacks
+    //    `data.id` and MP sometimes signs without that segment.
     pushManifest(`request-id:${xRequestId};ts:${ts};`);
+
+    // 3) Topic-augmented variants — MP's IPN signature scheme for
+    //    `topic=merchant_order` is undocumented; some accounts/regions append
+    //    or prepend the topic. These are cheap to try and harmless.
+    if (bodyTopic) {
+      for (const id of candidateIds) {
+        pushManifest(`id:${id};topic:${bodyTopic};request-id:${xRequestId};ts:${ts};`);
+        pushManifest(`topic:${bodyTopic};id:${id};request-id:${xRequestId};ts:${ts};`);
+      }
+      pushManifest(`topic:${bodyTopic};request-id:${xRequestId};ts:${ts};`);
+    }
 
     if (manifests.length === 0) return false;
 
@@ -283,23 +294,55 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
       return match;
     });
 
-    if (!isValid) {
-      console.warn(
-        `[Webhook Signature Mismatch] manifestCandidates: "${manifests.join('" | "')}", expected(last): ${lastExpected}, received: ${v1s.join(' OR ')}`,
-      );
-      if (this.webhookDebug) {
-        console.warn(
-          '[Webhook Debug] expectedByManifest='
-            + expectedByManifest
-              .map((entry) => `{manifest:"${entry.manifest}",expected:"${entry.expected}"}`)
-              .join(','),
-        );
-      }
-    } else {
+    if (isValid) {
       console.log(`[Webhook Signature OK] manifest: "${matchedManifest}"`);
+      return true;
     }
 
-    return isValid;
+    console.warn(
+      `[Webhook Signature Mismatch] manifestCandidates: "${manifests.join('" | "')}", expected(last): ${lastExpected}, received: ${v1s.join(' OR ')}`,
+    );
+    if (this.webhookDebug) {
+      console.warn(
+        '[Webhook Debug] expectedByManifest='
+          + expectedByManifest
+            .map((entry) => `{manifest:"${entry.manifest}",expected:"${entry.expected}"}`)
+            .join(','),
+      );
+    }
+
+    // ── Pragmatic fallback for legacy IPN topic notifications ──────────────
+    //
+    // Mercado Pago's IPN-style webhooks (`?topic=merchant_order&id=...` with a
+    // body shaped like `{ resource, topic }`) use an UNDOCUMENTED signature
+    // scheme that does not match either of the manifests in MP's webhook
+    // documentation. The official docs only describe the signature for modern
+    // `type=payment` webhooks. The MP simulator and production both emit these
+    // legacy notifications and we have no reliable way to verify them.
+    //
+    // Accepting them is SAFE because:
+    //   1. The body is `{ resource, topic }` — there is no `type=payment`,
+    //      no `data.id`, and `parseWebhookEvent()` returns `paymentId: ''`.
+    //   2. `ProcessPaymentWebhookUseCase` short-circuits to `'ignored'` when
+    //      `paymentId` is empty — zero state change, zero financial impact.
+    //   3. The real payment notification arrives separately as a modern
+    //      `type=payment` webhook which we DO verify with strict signature
+    //      checks (manifest #1 above).
+    //
+    // The threat model: an attacker spamming our endpoint with fake IPN
+    // notifications causes us to return 200 OK without doing anything. No
+    // money moves, no DB rows change, no emails are sent.
+    const isLegacyIpn = bodyParsed && !!bodyTopic && !bodyEventId && !bodyDataId;
+    if (isLegacyIpn) {
+      console.warn(
+        `[Webhook] Accepting legacy IPN notification (topic=${bodyTopic}) despite ` +
+        'signature mismatch — these events are ignored and have no financial impact. ' +
+        'The real payment will arrive on a separately-verified type=payment webhook.',
+      );
+      return true;
+    }
+
+    return false;
   }
 
   // ─── Webhook event parsing ─────────────────────────────────────────────────
