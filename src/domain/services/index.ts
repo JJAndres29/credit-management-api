@@ -11,3 +11,5 @@ export { ProductCatalogPort } from './product-catalog.port';
 export type { ProductForOrder } from './product-catalog.port';
 export { IPaymentGateway } from './payment-gateway.port';
 export type { GatewayTransactionStatus } from './payment-gateway.port';
+export { MonthlySummaryPort } from './monthly-summary.port';
+export type { MonthlySummaryResult } from './monthly-summary.port';

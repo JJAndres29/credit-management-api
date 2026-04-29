@@ -1,6 +1,9 @@
 import { Router } from 'express';
 import { ReportController } from './report.controller';
-import { GenerateAccountStatementUseCase } from '../../domain/use-cases/reports';
+import {
+  GenerateAccountStatementUseCase,
+  GetMonthlySummaryUseCase,
+} from '../../domain/use-cases/reports';
 import { ClientRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaClientDatasource } from '../../infrastructure/datasources';
 import { SaleRepositoryImpl } from '../../infrastructure/repositories';
@@ -12,7 +15,11 @@ import { PrismaProductDatasource } from '../../infrastructure/datasources';
 import { AuthRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaAuthDatasource } from '../../infrastructure/datasources';
 import { AuthMiddleware, checkRole } from '../middlewares';
-import { JwtAdapter, PdfkitPdfService } from '../../infrastructure/services';
+import {
+  JwtAdapter,
+  PdfkitPdfService,
+  PrismaMonthlySummaryAdapter,
+} from '../../infrastructure/services';
 import { Role } from '../../domain/entities';
 
 export class ReportRouter {
@@ -27,6 +34,7 @@ export class ReportRouter {
 
     // Implementación concreta del PdfService
     const pdfService = new PdfkitPdfService();
+    const summaryAdapter = new PrismaMonthlySummaryAdapter();
 
     const controller = new ReportController(
       new GenerateAccountStatementUseCase(
@@ -36,6 +44,7 @@ export class ReportRouter {
         productRepository,
         pdfService,
       ),
+      new GetMonthlySummaryUseCase(summaryAdapter),
     );
 
     const middleware = new AuthMiddleware(
@@ -49,6 +58,7 @@ export class ReportRouter {
 
     // GET /api/reports/account-statement/:clientId
     router.get('/account-statement/:clientId', controller.getAccountStatement);
+    router.get('/monthly-summary', controller.getMonthlySummary);
 
     return router;
   }

@@ -1,11 +1,15 @@
 import { Request, Response } from 'express';
 import { CustomError } from '../../domain/errors';
 import { UserEntity } from '../../domain/entities';
-import { GenerateAccountStatementUseCase } from '../../domain/use-cases/reports';
+import {
+  GenerateAccountStatementUseCase,
+  GetMonthlySummaryUseCase,
+} from '../../domain/use-cases/reports';
 
 export class ReportController {
   constructor(
     private readonly generateAccountStatementUseCase: GenerateAccountStatementUseCase,
+    private readonly getMonthlySummaryUseCase: GetMonthlySummaryUseCase,
   ) {}
 
   /**
@@ -31,6 +35,18 @@ export class ReportController {
       res.setHeader('Content-Length', pdfBuffer.length);
 
       res.end(pdfBuffer);
+    } catch (err) {
+      this.handleError(err, res);
+    }
+  };
+
+  getMonthlySummary = async (req: Request, res: Response): Promise<void> => {
+    const year = parseInt(req.query.year as string);
+    const month = parseInt(req.query.month as string);
+
+    try {
+      const result = await this.getMonthlySummaryUseCase.execute(year, month);
+      res.json(result);
     } catch (err) {
       this.handleError(err, res);
     }

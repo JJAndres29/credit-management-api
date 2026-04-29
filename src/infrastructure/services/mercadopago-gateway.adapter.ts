@@ -168,29 +168,40 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
     }
 
     const candidateIds: string[] = [];
-
-    const queryDataId = this.pickFirst(queryParams['data.id']);
-    const nestedQueryDataId = this.pickFirst(queryParams?.data?.id);
-    const queryId = this.pickFirst(queryParams['id']);
-
-    if (queryDataId) candidateIds.push(queryDataId);
-    if (nestedQueryDataId && !candidateIds.includes(nestedQueryDataId)) candidateIds.push(nestedQueryDataId);
-    if (queryId && !candidateIds.includes(queryId)) candidateIds.push(queryId);
-
-    if (candidateIds.length === 0) {
-      try {
-        const parsed = JSON.parse(rawBody.toString('utf-8')) as Record<string, unknown>;
-        const data = parsed.data as Record<string, unknown> | undefined;
-        const bodyDataId = this.pickFirst(data?.id);
-        const bodyEventId = this.pickFirst(parsed.id);
-        if (bodyDataId) candidateIds.push(bodyDataId);
-        if (bodyEventId && !candidateIds.includes(bodyEventId)) candidateIds.push(bodyEventId);
-      } catch {
-        return false;
+    const pushCandidateId = (value: unknown): void => {
+      const normalized = this.pickFirst(value);
+      if (normalized && !candidateIds.includes(normalized)) {
+        candidateIds.push(normalized);
       }
+    };
+
+    pushCandidateId(queryParams['data.id']);
+    pushCandidateId(queryParams?.data?.id);
+    pushCandidateId(queryParams['id']);
+
+    let bodyParsed = false;
+    let bodyDataId = '';
+    let bodyEventId = '';
+    try {
+      const parsed = JSON.parse(rawBody.toString('utf-8')) as Record<string, unknown>;
+      const data = parsed.data as Record<string, unknown> | undefined;
+      bodyDataId = this.pickFirst(data?.id);
+      bodyEventId = this.pickFirst(parsed.id);
+      pushCandidateId(bodyDataId);
+      pushCandidateId(bodyEventId);
+      bodyParsed = true;
+    } catch {
+      // Keep running with query-derived ids only.
     }
 
     if (candidateIds.length === 0) return false;
+
+    if (this.webhookDebug) {
+      console.log(
+        `[Webhook Debug] candidateIds=${candidateIds.join('|')} bodyParsed=${bodyParsed} `
+        + `body.data.id=${bodyDataId || '<empty>'} body.id=${bodyEventId || '<empty>'}`,
+      );
+    }
 
     const manifests = candidateIds.map((id) => `id:${id};request-id:${xRequestId};ts:${ts};`);
 

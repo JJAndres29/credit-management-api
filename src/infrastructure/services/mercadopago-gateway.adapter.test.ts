@@ -187,6 +187,25 @@ describe('MercadoPagoGatewayAdapter', () => {
 
       expect(result).toBe(true);
     });
+
+    it('si query id no coincide, acepta body.data.id como candidato alterno', () => {
+      const bodyDataId = '40395972524';
+      const requestId = 'req-prefers-body';
+      const ts = '1777431789';
+      const xSignature = buildSignatureHeader(bodyDataId, requestId, ts, secret);
+      const body = JSON.stringify({ type: 'payment', data: { id: bodyDataId }, id: 'evt-1' });
+
+      const result = adapter.verifyWebhookSignature(
+        Buffer.from(body),
+        {
+          'x-signature': xSignature,
+          'x-request-id': requestId,
+        },
+        { id: 'not-the-payment-id' },
+      );
+
+      expect(result).toBe(true);
+    });
   });
 
   // ── parseWebhookEvent ─────────────────────────────────────────────────────
