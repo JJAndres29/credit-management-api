@@ -9,8 +9,14 @@ export class WebhookController {
   ) {}
 
   mercadopago = async (req: Request, res: Response): Promise<void> => {
-    const rawBody = req.body as Buffer;
-    const headers = req.headers as Record<string, string>;
+    const rawBody = Buffer.isBuffer(req.body)
+      ? req.body
+      : Buffer.from(JSON.stringify(req.body ?? {}));
+    const headers: Record<string, string> = {};
+    for (const [key, value] of Object.entries(req.headers)) {
+      if (typeof value === 'string') headers[key] = value;
+      else if (Array.isArray(value)) headers[key] = value.join(',');
+    }
 
     if (!this.mercadoPagoGateway.verifyWebhookSignature(rawBody, headers, req.query)) {
       console.warn('[Webhook] Invalid Mercado Pago signature — request rejected');

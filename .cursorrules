@@ -1,0 +1,7 @@
+Sigue estrictamente una arquitectura basada en Clean Architecture,
+separando siempre la lógica de negocio de los controladores. Para este sistema
+de creditos, revisa siempre los tipos definidos en prisma, cada implementación
+asegurate que cumpla la capa de infraestructura.
+El sistema alimenta dos tiendas diferentes por lo cual el repositorio se maneja
+en ramas de github que alimentan cada repositorio a cada cliente, por lo cual
+el main debe estar limpio y las ramas de production deben estar protegidas.

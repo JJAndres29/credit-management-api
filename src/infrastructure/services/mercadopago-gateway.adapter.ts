@@ -107,26 +107,32 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
   }
 
   verifyWebhookSignature(rawBody: Buffer, headers: Record<string, string>, queryParams: Record<string, any> = {}): boolean {
-    const { webhookSecret } = envs.mercadopago;
+    const webhookSecret = envs.mercadopago.webhookSecret?.trim();
     if (!webhookSecret) return false;
 
-    const xSignature = headers['x-signature'] ?? '';
+    const xSignature = headers['x-signature']?.trim() ?? '';
     if (!xSignature) return false;
 
-    const xRequestId = headers['x-request-id'] ?? '';
+    const xRequestId = headers['x-request-id']?.trim() ?? '';
+    if (!xRequestId) return false;
 
     let ts = '';
     const v1s: string[] = [];
     for (const part of xSignature.split(',')) {
-      const [key, value] = part.split('=');
+      const [rawKey, rawValue] = part.split('=');
+      const key = rawKey?.trim();
+      const value = rawValue?.trim();
       if (key === 'ts') ts = value ?? '';
       if (key === 'v1' && value) v1s.push(value);
     }
 
     if (!ts || v1s.length === 0) return false;
 
-    let dataId = queryParams['data.id'] ?? queryParams['id'] ?? '';
-    
+    let dataId = queryParams['data.id']
+      ?? queryParams?.data?.id
+      ?? queryParams['id']
+      ?? '';
+
     if (!dataId) {
       try {
         const parsed = JSON.parse(rawBody.toString('utf-8')) as Record<string, unknown>;
@@ -137,12 +143,16 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
       }
     }
 
-    const manifest = `id:${dataId};request-id:${xRequestId};ts:${ts};`;
+    const normalizedDataId = String(dataId).trim();
+    if (!normalizedDataId) return false;
+
+    const manifest = `id:${normalizedDataId};request-id:${xRequestId};ts:${ts};`;
     const expected = createHmac('sha256', webhookSecret).update(manifest).digest('hex');
 
     const isValid = v1s.some(v1 => {
       try {
-        return timingSafeEqual(Buffer.from(expected), Buffer.from(v1));
+        if (!/^[a-fA-F0-9]{64}$/.test(v1)) return false;
+        return timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(v1, 'hex'));
       } catch {
         return false;
       }
