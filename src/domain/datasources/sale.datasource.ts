@@ -19,6 +19,8 @@ export interface SaleCreateData {
   clientId: string;
   type: SaleType;
   total: number;
+  /** true cuando la Sale viene de una orden ecommerce ya procesada. */
+  skipStockDecrement?: boolean;
   items: {
     /**
      * ID de un producto existente. Vacío cuando `newProduct` está presente —

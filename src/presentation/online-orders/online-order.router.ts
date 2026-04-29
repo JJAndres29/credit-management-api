@@ -6,8 +6,8 @@ import {
   GetOnlineOrdersUseCase,
   UpdateOnlineOrderStatusUseCase,
 } from '../../domain/use-cases/online-orders';
-import { OnlineOrderRepositoryImpl } from '../../infrastructure/repositories';
-import { PrismaOnlineOrderDatasource } from '../../infrastructure/datasources';
+import { OnlineOrderRepositoryImpl, SaleRepositoryImpl } from '../../infrastructure/repositories';
+import { PrismaOnlineOrderDatasource, PrismaSaleDatasource } from '../../infrastructure/datasources';
 import { ProductCatalogAdapter, CustomerJwtAdapter, MercadoPagoGatewayAdapter } from '../../infrastructure/services';
 import { CustomerRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaCustomerDatasource } from '../../infrastructure/datasources';
@@ -62,7 +62,11 @@ export class OnlineOrderRouter {
       new CreateOnlineOrderUseCase(orderRepository, productCatalog, paymentGateway),
       new GetOnlineOrderByIdUseCase(orderRepository),
       new GetOnlineOrdersUseCase(orderRepository),
-      new UpdateOnlineOrderStatusUseCase(orderRepository),
+      new UpdateOnlineOrderStatusUseCase(
+        orderRepository,
+        new SaleRepositoryImpl(new PrismaSaleDatasource()),
+        new CustomerRepositoryImpl(new PrismaCustomerDatasource()),
+      ),
     );
 
     // POST /api/online-orders — público, customer JWT opcional

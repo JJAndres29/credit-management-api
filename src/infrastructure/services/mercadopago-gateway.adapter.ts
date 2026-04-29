@@ -132,8 +132,12 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
   }
 
   verifyWebhookSignature(rawBody: Buffer, headers: Record<string, string>, queryParams: Record<string, any> = {}): boolean {
-    const webhookSecret = this.sanitizeSecret(envs.mercadopago.webhookSecret);
-    if (!webhookSecret) return false;
+    const primarySecret = this.sanitizeSecret(envs.mercadopago.webhookSecret);
+    const altSecret = this.sanitizeSecret(envs.mercadopago.webhookSecretAlt);
+    const webhookSecrets = [primarySecret, altSecret].filter((secret, index, arr) => {
+      return !!secret && arr.indexOf(secret) === index;
+    });
+    if (webhookSecrets.length === 0) return false;
 
     const xSignature = headers['x-signature']?.trim() ?? '';
     if (!xSignature) return false;
@@ -154,15 +158,20 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
     if (!ts || v1s.length === 0) return false;
 
     if (this.webhookDebug) {
-      const secretFingerprint = createHmac('sha256', 'mp-webhook-secret-fingerprint')
-        .update(webhookSecret)
-        .digest('hex');
       const bodySha256 = createHmac('sha256', 'mp-body-fingerprint')
         .update(rawBody)
         .digest('hex');
+      const secretFingerprints = webhookSecrets
+        .map((secret, idx) => {
+          const fp = createHmac('sha256', 'mp-webhook-secret-fingerprint')
+            .update(secret)
+            .digest('hex');
+          return `s${idx + 1}.len=${secret.length},s${idx + 1}.fp=${this.mask(fp)}`;
+        })
+        .join(' ');
       console.log(
         `[Webhook Debug] request-id=${xRequestId} ts=${ts} signature=${xSignature} `
-        + `secret.len=${webhookSecret.length} secret.fp=${this.mask(secretFingerprint)} `
+        + `${secretFingerprints} `
         + `body.len=${rawBody.length} body.fp=${this.mask(bodySha256)}`,
       );
     }
@@ -206,23 +215,30 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
     const manifests = candidateIds.map((id) => `id:${id};request-id:${xRequestId};ts:${ts};`);
 
     let matchedManifest = '';
+    let matchedSecretLabel = '';
     let lastExpected = '';
-    const expectedByManifest: Array<{ manifest: string; expected: string }> = [];
+    const expectedByManifest: Array<{ secretLabel: string; manifest: string; expected: string }> = [];
 
-    const isValid = manifests.some((manifest) => {
-      const expected = createHmac('sha256', webhookSecret).update(manifest).digest('hex');
-      expectedByManifest.push({ manifest, expected });
-      lastExpected = expected;
-      const match = v1s.some(v1 => {
-        try {
-          if (!/^[a-fA-F0-9]{64}$/.test(v1)) return false;
-          return timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(v1, 'hex'));
-        } catch {
-          return false;
+    const isValid = webhookSecrets.some((secret, secretIndex) => {
+      const secretLabel = `s${secretIndex + 1}`;
+      return manifests.some((manifest) => {
+        const expected = createHmac('sha256', secret).update(manifest).digest('hex');
+        expectedByManifest.push({ secretLabel, manifest, expected });
+        lastExpected = expected;
+        const match = v1s.some(v1 => {
+          try {
+            if (!/^[a-fA-F0-9]{64}$/.test(v1)) return false;
+            return timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(v1, 'hex'));
+          } catch {
+            return false;
+          }
+        });
+        if (match) {
+          matchedManifest = manifest;
+          matchedSecretLabel = secretLabel;
         }
+        return match;
       });
-      if (match) matchedManifest = manifest;
-      return match;
     });
 
     if (!isValid) {
@@ -233,12 +249,12 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
         console.warn(
           '[Webhook Debug] expectedByManifest='
             + expectedByManifest
-              .map((entry) => `{manifest:"${entry.manifest}",expected:"${entry.expected}"}`)
+              .map((entry) => `{secret:"${entry.secretLabel}",manifest:"${entry.manifest}",expected:"${entry.expected}"}`)
               .join(','),
         );
       }
     } else {
-      console.log(`[Webhook Signature OK] manifest: "${matchedManifest}"`);
+      console.log(`[Webhook Signature OK] secret=${matchedSecretLabel} manifest: "${matchedManifest}"`);
     }
 
     return isValid;

@@ -97,12 +97,14 @@ export class PrismaSaleDatasource implements SaleDatasource {
         }
       }
 
-      // 1. Descontar stock de cada producto
-      for (const item of data.items) {
-        await tx.product.update({
-          where: { id: item.productId },
-          data: { stock: { decrement: item.quantity } },
-        });
+      // 1. Descontar stock de cada producto (opcional para ventas originadas desde ecommerce)
+      if (!data.skipStockDecrement) {
+        for (const item of data.items) {
+          await tx.product.update({
+            where: { id: item.productId },
+            data: { stock: { decrement: item.quantity } },
+          });
+        }
       }
 
       // 2. Si es venta a crédito, incrementar el balance del cliente y registrar en auditoría
