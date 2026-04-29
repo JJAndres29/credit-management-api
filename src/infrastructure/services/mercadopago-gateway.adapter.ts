@@ -54,10 +54,13 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
     }
 
     const preference = await response.json() as Record<string, unknown>;
-    const isProduction = envs.nodeEnv === 'production';
-    const url = isProduction
-      ? (preference.init_point as string)
-      : (preference.sandbox_init_point as string);
+    const isTestToken = accessToken.startsWith('TEST-');
+    const isProductionEnv = envs.nodeEnv === 'production';
+    
+    // Always use sandbox if using a test token, regardless of NODE_ENV
+    const url = (isTestToken || !isProductionEnv)
+      ? (preference.sandbox_init_point as string)
+      : (preference.init_point as string);
 
     return { url, gatewayReference: preference.id as string };
   }
