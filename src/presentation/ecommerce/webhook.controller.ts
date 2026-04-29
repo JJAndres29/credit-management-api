@@ -12,7 +12,7 @@ export class WebhookController {
     const rawBody = req.body as Buffer;
     const headers = req.headers as Record<string, string>;
 
-    if (!this.mercadoPagoGateway.verifyWebhookSignature(rawBody, headers)) {
+    if (!this.mercadoPagoGateway.verifyWebhookSignature(rawBody, headers, req.query)) {
       console.warn('[Webhook] Invalid Mercado Pago signature — request rejected');
       res.status(401).json({ error: 'Invalid signature' });
       return;

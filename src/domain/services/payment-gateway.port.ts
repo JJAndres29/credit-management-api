@@ -9,6 +9,6 @@ export interface IPaymentGateway {
     amount: number;
     externalReference: string;
   }>;
-  verifyWebhookSignature(rawBody: Buffer, headers: Record<string, string>): boolean;
+  verifyWebhookSignature(rawBody: Buffer, headers: Record<string, string>, queryParams?: Record<string, any>): boolean;
   parseWebhookEvent(rawBody: Buffer): { eventId: string; paymentId: string };
 }

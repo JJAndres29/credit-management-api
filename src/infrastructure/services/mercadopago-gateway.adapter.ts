@@ -102,7 +102,7 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
     };
   }
 
-  verifyWebhookSignature(rawBody: Buffer, headers: Record<string, string>): boolean {
+  verifyWebhookSignature(rawBody: Buffer, headers: Record<string, string>, queryParams: Record<string, any> = {}): boolean {
     const { webhookSecret } = envs.mercadopago;
     if (!webhookSecret) return false;
 
@@ -112,32 +112,43 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
     const xRequestId = headers['x-request-id'] ?? '';
 
     let ts = '';
-    let v1 = '';
+    const v1s: string[] = [];
     for (const part of xSignature.split(',')) {
       const [key, value] = part.split('=');
       if (key === 'ts') ts = value ?? '';
-      if (key === 'v1') v1 = value ?? '';
+      if (key === 'v1' && value) v1s.push(value);
     }
 
-    if (!ts || !v1) return false;
+    if (!ts || v1s.length === 0) return false;
 
-    let dataId = '';
-    try {
-      const parsed = JSON.parse(rawBody.toString('utf-8')) as Record<string, unknown>;
-      const data = parsed.data as Record<string, unknown> | undefined;
-      dataId = data?.id != null ? String(data.id) : '';
-    } catch {
-      return false;
+    let dataId = queryParams['data.id'] ?? queryParams['id'] ?? '';
+    
+    if (!dataId) {
+      try {
+        const parsed = JSON.parse(rawBody.toString('utf-8')) as Record<string, unknown>;
+        const data = parsed.data as Record<string, unknown> | undefined;
+        dataId = data?.id != null ? String(data.id) : '';
+      } catch {
+        return false;
+      }
     }
 
     const manifest = `id:${dataId};request-id:${xRequestId};ts:${ts};`;
     const expected = createHmac('sha256', webhookSecret).update(manifest).digest('hex');
 
-    try {
-      return timingSafeEqual(Buffer.from(expected), Buffer.from(v1));
-    } catch {
-      return false;
+    const isValid = v1s.some(v1 => {
+      try {
+        return timingSafeEqual(Buffer.from(expected), Buffer.from(v1));
+      } catch {
+        return false;
+      }
+    });
+
+    if (!isValid) {
+      console.warn(`[Webhook Signature Mismatch] manifest: "${manifest}", expected: ${expected}, received: ${v1s.join(' OR ')}`);
     }
+
+    return isValid;
   }
 
   parseWebhookEvent(rawBody: Buffer): { eventId: string; paymentId: string } {
