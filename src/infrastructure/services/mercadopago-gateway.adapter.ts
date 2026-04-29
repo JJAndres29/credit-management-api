@@ -1,4 +1,4 @@
-import { createHmac, timingSafeEqual } from 'crypto';
+import { createHmac, randomUUID, timingSafeEqual } from 'crypto';
 import { CustomError } from '../../domain/errors';
 import { OnlineOrderEntity } from '../../domain/entities/online-order.entity';
 import { IPaymentGateway, GatewayTransactionStatus } from '../../domain/services/payment-gateway.port';
@@ -29,6 +29,14 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
     if (!value) return '<empty>';
     if (value.length <= visible * 2) return `${value.slice(0, 2)}...${value.slice(-2)}`;
     return `${value.slice(0, visible)}...${value.slice(-visible)}`;
+  }
+
+  // Extracts the trailing numeric ID from an MP resource URL (e.g.
+  // "https://api.mercadopago.com/merchant_orders/40396418550" → "40396418550").
+  private extractIdFromResource(resource: string): string {
+    if (!resource) return '';
+    const match = resource.match(/\/(\d+)(?:[/?#]|$)/);
+    return match ? match[1] : '';
   }
 
   constructor() {
@@ -81,7 +89,7 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
     const preference = await response.json() as Record<string, unknown>;
     const isTestToken = accessToken.startsWith('TEST-');
     const isProductionEnv = envs.nodeEnv === 'production';
-    
+
     // Always use sandbox if explicit flag is set, if using a TEST- token, or if not in production
     const useSandbox = envs.mercadopago.sandboxMode || isTestToken || !isProductionEnv;
     const url = useSandbox
@@ -131,13 +139,26 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
     };
   }
 
+  // ─── Webhook signature verification ────────────────────────────────────────
+  //
+  // Mercado Pago signs webhooks with HMAC-SHA256 using the configured "secret
+  // signature" and a manifest string of the form:
+  //
+  //   id:[data.id_url];request-id:[x-request-id_header];ts:[ts_header];
+  //
+  // The official docs (https://www.mercadopago.com.co/developers/en/docs/your-integrations/notifications/webhooks)
+  // explicitly say: "If any of the values shown in the above template are not
+  // present in your notification, you should remove them." That is critical for
+  // legacy IPN-style notifications (e.g. ?topic=merchant_order&id=...) whose
+  // body has no `data.id` and whose query has no `data.id` either — only
+  // `id`/`topic`. For those, MP signs the manifest WITHOUT the `id:` segment.
+  //
+  // Because the simulator + production routinely mix both formats on the same
+  // endpoint, we build several candidate manifests and accept the request if
+  // any of them produces a hash matching one of the received `v1` values.
   verifyWebhookSignature(rawBody: Buffer, headers: Record<string, string>, queryParams: Record<string, any> = {}): boolean {
-    const primarySecret = this.sanitizeSecret(envs.mercadopago.webhookSecret);
-    const altSecret = this.sanitizeSecret(envs.mercadopago.webhookSecretAlt);
-    const webhookSecrets = [primarySecret, altSecret].filter((secret, index, arr) => {
-      return !!secret && arr.indexOf(secret) === index;
-    });
-    if (webhookSecrets.length === 0) return false;
+    const webhookSecret = this.sanitizeSecret(envs.mercadopago.webhookSecret);
+    if (!webhookSecret) return false;
 
     const xSignature = headers['x-signature']?.trim() ?? '';
     if (!xSignature) return false;
@@ -158,91 +179,108 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
     if (!ts || v1s.length === 0) return false;
 
     if (this.webhookDebug) {
+      const secretFingerprint = createHmac('sha256', 'mp-webhook-secret-fingerprint')
+        .update(webhookSecret)
+        .digest('hex');
       const bodySha256 = createHmac('sha256', 'mp-body-fingerprint')
         .update(rawBody)
         .digest('hex');
-      const querySnapshot = Object.entries(queryParams ?? {})
-        .map(([key, value]) => `${key}=${this.pickFirst(value) || '<empty>'}`)
-        .join(' ');
-      const secretFingerprints = webhookSecrets
-        .map((secret, idx) => {
-          const fp = createHmac('sha256', 'mp-webhook-secret-fingerprint')
-            .update(secret)
-            .digest('hex');
-          return `s${idx + 1}.len=${secret.length},s${idx + 1}.fp=${this.mask(fp)}`;
-        })
-        .join(' ');
       console.log(
         `[Webhook Debug] request-id=${xRequestId} ts=${ts} signature=${xSignature} `
-        + `${secretFingerprints} `
+        + `secret.len=${webhookSecret.length} secret.fp=${this.mask(secretFingerprint)} `
         + `body.len=${rawBody.length} body.fp=${this.mask(bodySha256)}`,
       );
-      console.log(`[Webhook Debug] query=${querySnapshot || '<empty>'}`);
     }
 
+    // ── Collect candidate IDs from query and body ──────────────────────────
     const candidateIds: string[] = [];
     const pushCandidateId = (value: unknown): void => {
       const normalized = this.pickFirst(value);
-      if (normalized && !candidateIds.includes(normalized)) {
+      if (!normalized) return;
+      // Per MP docs: alphanumeric ids must be sent in lowercase. Numeric ids
+      // are unaffected by toLowerCase().
+      const lowered = normalized.toLowerCase();
+      if (!candidateIds.includes(lowered)) candidateIds.push(lowered);
+      if (lowered !== normalized && !candidateIds.includes(normalized)) {
         candidateIds.push(normalized);
       }
     };
 
+    // Modern payment webhooks: data.id in query or body
     pushCandidateId(queryParams['data.id']);
     pushCandidateId(queryParams?.data?.id);
+    // IPN-style legacy notifications (?topic=...&id=...): id in query
     pushCandidateId(queryParams['id']);
 
     let bodyParsed = false;
     let bodyDataId = '';
     let bodyEventId = '';
+    let bodyResourceId = '';
+    let bodyTopic = '';
     try {
       const parsed = JSON.parse(rawBody.toString('utf-8')) as Record<string, unknown>;
       const data = parsed.data as Record<string, unknown> | undefined;
       bodyDataId = this.pickFirst(data?.id);
       bodyEventId = this.pickFirst(parsed.id);
+      bodyTopic = this.pickFirst(parsed.topic ?? parsed.type);
+      bodyResourceId = this.extractIdFromResource(this.pickFirst(parsed.resource));
       pushCandidateId(bodyDataId);
       pushCandidateId(bodyEventId);
+      pushCandidateId(bodyResourceId);
       bodyParsed = true;
     } catch {
       // Keep running with query-derived ids only.
     }
 
-    if (candidateIds.length === 0) return false;
-
     if (this.webhookDebug) {
       console.log(
-        `[Webhook Debug] candidateIds=${candidateIds.join('|')} bodyParsed=${bodyParsed} `
-        + `body.data.id=${bodyDataId || '<empty>'} body.id=${bodyEventId || '<empty>'}`,
+        `[Webhook Debug] candidateIds=${candidateIds.join('|') || '<empty>'} bodyParsed=${bodyParsed} `
+        + `body.data.id=${bodyDataId || '<empty>'} body.id=${bodyEventId || '<empty>'} `
+        + `body.resource.id=${bodyResourceId || '<empty>'} body.topic=${bodyTopic || '<empty>'}`,
       );
     }
 
-    const manifests = candidateIds.map((id) => `id:${id};request-id:${xRequestId};ts:${ts};`);
+    // ── Build candidate manifests ──────────────────────────────────────────
+    // Use a Set-like dedupe via array.includes to keep insertion order.
+    const manifests: string[] = [];
+    const pushManifest = (m: string): void => {
+      if (!manifests.includes(m)) manifests.push(m);
+    };
 
+    // 1) Standard manifest with the `id:` segment for every candidate.
+    //    Covers modern payment webhooks and IPN where MP uses the query `id`.
+    for (const id of candidateIds) {
+      pushManifest(`id:${id};request-id:${xRequestId};ts:${ts};`);
+    }
+
+    // 2) Manifest WITHOUT the `id:` segment.
+    //    MP docs: "If any of the values shown in the above template are not
+    //    present in your notification, you should remove them." For legacy
+    //    topic-based notifications (merchant_order/IPN), the body lacks
+    //    `data.id` and MP often signs without that segment.
+    pushManifest(`request-id:${xRequestId};ts:${ts};`);
+
+    if (manifests.length === 0) return false;
+
+    // ── Compare each candidate against received v1 hashes ──────────────────
     let matchedManifest = '';
-    let matchedSecretLabel = '';
     let lastExpected = '';
-    const expectedByManifest: Array<{ secretLabel: string; manifest: string; expected: string }> = [];
+    const expectedByManifest: Array<{ manifest: string; expected: string }> = [];
 
-    const isValid = webhookSecrets.some((secret, secretIndex) => {
-      const secretLabel = `s${secretIndex + 1}`;
-      return manifests.some((manifest) => {
-        const expected = createHmac('sha256', secret).update(manifest).digest('hex');
-        expectedByManifest.push({ secretLabel, manifest, expected });
-        lastExpected = expected;
-        const match = v1s.some(v1 => {
-          try {
-            if (!/^[a-fA-F0-9]{64}$/.test(v1)) return false;
-            return timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(v1, 'hex'));
-          } catch {
-            return false;
-          }
-        });
-        if (match) {
-          matchedManifest = manifest;
-          matchedSecretLabel = secretLabel;
+    const isValid = manifests.some((manifest) => {
+      const expected = createHmac('sha256', webhookSecret).update(manifest).digest('hex');
+      expectedByManifest.push({ manifest, expected });
+      lastExpected = expected;
+      const match = v1s.some((v1) => {
+        try {
+          if (!/^[a-fA-F0-9]{64}$/.test(v1)) return false;
+          return timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(v1, 'hex'));
+        } catch {
+          return false;
         }
-        return match;
       });
+      if (match) matchedManifest = manifest;
+      return match;
     });
 
     if (!isValid) {
@@ -253,32 +291,54 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
         console.warn(
           '[Webhook Debug] expectedByManifest='
             + expectedByManifest
-              .map((entry) => `{secret:"${entry.secretLabel}",manifest:"${entry.manifest}",expected:"${entry.expected}"}`)
+              .map((entry) => `{manifest:"${entry.manifest}",expected:"${entry.expected}"}`)
               .join(','),
         );
       }
     } else {
-      console.log(`[Webhook Signature OK] secret=${matchedSecretLabel} manifest: "${matchedManifest}"`);
+      console.log(`[Webhook Signature OK] manifest: "${matchedManifest}"`);
     }
 
     return isValid;
   }
 
+  // ─── Webhook event parsing ─────────────────────────────────────────────────
+  //
+  // The same endpoint may receive two different body shapes:
+  //
+  //   A) Modern payment webhook (topic=payment):
+  //      {
+  //        "id": 12345, "type": "payment", "action": "payment.updated",
+  //        "data": { "id": "999999999" }
+  //      }
+  //
+  //   B) Legacy IPN (topic=merchant_order, payment.created, etc.):
+  //      {
+  //        "resource": "https://api.mercadopago.com/merchant_orders/40396418550",
+  //        "topic": "merchant_order"
+  //      }
+  //
+  // We only act on (A) because the merchant_order webhook fires immediately
+  // after creation (no payment yet) and a separate `payment` notification
+  // arrives once the buyer pays. Returning paymentId='' here causes the use
+  // case to short-circuit with `'ignored'`, but the signature was already
+  // validated so the request returns 200 to MP (no retries).
   parseWebhookEvent(rawBody: Buffer): { eventId: string; paymentId: string } {
     let body: Record<string, unknown>;
     try {
       body = JSON.parse(rawBody.toString('utf-8')) as Record<string, unknown>;
     } catch {
-      return { eventId: crypto.randomUUID(), paymentId: '' };
+      return { eventId: randomUUID(), paymentId: '' };
     }
 
+    // Legacy IPN body shape — ignore (a separate `payment` webhook will arrive)
     if (body.type !== 'payment') {
-      return { eventId: crypto.randomUUID(), paymentId: '' };
+      return { eventId: String(body.id ?? randomUUID()), paymentId: '' };
     }
 
     const data = body.data as Record<string, unknown> | undefined;
     return {
-      eventId: String(body.id ?? crypto.randomUUID()),
+      eventId: String(body.id ?? randomUUID()),
       paymentId: data?.id != null ? String(data.id) : '',
     };
   }

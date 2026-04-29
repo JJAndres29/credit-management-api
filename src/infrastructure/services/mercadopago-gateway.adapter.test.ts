@@ -53,6 +53,12 @@ function buildSignatureHeader(dataId: string | number, requestId: string, ts: st
   return `ts=${ts},v1=${v1}`;
 }
 
+function buildSignatureHeaderNoId(requestId: string, ts: string, secret: string): string {
+  const manifest = `request-id:${requestId};ts:${ts};`;
+  const v1 = createHmac('sha256', secret).update(manifest).digest('hex');
+  return `ts=${ts},v1=${v1}`;
+}
+
 // ─── Tests ───────────────────────────────────────────────────────────────────
 
 describe('MercadoPagoGatewayAdapter', () => {
@@ -203,6 +209,70 @@ describe('MercadoPagoGatewayAdapter', () => {
         },
         { id: 'not-the-payment-id' },
       );
+
+      expect(result).toBe(true);
+    });
+
+    // ── IPN-style legacy topic notifications (?topic=merchant_order&id=...)
+    it('topic=merchant_order con id en query y manifest standard → true', () => {
+      const id = '40396418550';
+      const requestId = 'req-merchant-order';
+      const ts = '1777435526';
+      const xSignature = buildSignatureHeader(id, requestId, ts, secret);
+      const body = JSON.stringify({
+        resource: `https://api.mercadopago.com/merchant_orders/${id}`,
+        topic: 'merchant_order',
+      });
+
+      const result = adapter.verifyWebhookSignature(
+        Buffer.from(body),
+        {
+          'x-signature': xSignature,
+          'x-request-id': requestId,
+        },
+        { id, topic: 'merchant_order' },
+      );
+
+      expect(result).toBe(true);
+    });
+
+    it('topic=merchant_order firmado SIN id (manifest legacy) → true', () => {
+      // Some legacy IPN notifications are signed with a manifest that omits
+      // the `id:` segment because no `data.id` exists in the request.
+      const requestId = 'req-merchant-order-no-id';
+      const ts = '1777435600';
+      const xSignature = buildSignatureHeaderNoId(requestId, ts, secret);
+      const body = JSON.stringify({
+        resource: 'https://api.mercadopago.com/merchant_orders/40396418550',
+        topic: 'merchant_order',
+      });
+
+      const result = adapter.verifyWebhookSignature(
+        Buffer.from(body),
+        {
+          'x-signature': xSignature,
+          'x-request-id': requestId,
+        },
+        { id: '40396418550', topic: 'merchant_order' },
+      );
+
+      expect(result).toBe(true);
+    });
+
+    it('extrae el id desde body.resource cuando no viene en query ni en data.id', () => {
+      const id = '40396752814';
+      const requestId = 'req-resource-only';
+      const ts = '1777436694';
+      const xSignature = buildSignatureHeader(id, requestId, ts, secret);
+      const body = JSON.stringify({
+        resource: `https://api.mercadopago.com/merchant_orders/${id}`,
+        topic: 'merchant_order',
+      });
+
+      const result = adapter.verifyWebhookSignature(Buffer.from(body), {
+        'x-signature': xSignature,
+        'x-request-id': requestId,
+      });
 
       expect(result).toBe(true);
     });
