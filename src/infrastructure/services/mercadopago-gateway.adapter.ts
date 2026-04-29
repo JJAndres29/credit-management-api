@@ -57,8 +57,9 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
     const isTestToken = accessToken.startsWith('TEST-');
     const isProductionEnv = envs.nodeEnv === 'production';
     
-    // Always use sandbox if using a test token, regardless of NODE_ENV
-    const url = (isTestToken || !isProductionEnv)
+    // Always use sandbox if explicit flag is set, if using a TEST- token, or if not in production
+    const useSandbox = envs.mercadopago.sandboxMode || isTestToken || !isProductionEnv;
+    const url = useSandbox
       ? (preference.sandbox_init_point as string)
       : (preference.init_point as string);
 

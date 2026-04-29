@@ -52,6 +52,7 @@ export const envs = {
     accessToken: process.env.MP_ACCESS_TOKEN ?? '',
     webhookSecret: process.env.MP_WEBHOOK_SECRET ?? '',
     baseUrl: process.env.MP_BASE_URL ?? 'https://api.mercadopago.com',
+    sandboxMode: process.env.MP_SANDBOX_MODE === 'true',
     appUrl: process.env.APP_URL ?? '',
     backUrls: {
       success: process.env.MP_BACK_URL_SUCCESS ?? '',
