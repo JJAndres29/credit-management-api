@@ -6,9 +6,34 @@ import { envs } from '../../config/envs';
 
 export class MercadoPagoGatewayAdapter implements IPaymentGateway {
   private readonly enabled: boolean;
+  private readonly webhookDebug: boolean;
+
+  private sanitizeSecret(secret: string | undefined): string {
+    const trimmed = secret?.trim() ?? '';
+    if (
+      (trimmed.startsWith('"') && trimmed.endsWith('"'))
+      || (trimmed.startsWith("'") && trimmed.endsWith("'"))
+    ) {
+      return trimmed.slice(1, -1).trim();
+    }
+    return trimmed;
+  }
+
+  private pickFirst(value: unknown): string {
+    if (Array.isArray(value)) return value.length > 0 ? String(value[0]).trim() : '';
+    if (value == null) return '';
+    return String(value).trim();
+  }
+
+  private mask(value: string, visible = 6): string {
+    if (!value) return '<empty>';
+    if (value.length <= visible * 2) return `${value.slice(0, 2)}...${value.slice(-2)}`;
+    return `${value.slice(0, visible)}...${value.slice(-visible)}`;
+  }
 
   constructor() {
     this.enabled = !!(envs.mercadopago.accessToken && envs.mercadopago.webhookSecret);
+    this.webhookDebug = envs.mercadopago.webhookDebug;
     if (!this.enabled) {
       console.warn('[MercadoPagoGatewayAdapter] Disabled — MP_ACCESS_TOKEN or MP_WEBHOOK_SECRET missing');
     }
@@ -107,7 +132,7 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
   }
 
   verifyWebhookSignature(rawBody: Buffer, headers: Record<string, string>, queryParams: Record<string, any> = {}): boolean {
-    const webhookSecret = envs.mercadopago.webhookSecret?.trim();
+    const webhookSecret = this.sanitizeSecret(envs.mercadopago.webhookSecret);
     if (!webhookSecret) return false;
 
     const xSignature = headers['x-signature']?.trim() ?? '';
@@ -128,38 +153,81 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
 
     if (!ts || v1s.length === 0) return false;
 
-    let dataId = queryParams['data.id']
-      ?? queryParams?.data?.id
-      ?? queryParams['id']
-      ?? '';
+    if (this.webhookDebug) {
+      const secretFingerprint = createHmac('sha256', 'mp-webhook-secret-fingerprint')
+        .update(webhookSecret)
+        .digest('hex');
+      const bodySha256 = createHmac('sha256', 'mp-body-fingerprint')
+        .update(rawBody)
+        .digest('hex');
+      console.log(
+        `[Webhook Debug] request-id=${xRequestId} ts=${ts} signature=${xSignature} `
+        + `secret.len=${webhookSecret.length} secret.fp=${this.mask(secretFingerprint)} `
+        + `body.len=${rawBody.length} body.fp=${this.mask(bodySha256)}`,
+      );
+    }
 
-    if (!dataId) {
+    const candidateIds: string[] = [];
+
+    const queryDataId = this.pickFirst(queryParams['data.id']);
+    const nestedQueryDataId = this.pickFirst(queryParams?.data?.id);
+    const queryId = this.pickFirst(queryParams['id']);
+
+    if (queryDataId) candidateIds.push(queryDataId);
+    if (nestedQueryDataId && !candidateIds.includes(nestedQueryDataId)) candidateIds.push(nestedQueryDataId);
+    if (queryId && !candidateIds.includes(queryId)) candidateIds.push(queryId);
+
+    if (candidateIds.length === 0) {
       try {
         const parsed = JSON.parse(rawBody.toString('utf-8')) as Record<string, unknown>;
         const data = parsed.data as Record<string, unknown> | undefined;
-        dataId = data?.id != null ? String(data.id) : '';
+        const bodyDataId = this.pickFirst(data?.id);
+        const bodyEventId = this.pickFirst(parsed.id);
+        if (bodyDataId) candidateIds.push(bodyDataId);
+        if (bodyEventId && !candidateIds.includes(bodyEventId)) candidateIds.push(bodyEventId);
       } catch {
         return false;
       }
     }
 
-    const normalizedDataId = String(dataId).trim();
-    if (!normalizedDataId) return false;
+    if (candidateIds.length === 0) return false;
 
-    const manifest = `id:${normalizedDataId};request-id:${xRequestId};ts:${ts};`;
-    const expected = createHmac('sha256', webhookSecret).update(manifest).digest('hex');
+    const manifests = candidateIds.map((id) => `id:${id};request-id:${xRequestId};ts:${ts};`);
 
-    const isValid = v1s.some(v1 => {
-      try {
-        if (!/^[a-fA-F0-9]{64}$/.test(v1)) return false;
-        return timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(v1, 'hex'));
-      } catch {
-        return false;
-      }
+    let matchedManifest = '';
+    let lastExpected = '';
+    const expectedByManifest: Array<{ manifest: string; expected: string }> = [];
+
+    const isValid = manifests.some((manifest) => {
+      const expected = createHmac('sha256', webhookSecret).update(manifest).digest('hex');
+      expectedByManifest.push({ manifest, expected });
+      lastExpected = expected;
+      const match = v1s.some(v1 => {
+        try {
+          if (!/^[a-fA-F0-9]{64}$/.test(v1)) return false;
+          return timingSafeEqual(Buffer.from(expected, 'hex'), Buffer.from(v1, 'hex'));
+        } catch {
+          return false;
+        }
+      });
+      if (match) matchedManifest = manifest;
+      return match;
     });
 
     if (!isValid) {
-      console.warn(`[Webhook Signature Mismatch] manifest: "${manifest}", expected: ${expected}, received: ${v1s.join(' OR ')}`);
+      console.warn(
+        `[Webhook Signature Mismatch] manifestCandidates: "${manifests.join('" | "')}", expected(last): ${lastExpected}, received: ${v1s.join(' OR ')}`,
+      );
+      if (this.webhookDebug) {
+        console.warn(
+          '[Webhook Debug] expectedByManifest='
+            + expectedByManifest
+              .map((entry) => `{manifest:"${entry.manifest}",expected:"${entry.expected}"}`)
+              .join(','),
+        );
+      }
+    } else {
+      console.log(`[Webhook Signature OK] manifest: "${matchedManifest}"`);
     }
 
     return isValid;

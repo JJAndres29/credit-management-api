@@ -82,6 +82,7 @@ export class PrismaProductDatasource implements ProductDatasource {
         name: dto.name,
         stock: dto.stock,
         categoryId: dto.categoryId,
+        ...(dto.investmentCost !== undefined && { investmentCost: dto.investmentCost }),
       },
       include: includeImages,
     });
@@ -96,6 +97,7 @@ export class PrismaProductDatasource implements ProductDatasource {
         data: {
           ...(dto.name !== undefined && { name: dto.name }),
           ...(dto.categoryId !== undefined && { categoryId: dto.categoryId }),
+          ...(dto.investmentCost !== undefined && { investmentCost: dto.investmentCost }),
         },
       });
 

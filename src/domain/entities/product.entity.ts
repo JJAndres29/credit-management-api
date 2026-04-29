@@ -11,6 +11,7 @@ export class ProductEntity {
     public readonly name: string,
     public readonly stock: number,
     public readonly retailPrice: number | null,
+    public readonly investmentCost: number | null,
     public readonly images: ProductImageEntity[],
     public readonly categoryId: string | null,
     public readonly categoryName: string | null,
@@ -26,6 +27,7 @@ export class ProductEntity {
       name: this.name,
       stock: this.stock,
       retailPrice: this.retailPrice,
+      investmentCost: this.investmentCost,
       images: this.images,
       categoryId: this.categoryId,
       categoryName: this.categoryName,
@@ -37,7 +39,7 @@ export class ProductEntity {
   }
 
   static fromObject(object: Record<string, unknown>): ProductEntity {
-    const { id, name, stock, retailPrice, images, categoryId, category, attributes, isActive, createdAt, updatedAt } = object;
+    const { id, name, stock, retailPrice, investmentCost, images, categoryId, category, attributes, isActive, createdAt, updatedAt } = object;
 
     if (!id) throw new Error('Product id is required');
     if (!name) throw new Error('Product name is required');
@@ -71,6 +73,7 @@ export class ProductEntity {
       name as string,
       Number(stock ?? 0),
       retailPrice != null ? Number(retailPrice) : null,
+      investmentCost != null ? Number(investmentCost) : null,
       parsedImages,
       (categoryId as string | null | undefined) ?? null,
       categoryName,

@@ -75,6 +75,7 @@ model Product {
   name        String
   stock       Int      @default(0)
   retailPrice Decimal? @db.Decimal(10, 2)
+  investmentCost Decimal? @db.Decimal(10, 2)
   isActive    Boolean  @default(true)
   categoryId  String?
   createdAt   DateTime @default(now())

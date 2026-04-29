@@ -3,10 +3,11 @@ export class CreateProductDto {
     public readonly name: string,
     public readonly stock: number,
     public readonly categoryId: string | null,
+    public readonly investmentCost: number | null,
   ) {}
 
   static create(object: Record<string, unknown>): [string?, CreateProductDto?] {
-    const { name, stock, categoryId } = object;
+    const { name, stock, categoryId, investmentCost } = object;
 
     if (!name || typeof name !== 'string' || name.trim().length < 2) {
       return ['El nombre es requerido y debe tener al menos 2 caracteres'];
@@ -22,12 +23,19 @@ export class CreateProductDto {
       return ['El categoryId debe ser un string'];
     }
 
+    if (investmentCost !== undefined && investmentCost !== null) {
+      if (typeof investmentCost !== 'number' || Number.isNaN(investmentCost) || investmentCost < 0) {
+        return ['El costo de inversión debe ser un número mayor o igual a 0'];
+      }
+    }
+
     return [
       undefined,
       new CreateProductDto(
         name.trim(),
         typeof stock === 'number' ? stock : 0,
         typeof categoryId === 'string' ? categoryId.trim() : null,
+        typeof investmentCost === 'number' ? investmentCost : null,
       ),
     ];
   }
