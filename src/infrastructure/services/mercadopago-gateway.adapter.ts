@@ -161,6 +161,9 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
       const bodySha256 = createHmac('sha256', 'mp-body-fingerprint')
         .update(rawBody)
         .digest('hex');
+      const querySnapshot = Object.entries(queryParams ?? {})
+        .map(([key, value]) => `${key}=${this.pickFirst(value) || '<empty>'}`)
+        .join(' ');
       const secretFingerprints = webhookSecrets
         .map((secret, idx) => {
           const fp = createHmac('sha256', 'mp-webhook-secret-fingerprint')
@@ -174,6 +177,7 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
         + `${secretFingerprints} `
         + `body.len=${rawBody.length} body.fp=${this.mask(bodySha256)}`,
       );
+      console.log(`[Webhook Debug] query=${querySnapshot || '<empty>'}`);
     }
 
     const candidateIds: string[] = [];
