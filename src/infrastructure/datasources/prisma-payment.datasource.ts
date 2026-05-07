@@ -83,6 +83,17 @@ export class PrismaPaymentDatasource implements PaymentDatasource {
     return payments.map((p) => mapToEntity(p as unknown as Record<string, unknown>));
   }
 
+  async findBySaleIds(saleIds: string[]): Promise<PaymentEntity[]> {
+    if (saleIds.length === 0) return [];
+
+    const payments = await prisma.payment.findMany({
+      where: { saleId: { in: saleIds } },
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return payments.map((p) => mapToEntity(p as unknown as Record<string, unknown>));
+  }
+
   async create(data: PaymentCreateData): Promise<PaymentEntity> {
     /**
      * Transacción atómica: si cualquier operación falla, se revierten todas.

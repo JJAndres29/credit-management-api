@@ -4,6 +4,7 @@ import { SaleRepository } from '../../repositories';
 import { PaymentRepository } from '../../repositories';
 import { EventEmitterPort, CLIENT_NOTIFY_REQUESTED } from '../../events';
 import { SaleStatus, SaleType } from '../../entities/sale.entity';
+import { InstallmentScheduleService } from '../../services/installments';
 
 export interface NotifyClientResult {
   whatsappPayload: { phone: string; message: string } | null;
@@ -15,6 +16,7 @@ export class NotifyClientUseCase {
     private readonly eventEmitter?: EventEmitterPort,
     private readonly saleRepository?: SaleRepository,
     private readonly paymentRepository?: PaymentRepository,
+    private readonly installmentScheduleService: InstallmentScheduleService = new InstallmentScheduleService(),
   ) {}
 
   async execute(clientId: string, requestedBy: string): Promise<NotifyClientResult> {
@@ -27,7 +29,9 @@ export class NotifyClientUseCase {
     this.eventEmitter?.emit(CLIENT_NOTIFY_REQUESTED, { clientId, requestedBy });
 
     const fmt = (n: number) =>
-      new Intl.NumberFormat('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+      new Intl.NumberFormat('es-CO', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(
+        n,
+      );
 
     const fmtDate = (date: Date) => {
       const parts = new Intl.DateTimeFormat('es-CO', {
@@ -48,13 +52,35 @@ export class NotifyClientUseCase {
       const activeSale = await this.findActiveCreditSale(clientId);
       let message: string;
 
-      if (activeSale && activeSale.installmentsCount && activeSale.installmentAmount && this.paymentRepository) {
+      if (
+        activeSale &&
+        activeSale.installmentsCount &&
+        activeSale.installmentAmount &&
+        this.paymentRepository
+      ) {
         const payments = await this.paymentRepository.findBySaleId(activeSale.id);
-        const totalPaidSoFar = payments.reduce((sum, p) => sum + Number(p.amount), 0);
-        const initialPayment = Number(activeSale.initialPayment ?? 0);
-        const paidInstallments = Math.max(
-          0,
-          (totalPaidSoFar - initialPayment) / Number(activeSale.installmentAmount),
+        const today = InstallmentScheduleService.todayBogota();
+        const schedule = this.installmentScheduleService.compute(
+          {
+            id: activeSale.id,
+            saleNumber: activeSale.saleNumber,
+            clientId: activeSale.clientId,
+            total: activeSale.total,
+            createdAt: activeSale.createdAt,
+            installmentsCount: activeSale.installmentsCount!, // guarded above
+            installmentAmount: activeSale.installmentAmount,
+            collectionDay: activeSale.collectionDay,
+            collectionDay2: activeSale.collectionDay2,
+            frequency: activeSale.frequency,
+            initialPayment: activeSale.initialPayment,
+          },
+          payments,
+          today,
+        );
+
+        const paidCount = schedule.installments.filter((i) => i.status === 'PAID').length;
+        const nextDue = schedule.installments.find(
+          (i) => i.status === 'PARTIAL' || i.status === 'PENDING' || i.status === 'OVERDUE',
         );
 
         message =
@@ -63,10 +89,13 @@ export class NotifyClientUseCase {
           `Fecha inicial ${fmtDate(activeSale.createdAt)}.\n\n` +
           `Valor del crédito ${fmt(Number(activeSale.total))}.\n\n` +
           (activeSale.initialPayment != null
-            ? `Cuota inicial aplicada el ${fmtDate(activeSale.createdAt)} por valor de ${fmt(initialPayment)}.\n\n`
+            ? `Cuota inicial aplicada el ${fmtDate(activeSale.createdAt)} por valor de ${fmt(Number(activeSale.initialPayment))}.\n\n`
             : '') +
-          `Cuotas pagadas ${fmt(paidInstallments)} de ${activeSale.installmentsCount}.\n\n` +
-          `Su nuevo saldo es ${fmt(Number(client.balance))}.`;
+          `Cuotas pagadas ${paidCount} de ${activeSale.installmentsCount}.\n\n` +
+          (nextDue && nextDue.remainingAmount > 0
+            ? `Próximo cobro: ${fmt(nextDue.remainingAmount)} con vencimiento ${fmtDate(nextDue.dueDate)}.\n\n`
+            : '') +
+          `Su saldo actual es ${fmt(Number(client.balance))}.`;
       } else {
         const balance = Number(client.balance);
         const available = Number(client.creditLimit) - balance;

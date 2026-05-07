@@ -20,6 +20,10 @@ export class SaleRepositoryImpl implements SaleRepository {
     return this.datasource.findByClientId(clientId);
   }
 
+  findActiveCreditSales(clientId?: string): Promise<SaleEntity[]> {
+    return this.datasource.findActiveCreditSales(clientId);
+  }
+
   create(data: SaleCreateData): Promise<SaleEntity> {
     return this.datasource.create(data);
   }

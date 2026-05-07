@@ -104,6 +104,12 @@ export interface SaleDatasource {
   findById(id: string): Promise<SaleEntity | null>;
   findByClientId(clientId: string): Promise<SaleEntity[]>;
   /**
+   * Devuelve todas las ventas CREDIT con status PENDING o PARTIAL que tienen plan
+   * de cuotas (installmentsCount != null). Filtro opcional por clientId.
+   * Usado por GetCollectionsUseCase para calcular el schedule de cuotas vencidas/pendientes.
+   */
+  findActiveCreditSales(clientId?: string): Promise<SaleEntity[]>;
+  /**
    * Crea la venta, sus ítems, descuenta stock y actualiza balance del cliente
    * todo en una única transacción atómica de base de datos.
    */

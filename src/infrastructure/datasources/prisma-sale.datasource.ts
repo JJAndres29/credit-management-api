@@ -77,6 +77,21 @@ export class PrismaSaleDatasource implements SaleDatasource {
     return sales.map((sale) => mapToEntity(sale as unknown as Record<string, unknown>));
   }
 
+  async findActiveCreditSales(clientId?: string): Promise<SaleEntity[]> {
+    const sales = await prisma.sale.findMany({
+      where: {
+        type: SaleType.CREDIT,
+        status: { in: [SaleStatus.PENDING, SaleStatus.PARTIAL] },
+        installmentsCount: { not: null },
+        ...(clientId && { clientId }),
+      },
+      include: SALE_WITH_ITEMS,
+      orderBy: { createdAt: 'asc' },
+    });
+
+    return sales.map((sale) => mapToEntity(sale as unknown as Record<string, unknown>));
+  }
+
   async create(data: SaleCreateData): Promise<SaleEntity> {
     const isCashSale = data.type === SaleType.CASH;
 

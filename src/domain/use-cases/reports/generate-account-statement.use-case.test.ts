@@ -58,6 +58,7 @@ const mockSaleRepo = {
   findById: jest.fn(),
   findAll: jest.fn(),
   findByClientId: jest.fn(),
+  findActiveCreditSales: jest.fn(),
   update: jest.fn(),
   delete: jest.fn(),
 } as jest.Mocked<SaleRepository>;
@@ -68,6 +69,7 @@ const mockPaymentRepo = {
   findAll: jest.fn(),
   findByClientId: jest.fn(),
   findBySaleId: jest.fn(),
+  findBySaleIds: jest.fn(),
   update: jest.fn(),
   delete: jest.fn(),
 } as jest.Mocked<PaymentRepository>;

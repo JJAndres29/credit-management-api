@@ -1,6 +1,8 @@
 import { SaleEntity } from '../../entities';
 import { DashboardActiveCreditSale } from '../../datasources/dashboard.datasource';
 import { DashboardRepository } from '../../repositories/dashboard.repository';
+import { InstallmentScheduleService } from '../../services/installments';
+import { InstallmentFrequency } from '../../entities/sale.entity';
 
 export interface UpcomingCollection {
   date: string;
@@ -9,6 +11,7 @@ export interface UpcomingCollection {
   clientId: string;
   clientName: string;
   installmentAmount: number;
+  remainingAmount: number;
 }
 
 export interface DashboardMetrics {
@@ -23,32 +26,28 @@ export interface DashboardMetrics {
 }
 
 export class GetDashboardUseCase {
-  constructor(private readonly dashboardRepository: DashboardRepository) {}
+  constructor(
+    private readonly dashboardRepository: DashboardRepository,
+    private readonly installmentScheduleService: InstallmentScheduleService = new InstallmentScheduleService(),
+  ) {}
 
   async execute(): Promise<DashboardMetrics> {
-    // Compute current date in Colombia timezone to avoid UTC midnight issues
-    const now = new Date();
-    const parts = new Intl.DateTimeFormat('en-CA', {
-      timeZone: 'America/Bogota',
-      year: 'numeric',
-      month: '2-digit',
-      day: '2-digit',
-    }).formatToParts(now);
-
-    const year = Number(parts.find((p) => p.type === 'year')!.value);
-    const month = Number(parts.find((p) => p.type === 'month')!.value);
-    const day = Number(parts.find((p) => p.type === 'day')!.value);
-
-    const monthStart = new Date(year, month - 1, 1);
-    const monthEnd = new Date(year, month, 0, 23, 59, 59, 999);
-    const today = new Date(year, month - 1, day);
+    const today = InstallmentScheduleService.todayBogota();
     const cutoff = new Date(today);
     cutoff.setDate(cutoff.getDate() + 30);
+
+    const monthStart = new Date(today.getFullYear(), today.getMonth(), 1);
+    const monthEnd = new Date(today.getFullYear(), today.getMonth() + 1, 0, 23, 59, 59, 999);
 
     const raw = await this.dashboardRepository.getRawMetrics(monthStart, monthEnd);
 
     const recentSales = raw.recentSales.map((s) => SaleEntity.fromObject(s));
-    const upcomingCollections = this.computeUpcomingCollections(raw.activeCreditSales, today, cutoff);
+    const upcomingCollections = this.computeUpcomingCollections(
+      raw.activeCreditSales,
+      today,
+      cutoff,
+      raw.paymentsBySaleId,
+    );
 
     return {
       totalSalesAmountThisMonth: raw.totalSalesAmountThisMonth,
@@ -66,59 +65,39 @@ export class GetDashboardUseCase {
     sales: DashboardActiveCreditSale[],
     today: Date,
     cutoff: Date,
+    paymentsBySaleId: Record<string, { amount: number }[]>,
   ): UpcomingCollection[] {
     const result: UpcomingCollection[] = [];
 
     for (const sale of sales) {
-      const days = sale.collectionDay2
-        ? [sale.collectionDay, sale.collectionDay2]
-        : [sale.collectionDay];
+      const saleInput = {
+        ...sale,
+        frequency: (sale.frequency as InstallmentFrequency | null) ?? null,
+        initialPayment: sale.initialPayment ?? null,
+      };
 
-      const after = new Date(sale.createdAt);
-      after.setHours(0, 0, 0, 0);
+      const payments = paymentsBySaleId[sale.id] ?? [];
+      const schedule = this.installmentScheduleService.compute(saleInput, payments, today);
 
-      const dates = this.buildDatesFromDays(days, after, sale.installmentsCount);
-
-      for (const date of dates) {
-        if (date >= today && date <= cutoff) {
+      for (const inst of schedule.installments) {
+        if (
+          inst.dueDate >= today &&
+          inst.dueDate <= cutoff &&
+          (inst.status === 'PENDING' || inst.status === 'PARTIAL')
+        ) {
           result.push({
-            date: date.toISOString(),
+            date: inst.dueDate.toISOString(),
             saleId: sale.id,
             saleNumber: sale.saleNumber,
             clientId: sale.clientId,
             clientName: sale.clientName,
-            installmentAmount:
-              sale.installmentAmount ?? Math.ceil(sale.total / sale.installmentsCount),
+            installmentAmount: inst.expectedAmount,
+            remainingAmount: inst.remainingAmount,
           });
         }
       }
     }
 
     return result.sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
-  }
-
-  /** Replicates the frontend buildDatesFromDays algorithm. */
-  private buildDatesFromDays(days: number[], after: Date, count: number): Date[] {
-    const sorted = [...days].sort((a, b) => a - b);
-    const result: Date[] = [];
-    let year = after.getFullYear();
-    let month = after.getMonth();
-
-    while (result.length < count) {
-      for (const day of sorted) {
-        const candidate = new Date(year, month, day);
-        if (candidate > after) {
-          result.push(candidate);
-          if (result.length >= count) break;
-        }
-      }
-      month++;
-      if (month > 11) {
-        month = 0;
-        year++;
-      }
-    }
-
-    return result;
   }
 }

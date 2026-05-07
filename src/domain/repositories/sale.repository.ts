@@ -8,6 +8,7 @@ export interface SaleRepository {
   findAll(pagination: PaginationDto, filters: FilterSalesDto): Promise<PaginatedResult<SaleEntity>>;
   findById(id: string): Promise<SaleEntity | null>;
   findByClientId(clientId: string): Promise<SaleEntity[]>;
+  findActiveCreditSales(clientId?: string): Promise<SaleEntity[]>;
   create(data: SaleCreateData): Promise<SaleEntity>;
   update(id: string, data: SaleUpdateData): Promise<SaleEntity>;
   delete(id: string, data: SaleDeleteData): Promise<SaleEntity>;

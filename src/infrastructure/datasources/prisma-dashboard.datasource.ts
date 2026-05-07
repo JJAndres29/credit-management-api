@@ -59,10 +59,30 @@ export class PrismaDashboardDatasource implements DashboardDatasource {
             installmentAmount: true,
             collectionDay: true,
             collectionDay2: true,
+            frequency: true,
+            initialPayment: true,
             client: { select: { name: true } },
           },
         }),
       ]);
+
+    const activeSaleIds = activeCreditSales.map((s) => s.id);
+
+    // Bulk-load all payments for active credit sales in a single query (avoids N+1).
+    const paymentsRaw =
+      activeSaleIds.length > 0
+        ? await prisma.payment.findMany({
+            where: { saleId: { in: activeSaleIds } },
+            select: { saleId: true, amount: true },
+          })
+        : [];
+
+    const paymentsBySaleId: Record<string, { amount: number }[]> = {};
+    for (const p of paymentsRaw) {
+      if (!p.saleId) continue;
+      if (!paymentsBySaleId[p.saleId]) paymentsBySaleId[p.saleId] = [];
+      paymentsBySaleId[p.saleId].push({ amount: Number(p.amount) });
+    }
 
     return {
       totalSalesAmountThisMonth: Number(salesAgg._sum.total ?? 0),
@@ -87,7 +107,10 @@ export class PrismaDashboardDatasource implements DashboardDatasource {
         installmentAmount: s.installmentAmount != null ? Number(s.installmentAmount) : null,
         collectionDay: s.collectionDay!,
         collectionDay2: s.collectionDay2 ?? null,
+        frequency: s.frequency ?? null,
+        initialPayment: s.initialPayment != null ? Number(s.initialPayment) : null,
       })) as DashboardActiveCreditSale[],
+      paymentsBySaleId,
     };
   }
 }
