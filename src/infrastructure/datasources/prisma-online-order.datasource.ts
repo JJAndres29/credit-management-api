@@ -171,4 +171,45 @@ export class PrismaOnlineOrderDatasource implements OnlineOrderDatasource {
     });
     return mapToEntity(order as unknown as Record<string, unknown>);
   }
+
+  async tryCancelOrExpirePending(
+    id: string,
+    newStatus: 'CANCELLED' | 'EXPIRED',
+  ): Promise<OnlineOrderEntity | null> {
+    // updateMany with a status guard is the atomic operation that prevents
+    // a race with the webhook handler (which would mark as PAID).
+    const result = await prisma.onlineOrder.updateMany({
+      where: { id, status: 'PENDING_PAYMENT' },
+      data: { status: newStatus as never },
+    });
+    if (result.count === 0) return null;
+
+    const order = await prisma.onlineOrder.findUnique({
+      where: { id },
+      include: includeItems,
+    });
+    if (!order) return null;
+    return mapToEntity(order as unknown as Record<string, unknown>);
+  }
+
+  async markStockRestored(id: string): Promise<void> {
+    // Idempotent: only sets the marker the first time. Repeated calls are no-ops.
+    await prisma.onlineOrder.updateMany({
+      where: { id, stockRestoredAt: null },
+      data: { stockRestoredAt: new Date() },
+    });
+  }
+
+  async findExpiredPending(now: Date, limit: number = 100): Promise<OnlineOrderEntity[]> {
+    const orders = await prisma.onlineOrder.findMany({
+      where: {
+        status: 'PENDING_PAYMENT',
+        expiresAt: { lte: now },
+      },
+      include: includeItems,
+      take: limit,
+      orderBy: { expiresAt: 'asc' },
+    });
+    return orders.map((o) => mapToEntity(o as unknown as Record<string, unknown>));
+  }
 }

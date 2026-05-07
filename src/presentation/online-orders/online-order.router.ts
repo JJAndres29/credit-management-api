@@ -66,6 +66,7 @@ export class OnlineOrderRouter {
         orderRepository,
         new SaleRepositoryImpl(new PrismaSaleDatasource()),
         new CustomerLinkAdapter(new CustomerRepositoryImpl(new PrismaCustomerDatasource())),
+        productCatalog,
       ),
     );
 

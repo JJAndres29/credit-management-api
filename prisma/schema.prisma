@@ -269,10 +269,13 @@ model OnlineOrder {
   paymentUrl              String?
   expiresAt               DateTime?
   paidAt                  DateTime?
+  stockRestoredAt         DateTime?
   createdAt               DateTime           @default(now())
 
   customer Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
   items    OnlineOrderItem[]
+
+  @@index([status, expiresAt], map: "OnlineOrder_pending_expired_idx")
 }
 
 model ProcessedWebhook {

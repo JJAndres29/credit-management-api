@@ -71,8 +71,22 @@ export class ProcessPaymentWebhookUseCase {
 
     // DECLINED
     await this.orderRepository.markAsCancelled(order.id, { provider, eventId });
+    let allRestored = true;
     for (const item of order.items) {
-      await this.productCatalogPort.incrementStock(item.productId, item.quantity);
+      try {
+        await this.productCatalogPort.incrementStock(item.productId, item.quantity);
+      } catch (err) {
+        allRestored = false;
+        console.error('[ProcessWebhook] Falló incrementStock', {
+          orderId: order.id,
+          productId: item.productId,
+          quantity: item.quantity,
+          error: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+    if (allRestored) {
+      await this.orderRepository.markStockRestored(order.id);
     }
     return 'cancelled';
   }

@@ -14,4 +14,10 @@ export interface OnlineOrderRepository {
   webhookExists(provider: string, eventId: string): Promise<boolean>;
   saveProcessedWebhook(data: WebhookData): Promise<void>;
   updateStatus(id: string, status: string): Promise<OnlineOrderEntity>;
+  tryCancelOrExpirePending(
+    id: string,
+    newStatus: 'CANCELLED' | 'EXPIRED',
+  ): Promise<OnlineOrderEntity | null>;
+  markStockRestored(id: string): Promise<void>;
+  findExpiredPending(now: Date, limit?: number): Promise<OnlineOrderEntity[]>;
 }
