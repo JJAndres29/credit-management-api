@@ -1,16 +1,26 @@
 export class CreateProductDto {
   private constructor(
     public readonly name: string,
+    public readonly description: string | null,
     public readonly stock: number,
     public readonly categoryId: string | null,
     public readonly investmentCost: number | null,
   ) {}
 
   static create(object: Record<string, unknown>): [string?, CreateProductDto?] {
-    const { name, stock, categoryId, investmentCost } = object;
+    const { name, description, stock, categoryId, investmentCost } = object;
 
     if (!name || typeof name !== 'string' || name.trim().length < 2) {
       return ['El nombre es requerido y debe tener al menos 2 caracteres'];
+    }
+
+    if (description !== undefined && description !== null) {
+      if (typeof description !== 'string' || description.trim().length === 0) {
+        return ['La descripción debe ser un texto no vacío'];
+      }
+      if ((description as string).trim().length > 2000) {
+        return ['La descripción no puede superar los 2000 caracteres'];
+      }
     }
 
     if (stock !== undefined && stock !== null) {
@@ -33,6 +43,7 @@ export class CreateProductDto {
       undefined,
       new CreateProductDto(
         name.trim(),
+        typeof description === 'string' ? description.trim() : null,
         typeof stock === 'number' ? stock : 0,
         typeof categoryId === 'string' ? categoryId.trim() : null,
         typeof investmentCost === 'number' ? investmentCost : null,
