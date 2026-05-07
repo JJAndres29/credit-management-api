@@ -51,6 +51,7 @@ export class CreatePaymentUseCase {
     let saleTotalPaidAfter: number | undefined;
     let saleCreatedAt: Date | null = null;
     let saleInitialPayment: number = 0;
+    let saleProductsLine: string = '';
 
     // 3. Validaciones adicionales cuando el pago va asociado a una venta específica
     if (dto.saleId) {
@@ -85,6 +86,9 @@ export class CreatePaymentUseCase {
       // initialPayment se descuenta para que solo los pagos regulares cuenten
       // en el cálculo de cuotas: paidInstallments = (totalPaid - initialPayment) / installmentAmount
       saleInitialPayment = sale.initialPayment ?? 0;
+      saleProductsLine = sale.items
+        .map((i) => `${i.productName ?? `Producto ${i.productId.slice(0, 8)}`} (x${i.quantity})`)
+        .join(', ');
     }
 
     // 4. Persistir: la transacción atómica en el datasource se encarga de:
@@ -151,6 +155,7 @@ export class CreatePaymentUseCase {
           `Sr(a) ${client.name}, el estado de cuenta de su crédito No.${saleNumber} es el siguiente:\n\n` +
           `Fecha inicial ${fmtDate(saleCreatedAt)}.\n\n` +
           `Valor del crédito ${fmt(saleTotal)}.\n\n` +
+          `Productos: ${saleProductsLine}.\n\n` +
           `Último pago realizado el ${fmtDate(payment.createdAt)} por valor de ${fmt(dto.amount)}.` +
           installmentsLine +
           `\n\nSu nuevo saldo es ${fmt(newBalance)}.`,

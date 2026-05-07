@@ -83,11 +83,16 @@ export class NotifyClientUseCase {
           (i) => i.status === 'PARTIAL' || i.status === 'PENDING' || i.status === 'OVERDUE',
         );
 
+        const productsLine = activeSale.items
+          .map((i) => `${i.productName ?? `Producto ${i.productId.slice(0, 8)}`} (x${i.quantity})`)
+          .join(', ');
+
         message =
           `*\nESTADO DE CUENTA\n*\n\n` +
           `Sr(a) ${client.name}, el estado de cuenta de su crédito No.${activeSale.saleNumber} es el siguiente:\n\n` +
           `Fecha inicial ${fmtDate(activeSale.createdAt)}.\n\n` +
           `Valor del crédito ${fmt(Number(activeSale.total))}.\n\n` +
+          (productsLine ? `Productos: ${productsLine}.\n\n` : '') +
           (activeSale.initialPayment != null
             ? `Cuota inicial aplicada el ${fmtDate(activeSale.createdAt)} por valor de ${fmt(Number(activeSale.initialPayment))}.\n\n`
             : '') +
