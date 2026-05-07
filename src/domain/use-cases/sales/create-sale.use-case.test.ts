@@ -52,6 +52,7 @@ function makeProduct(overrides: Partial<{
   return new ProductEntity(
     overrides.id ?? 'prod-1',
     'Producto Test',
+    null,
     overrides.stock ?? 50,
     null,
     null,

@@ -80,6 +80,7 @@ export class PrismaProductDatasource implements ProductDatasource {
     const product = await prisma.product.create({
       data: {
         name: dto.name,
+        description: dto.description,
         stock: dto.stock,
         categoryId: dto.categoryId,
         ...(dto.investmentCost !== undefined && { investmentCost: dto.investmentCost }),
@@ -96,6 +97,7 @@ export class PrismaProductDatasource implements ProductDatasource {
         where: { id },
         data: {
           ...(dto.name !== undefined && { name: dto.name }),
+          ...(dto.description !== undefined && { description: dto.description }),
           ...(dto.categoryId !== undefined && { categoryId: dto.categoryId }),
           ...(dto.investmentCost !== undefined && { investmentCost: dto.investmentCost }),
         },

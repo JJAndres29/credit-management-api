@@ -9,6 +9,7 @@ export class ProductEntity {
   constructor(
     public readonly id: string,
     public readonly name: string,
+    public readonly description: string | null,
     public readonly stock: number,
     public readonly retailPrice: number | null,
     public readonly investmentCost: number | null,
@@ -25,6 +26,7 @@ export class ProductEntity {
     return {
       id: this.id,
       name: this.name,
+      description: this.description,
       stock: this.stock,
       retailPrice: this.retailPrice,
       investmentCost: this.investmentCost,
@@ -39,7 +41,7 @@ export class ProductEntity {
   }
 
   static fromObject(object: Record<string, unknown>): ProductEntity {
-    const { id, name, stock, retailPrice, investmentCost, images, categoryId, category, attributes, isActive, createdAt, updatedAt } = object;
+    const { id, name, description, stock, retailPrice, investmentCost, images, categoryId, category, attributes, isActive, createdAt, updatedAt } = object;
 
     if (!id) throw new Error('Product id is required');
     if (!name) throw new Error('Product name is required');
@@ -71,6 +73,7 @@ export class ProductEntity {
     return new ProductEntity(
       id as string,
       name as string,
+      (description as string | null | undefined) ?? null,
       Number(stock ?? 0),
       retailPrice != null ? Number(retailPrice) : null,
       investmentCost != null ? Number(investmentCost) : null,
