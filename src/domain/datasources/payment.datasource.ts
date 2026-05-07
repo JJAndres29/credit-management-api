@@ -54,6 +54,8 @@ export interface PaymentDatasource {
   findById(id: string): Promise<PaymentEntity | null>;
   findByClientId(clientId: string): Promise<PaymentEntity[]>;
   findBySaleId(saleId: string): Promise<PaymentEntity[]>;
+  /** Bulk-load: retorna pagos para múltiples saleIds en una sola query (evita N+1). */
+  findBySaleIds(saleIds: string[]): Promise<PaymentEntity[]>;
   /**
    * Crea el pago, decrementa el balance del cliente y (si hay saleId)
    * recalcula el estado de la venta — todo en una transacción atómica.

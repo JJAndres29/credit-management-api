@@ -16,6 +16,10 @@ export interface DashboardActiveCreditSale {
   installmentAmount: number | null;
   collectionDay: number;
   collectionDay2: number | null;
+  /** Periodicidad del plan de cuotas — necesaria para generar fechas correctamente. */
+  frequency: string | null;
+  /** Cuota inicial abonada al crear la venta — se descuenta del numerador FIFO. */
+  initialPayment: number | null;
 }
 
 export interface DashboardRawMetrics {
@@ -27,6 +31,8 @@ export interface DashboardRawMetrics {
   salesByStatus: DashboardSalesByStatus[];
   recentSales: Record<string, unknown>[];
   activeCreditSales: DashboardActiveCreditSale[];
+  /** Pagos agrupados por saleId para las ventas activas a crédito. */
+  paymentsBySaleId: Record<string, { amount: number }[]>;
 }
 
 export interface DashboardDatasource {

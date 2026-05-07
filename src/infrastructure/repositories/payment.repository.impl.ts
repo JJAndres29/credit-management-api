@@ -24,6 +24,10 @@ export class PaymentRepositoryImpl implements PaymentRepository {
     return this.datasource.findBySaleId(saleId);
   }
 
+  findBySaleIds(saleIds: string[]): Promise<PaymentEntity[]> {
+    return this.datasource.findBySaleIds(saleIds);
+  }
+
   create(data: PaymentCreateData): Promise<PaymentEntity> {
     return this.datasource.create(data);
   }

@@ -16,6 +16,7 @@ import { CategoryRouter } from './categories/category.router';
 import { AttributeRouter } from './categories/attribute.router';
 import { OnlineOrderRouter } from './online-orders/online-order.router';
 import { EcommerceRouter } from './ecommerce/ecommerce.router';
+import { CollectionRouter } from './collections/collection.router';
 import helmet from 'helmet';
 import cors from 'cors';
 
@@ -63,6 +64,7 @@ export class Server {
     this.app.use('/api/reports', ReportRouter.routes);
     this.app.use('/api/dashboard', DashboardRouter.routes);
     this.app.use('/api/customer-auth', CustomerAuthRouter.routes);
+    this.app.use('/api/collections', CollectionRouter.routes);
     this.app.use('/api/categories', CategoryRouter.routes);
     this.app.use('/api/online-orders', OnlineOrderRouter.routes);
     this.app.use('/api', AttributeRouter.routes);

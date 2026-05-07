@@ -9,6 +9,7 @@ export interface PaymentRepository {
   findById(id: string): Promise<PaymentEntity | null>;
   findByClientId(clientId: string): Promise<PaymentEntity[]>;
   findBySaleId(saleId: string): Promise<PaymentEntity[]>;
+  findBySaleIds(saleIds: string[]): Promise<PaymentEntity[]>;
   create(data: PaymentCreateData): Promise<PaymentEntity>;
   update(id: string, data: PaymentUpdateData): Promise<PaymentEntity>;
   delete(id: string, data: PaymentDeleteData): Promise<PaymentEntity>;
