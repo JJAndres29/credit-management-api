@@ -5,6 +5,11 @@ export interface ProductSelectedAttribute {
   value: string;
 }
 
+export interface ProductAttributeValue {
+  attribute: { name: string };
+  value: string;
+}
+
 export class ProductEntity {
   constructor(
     public readonly id: string,
@@ -33,7 +38,7 @@ export class ProductEntity {
       images: this.images,
       categoryId: this.categoryId,
       categoryName: this.categoryName,
-      attributes: this.attributes,
+      attributes: this.attributes.map((a) => ({ attribute: { name: a.attribute }, value: a.value })),
       isActive: this.isActive,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
