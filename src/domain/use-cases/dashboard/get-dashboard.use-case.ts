@@ -15,11 +15,22 @@ export interface UpcomingCollection {
 }
 
 export interface DashboardMetrics {
+  /** Suma total de ventas (CASH + CREDIT) del mes en curso. */
   totalSalesAmountThisMonth: number;
   salesCountThisMonth: number;
+  /** Suma de pagos cobrados en el mes (representa cobros de crédito). */
   totalCollectedThisMonth: number;
   totalPendingDebt: number;
   activeClientsCount: number;
+  /** Suma de ventas de contado (CASH) del mes en curso. */
+  totalCashSalesThisMonth: number;
+  /** Suma de ventas a crédito (CREDIT) del mes en curso. */
+  totalCreditSalesThisMonth: number;
+  /**
+   * Ingresos totales del mes = ventas contado + cobros de crédito recibidos.
+   * Invariante: todo Payment es cobro de crédito; toda Sale.CASH es cobro al contado.
+   */
+  totalIncomeThisMonth: number;
   salesByStatus: { status: string; count: number; amount: number }[];
   recentSales: SaleEntity[];
   upcomingCollections: UpcomingCollection[];
@@ -55,6 +66,9 @@ export class GetDashboardUseCase {
       totalCollectedThisMonth: raw.totalCollectedThisMonth,
       totalPendingDebt: raw.totalPendingDebt,
       activeClientsCount: raw.activeClientsCount,
+      totalCashSalesThisMonth: raw.totalCashSalesThisMonth,
+      totalCreditSalesThisMonth: raw.totalCreditSalesThisMonth,
+      totalIncomeThisMonth: raw.totalCashSalesThisMonth + raw.totalCollectedThisMonth,
       salesByStatus: raw.salesByStatus,
       recentSales,
       upcomingCollections,

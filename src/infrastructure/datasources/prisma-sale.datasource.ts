@@ -5,9 +5,9 @@ import { FilterSalesDto } from '../../domain/dtos/sales';
 import { PaginationDto } from '../../domain/dtos/shared';
 import { PaginatedResult } from '../../domain/types/paginated.type';
 
-// Inclusión de ítems en todas las consultas de venta
+// Inclusión de ítems con nombre de producto en todas las consultas de venta
 const SALE_WITH_ITEMS = {
-  items: true,
+  items: { include: { product: { select: { id: true, name: true } } } },
 } as const;
 
 function mapToEntity(sale: Record<string, unknown>): SaleEntity {

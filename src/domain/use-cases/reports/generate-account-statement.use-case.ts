@@ -38,18 +38,26 @@ export class GenerateAccountStatementUseCase {
       this.paymentRepository.findByClientId(clientId),
     ]);
 
-    // Recopilar todos los productId únicos para hacer un solo lookup por producto
-    // en lugar de uno por ítem (reduce queries duplicadas cuando hay varios ítems
-    // del mismo producto en distintas ventas).
-    const uniqueProductIds = [...new Set(sales.flatMap((s) => s.items.map((i) => i.productId)))];
+    // Solo consultar el repositorio para ítems que no tienen productName en el JOIN
+    // (datos históricos creados antes de E3, o entidades construidas sin el campo).
+    // En condiciones normales esta lista estará vacía y no se hará ninguna query extra.
+    const idsNeedingLookup = [
+      ...new Set(
+        sales.flatMap((s) =>
+          s.items.filter((i) => !i.productName).map((i) => i.productId),
+        ),
+      ),
+    ];
 
     const productMap = new Map<string, string>();
-    await Promise.all(
-      uniqueProductIds.map(async (productId) => {
-        const product = await this.productRepository.findById(productId);
-        productMap.set(productId, product?.name ?? `Producto ${productId.slice(0, 8)}`);
-      }),
-    );
+    if (idsNeedingLookup.length > 0) {
+      await Promise.all(
+        idsNeedingLookup.map(async (productId) => {
+          const product = await this.productRepository.findById(productId);
+          productMap.set(productId, product?.name ?? `Producto ${productId.slice(0, 8)}`);
+        }),
+      );
+    }
 
     const data: AccountStatementData = {
       client: {
@@ -67,7 +75,11 @@ export class GenerateAccountStatementUseCase {
         total: sale.total,
         createdAt: sale.createdAt,
         items: sale.items.map((item) => ({
-          productName: productMap.get(item.productId) ?? item.productId,
+          // Preferir el nombre inline del JOIN; caer al mapa de lookup para datos históricos.
+          productName:
+            item.productName ??
+            productMap.get(item.productId) ??
+            `Producto ${item.productId.slice(0, 8)}`,
           quantity: item.quantity,
           basePrice: item.basePrice,
           unitPrice: item.unitPrice,

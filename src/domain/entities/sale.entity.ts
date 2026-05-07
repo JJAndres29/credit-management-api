@@ -30,6 +30,11 @@ export class SaleItemEntity {
      * Null en ventas creadas antes de la implementación del Pricing Domain Service.
      */
     public readonly appliedRule: string | null,
+    /**
+     * Nombre del producto al momento de la consulta (obtenido vía JOIN en el datasource).
+     * Null en ventas cargadas desde caché o en tests que construyen la entidad directamente.
+     */
+    public readonly productName: string | null = null,
   ) {}
 }
 
@@ -82,19 +87,25 @@ export class SaleEntity {
     if (total === undefined) throw new Error('Sale total is required');
 
     const mappedItems: SaleItemEntity[] = Array.isArray(items)
-      ? (items as Record<string, unknown>[]).map(
-          (item) =>
-            new SaleItemEntity(
-              item.id as string,
-              item.saleId as string,
-              item.productId as string,
-              Number(item.quantity),
-              item.basePrice != null ? Number(item.basePrice) : null,
-              Number(item.unitPrice),
-              Number(item.subtotal),
-              (item.appliedRule as string | null) ?? null,
-            ),
-        )
+      ? (items as Record<string, unknown>[]).map((item) => {
+          // `product` viene del JOIN de Prisma cuando se usa SALE_WITH_ITEMS.
+          // Puede ser undefined si la entidad se construyó directamente (tests, etc.).
+          const productRecord = item.product as { name: string } | null | undefined;
+          const productName: string | null =
+            productRecord?.name ?? (item.productName as string | null) ?? null;
+
+          return new SaleItemEntity(
+            item.id as string,
+            item.saleId as string,
+            item.productId as string,
+            Number(item.quantity),
+            item.basePrice != null ? Number(item.basePrice) : null,
+            Number(item.unitPrice),
+            Number(item.subtotal),
+            (item.appliedRule as string | null) ?? null,
+            productName,
+          );
+        })
       : [];
 
     return new SaleEntity(
