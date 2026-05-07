@@ -6,10 +6,11 @@ export class FilterProductsDto {
     public readonly minStock?: number,
     public readonly maxStock?: number,
     public readonly categoryId?: string,
+    public readonly inStock?: boolean,
   ) {}
 
   static create(object: Record<string, unknown>): [string?, FilterProductsDto?] {
-    const { search, minStock, maxStock, categoryId } = object;
+    const { search, minStock, maxStock, categoryId, inStock } = object;
 
     if (search !== undefined && typeof search !== 'string') {
       return ['search debe ser una cadena de texto'];
@@ -43,6 +44,13 @@ export class FilterProductsDto {
       categoryIdStr = categoryId;
     }
 
+    let inStockBool: boolean | undefined;
+    if (inStock !== undefined) {
+      if (inStock === 'true' || inStock === true) inStockBool = true;
+      else if (inStock === 'false' || inStock === false) inStockBool = false;
+      else return ['inStock debe ser true o false'];
+    }
+
     return [
       undefined,
       new FilterProductsDto(
@@ -50,6 +58,7 @@ export class FilterProductsDto {
         minStockNum,
         maxStockNum,
         categoryIdStr,
+        inStockBool,
       ),
     ];
   }
