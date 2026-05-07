@@ -162,6 +162,10 @@ model Sale {
   client   Client     @relation(fields: [clientId], references: [id])
   items    SaleItem[]
   payments Payment[]
+
+  // Partial composite index on (type, status, collectionDay) WHERE installmentsCount IS NOT NULL.
+  // Prisma DSL does not support partial indexes — managed by raw migration
+  // 20260506000000_add_active_credit_sales_index as "Sale_active_credit_idx".
 }
 
 model SaleItem {
@@ -188,6 +192,10 @@ model Payment {
 
   client Client @relation(fields: [clientId], references: [id])
   sale   Sale?  @relation(fields: [saleId], references: [id])
+
+  // Composite index: accelerates bulk-load of payments by saleId (used by dashboard & GetCollectionsUseCase).
+  // Created by migration 20260506000000_add_active_credit_sales_index.
+  @@index([saleId, createdAt])
 }
 
 model AuditLog {
