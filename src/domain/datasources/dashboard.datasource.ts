@@ -23,11 +23,16 @@ export interface DashboardActiveCreditSale {
 }
 
 export interface DashboardRawMetrics {
+  /** Suma de todas las ventas (CASH + CREDIT) del mes en curso. Mantenido para compatibilidad. */
   totalSalesAmountThisMonth: number;
   salesCountThisMonth: number;
   totalCollectedThisMonth: number;
   totalPendingDebt: number;
   activeClientsCount: number;
+  /** Suma de ventas de contado (CASH) del mes en curso. */
+  totalCashSalesThisMonth: number;
+  /** Suma de ventas a crédito (CREDIT) del mes en curso. */
+  totalCreditSalesThisMonth: number;
   salesByStatus: DashboardSalesByStatus[];
   recentSales: Record<string, unknown>[];
   activeCreditSales: DashboardActiveCreditSale[];
