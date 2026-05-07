@@ -5,8 +5,9 @@ export interface ProductSelectedAttribute {
   value: string;
 }
 
+/** Shape of each entry in `attributes` in API JSON (scalar strings). */
 export interface ProductAttributeValue {
-  attribute: { name: string };
+  attribute: string;
   value: string;
 }
 
@@ -38,7 +39,7 @@ export class ProductEntity {
       images: this.images,
       categoryId: this.categoryId,
       categoryName: this.categoryName,
-      attributes: this.attributes.map((a) => ({ attribute: { name: a.attribute }, value: a.value })),
+      attributes: this.attributes.map((a) => ({ attribute: a.attribute, value: a.value })),
       isActive: this.isActive,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
