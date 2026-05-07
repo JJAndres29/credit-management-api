@@ -27,6 +27,10 @@ function buildWhere(filters: FilterProductsDto) {
   if (filters.minStock !== undefined) stockFilter.gte = filters.minStock;
   if (filters.maxStock !== undefined) stockFilter.lte = filters.maxStock;
 
+  // inStock overrides minStock/maxStock when present
+  if (filters.inStock === true) stockFilter.gt = 0;
+  else if (filters.inStock === false) stockFilter.equals = 0;
+
   return {
     isActive: true,
     ...(filters.search && {

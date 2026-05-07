@@ -957,7 +957,8 @@ El datasource usa `skip: pagination.skip, take: pagination.limit` directamente e
 - `page`, `limit`
 - `search` — búsqueda en name (insensitive)
 - `minPrice`, `maxPrice` — rango de precio
-- `minStock`, `maxStock` — rango de stock
+- `minStock`, `maxStock` — rango de stock arbitrario
+- `inStock=true|false` — `true` → stock > 0; `false` → stock = 0. Tiene precedencia sobre minStock/maxStock.
 
 **Ventas** (`GET /api/sales`)
 - `page`, `limit`
