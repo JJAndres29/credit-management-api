@@ -204,6 +204,10 @@ export class CreateSaleUseCase {
       return `${day}-${month}-${year}`;
     };
 
+    const fmtProducts = sale.items
+      .map((i) => `${i.productName ?? `Producto ${i.productId.slice(0, 8)}`} (x${i.quantity})`)
+      .join(', ');
+
     let whatsappPayload: WhatsAppPayload | null = null;
 
     if (client.phone) {
@@ -212,7 +216,8 @@ export class CreateSaleUseCase {
           `***\nESTADO DE CUENTA\n***\n\n` +
           `Sr(a) ${client.name}, el estado de cuenta de su crédito No.${sale.saleNumber} es el siguiente:\n\n` +
           `Fecha inicial ${fmtDate(sale.createdAt)}.\n\n` +
-          `Valor del crédito ${fmt(total)}.`;
+          `Valor del crédito ${fmt(total)}.\n\n` +
+          `Productos: ${fmtProducts}.`;
 
         if (installmentAmount && dto.installmentsCount) {
           if (initialPayment > 0) {
@@ -233,7 +238,8 @@ export class CreateSaleUseCase {
           message:
             `***\nCOMPRA REGISTRADA\n***\n\n` +
             `Sr(a) ${client.name}, se registró una compra de contado el ${fmtDate(sale.createdAt)} ` +
-            `por valor de ${fmt(total)}. Ref: #${sale.saleNumber}`,
+            `por valor de ${fmt(total)}. Ref: #${sale.saleNumber}\n\n` +
+            `Productos: ${fmtProducts}.`,
         };
       }
     }

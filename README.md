@@ -23,6 +23,7 @@
 - [Notification System](#notification-system)
 - [PDF Report System](#pdf-report-system)
 - [Product Categorization & Dynamic Attributes](#product-categorization--dynamic-attributes)
+- [Dashboard Collections & Monthly Summary](#dashboard-collections--monthly-summary)
 
 ---
 
@@ -44,6 +45,7 @@ This system allows a retail business to manage credit operations for its clients
 - **Automatic notifications** — Email (via Nodemailer/Gmail) sent after every payment and credit sale, with the PDF account statement attached. WhatsApp integration is **dormant**: the backend pre-builds a `whatsappPayload { phone, message }` returned in every `POST /api/payments` and `POST /api/sales` (201) response so the frontend can open a `wa.me` Deep Link for manual sending. The Meta Cloud API send blocks are commented out and can be reactivated without touching business logic. Notifications are optional and best-effort: if the provider fails or credentials are missing, the financial operation is not affected
 - **On-demand client notification** — Any authenticated user can trigger a notification to a client via `POST /api/clients/:id/notify`. Returns a `whatsappPayload` immediately for manual `wa.me` sending — the message includes full installment detail (sale number, initial date, credit amount, initial payment, paid installments, current balance) when an active credit plan exists. Asynchronously emails the client's full PDF account statement
 - **PDF account statements** — On-demand PDF generation for any client via `GET /api/reports/account-statement/:clientId`. The PDF is generated in memory and streamed directly to the browser — nothing is ever saved to disk
+- **Installment schedule as a reusable domain service** — Upcoming collections, overdue collections, and monthly dashboard summaries now share a single installment computation flow (`InstallmentScheduleService`) to avoid duplicated logic and inconsistent amounts
 
 ---
 
@@ -1386,6 +1388,38 @@ All errors follow this consistent structure:
 
 ---
 
+### Dashboard & Collections
+
+All dashboard endpoints require `Authorization: Bearer <token>`.
+
+#### GET `/api/dashboard`
+
+Returns current dashboard metrics plus upcoming collections.
+
+#### GET `/api/dashboard/monthly-summary?month=YYYY-MM`
+
+Returns dashboard metrics for a specific month. If `month` is omitted, it defaults to the current month in `America/Bogota`.
+
+#### GET `/api/collections/installments`
+
+Returns pending/partial/overdue installments derived on-the-fly from sales + payments.
+
+**Query parameters:**
+
+| Parameter | Type | Description |
+|-----------|------|-------------|
+| `page` | integer | Page number (default: `1`) |
+| `limit` | integer | Items per page (default: `20`, max: `100`) |
+| `status` | string | `PENDING`, `PARTIAL`, `OVERDUE` |
+| `clientId` | string | Filter by client |
+| `month` | string | Month shortcut (`YYYY-MM`) |
+| `dueFrom` | string | Due date start (ISO 8601, inclusive) |
+| `dueTo` | string | Due date end (ISO 8601, inclusive) |
+
+**Response `200`:** paginated rows with `saleId`, `saleNumber`, `clientName`, `dueDate`, `expectedAmount`, `paidAmount`, `remainingAmount`, `status`, `daysOverdue`.
+
+---
+
 ## Security
 
 ### Implemented measures
@@ -1482,6 +1516,11 @@ npm run db:seed         # Create default admin user
 | 15 | Timezone fix — `notify-client.use-case.ts` `fmtDate` now uses `Intl.DateTimeFormat` with `timeZone: 'America/Bogota'` (was calling `Date.getDate()` in UTC) | ✅ Done |
 | 16 | Sale deletion (`DELETE /api/sales/:id` — ADMIN, no-payments guard, stock restored, CREDIT balance reverted + `SALE_DELETED` audit log, atomic transaction) | ✅ Done |
 | 17 | Product retail price (`PATCH /api/products/:id/retail-price` — ADMIN, sets/clears optional suggested display price `retailPrice Decimal?` on Product; pure reference field, never affects sale calculations) | ✅ Done |
+| 18 | E0/E1 — Installment schedule refactor + upcoming collections fix (FIFO carryover with remaining amount per installment) | ✅ Done |
+| 19 | E2 — New collections installment view (`GET /api/collections/installments`) with pending/partial/overdue filters | ✅ Done |
+| 20 | E3 — Sales listing enriched with product names (better traceability on sale items) | ✅ Done |
+| 21 | E4/E5 — Dashboard metrics restructured and monthly summary endpoint (`GET /api/dashboard/monthly-summary`) | ✅ Done |
+| 22 | E6/E7 — Tests for schedule/dashboard/collections and performance indexes (`Sale_active_credit_idx`, `Payment(saleId, createdAt)`) | ✅ Done |
 
 ---
 
