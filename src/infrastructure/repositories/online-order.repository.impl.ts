@@ -51,4 +51,19 @@ export class OnlineOrderRepositoryImpl implements OnlineOrderRepository {
   updateStatus(id: string, status: string): Promise<OnlineOrderEntity> {
     return this.datasource.updateStatus(id, status);
   }
+
+  tryCancelOrExpirePending(
+    id: string,
+    newStatus: 'CANCELLED' | 'EXPIRED',
+  ): Promise<OnlineOrderEntity | null> {
+    return this.datasource.tryCancelOrExpirePending(id, newStatus);
+  }
+
+  markStockRestored(id: string): Promise<void> {
+    return this.datasource.markStockRestored(id);
+  }
+
+  findExpiredPending(now: Date, limit?: number): Promise<OnlineOrderEntity[]> {
+    return this.datasource.findExpiredPending(now, limit);
+  }
 }

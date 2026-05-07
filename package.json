@@ -13,7 +13,9 @@
     "db:generate": "prisma generate",
     "db:studio": "prisma studio",
     "db:seed": "ts-node prisma/seed.ts",
-    "seed:prod": "ts-node prisma/seed.ts"
+    "seed:prod": "ts-node prisma/seed.ts",
+    "fix:restore-stock": "ts-node scripts/restore-cancelled-orders-stock.ts",
+    "fix:restore-stock:apply": "ts-node scripts/restore-cancelled-orders-stock.ts --apply"
   },
   "dependencies": {
     "@prisma/client": "^5.22.0",

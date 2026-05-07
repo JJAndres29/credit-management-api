@@ -71,6 +71,7 @@ export class OnlineOrderEntity {
     public readonly paymentGatewayReference: string | null,
     public readonly paymentUrl: string | null,
     public readonly customer: OrderCustomerSnapshot | null,
+    public readonly stockRestoredAt: Date | null = null,
   ) {}
 
   toJSON() {
@@ -90,6 +91,7 @@ export class OnlineOrderEntity {
       paymentUrl: this.paymentUrl,
       expiresAt: this.expiresAt,
       paidAt: this.paidAt,
+      stockRestoredAt: this.stockRestoredAt,
       createdAt: this.createdAt,
       items: this.items.map((i) => i.toJSON()),
     };
@@ -100,7 +102,7 @@ export class OnlineOrderEntity {
       id, orderNumber, customerId, guestName, guestPhone, guestEmail,
       shippingAddress, status, totalAmount, paymentMethod,
       paymentGatewayReference, paymentUrl,
-      expiresAt, paidAt, createdAt, items, customer,
+      expiresAt, paidAt, stockRestoredAt, createdAt, items, customer,
     } = object;
 
     if (!id) throw new Error('OnlineOrder id is required');
@@ -131,6 +133,7 @@ export class OnlineOrderEntity {
       (paymentGatewayReference as string | null | undefined) ?? null,
       (paymentUrl as string | null | undefined) ?? null,
       parsedCustomer,
+      stockRestoredAt ? new Date(stockRestoredAt as string | Date) : null,
     );
   }
 }

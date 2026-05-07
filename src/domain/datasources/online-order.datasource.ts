@@ -44,4 +44,28 @@ export interface OnlineOrderDatasource {
   webhookExists(provider: string, eventId: string): Promise<boolean>;
   saveProcessedWebhook(data: WebhookData): Promise<void>;
   updateStatus(id: string, status: string): Promise<OnlineOrderEntity>;
+
+  /**
+   * Conditional transition: PENDING_PAYMENT → CANCELLED | EXPIRED.
+   * Atomic guard against concurrent webhook updates.
+   * Returns the updated order, or `null` if the order was no longer in
+   * PENDING_PAYMENT (already paid, cancelled, or expired by someone else).
+   */
+  tryCancelOrExpirePending(
+    id: string,
+    newStatus: 'CANCELLED' | 'EXPIRED',
+  ): Promise<OnlineOrderEntity | null>;
+
+  /**
+   * Idempotent marker: set `stockRestoredAt = NOW()` only if it was NULL.
+   * Called after `incrementStock` succeeds for every item of the order.
+   */
+  markStockRestored(id: string): Promise<void>;
+
+  /**
+   * Returns orders in PENDING_PAYMENT whose `expiresAt` has passed.
+   * Used by the expiry job. Caller is responsible for invoking
+   * `tryCancelOrExpirePending` per order to handle race with webhooks.
+   */
+  findExpiredPending(now: Date, limit?: number): Promise<OnlineOrderEntity[]>;
 }

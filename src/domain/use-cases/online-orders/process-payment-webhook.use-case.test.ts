@@ -67,6 +67,9 @@ const mockRepo: jest.Mocked<OnlineOrderRepository> = {
   webhookExists: jest.fn(),
   saveProcessedWebhook: jest.fn(),
   updateStatus: jest.fn(),
+  tryCancelOrExpirePending: jest.fn(),
+  markStockRestored: jest.fn(),
+  findExpiredPending: jest.fn(),
 };
 
 const mockGateway: jest.Mocked<IPaymentGateway> = {
@@ -141,13 +144,14 @@ describe('ProcessPaymentWebhookUseCase', () => {
     expect(result).toBe('paid');
   });
 
-  it('DECLINED → cancelled + incrementStock por cada item', async () => {
+  it('DECLINED → cancelled + incrementStock por cada item + markStockRestored', async () => {
     const items = [makeItem('prod-A', 3), makeItem('prod-B', 1)];
     mockRepo.webhookExists.mockResolvedValue(false);
     mockGateway.verifyTransaction.mockResolvedValue(makeVerifyResult({ status: 'DECLINED' }));
     mockRepo.findById.mockResolvedValue(makeOrder({ items }));
     mockRepo.markAsCancelled.mockResolvedValue(makeOrder({ status: OrderStatus.CANCELLED, items }));
     mockCatalog.incrementStock.mockResolvedValue(undefined);
+    mockRepo.markStockRestored.mockResolvedValue(undefined);
 
     const result = await useCase.execute({ provider: 'mercadopago', eventId: 'ev-1', paymentId: 'pay-1' });
 
@@ -156,6 +160,23 @@ describe('ProcessPaymentWebhookUseCase', () => {
     expect(mockCatalog.incrementStock).toHaveBeenCalledWith('prod-A', 3);
     expect(mockCatalog.incrementStock).toHaveBeenCalledWith('prod-B', 1);
     expect(mockCatalog.incrementStock).toHaveBeenCalledTimes(2);
+    expect(mockRepo.markStockRestored).toHaveBeenCalledWith('order-uuid-1');
+  });
+
+  it('DECLINED con incrementStock fallido → no marca stockRestored (consistency)', async () => {
+    const items = [makeItem('prod-A', 3), makeItem('prod-B', 1)];
+    mockRepo.webhookExists.mockResolvedValue(false);
+    mockGateway.verifyTransaction.mockResolvedValue(makeVerifyResult({ status: 'DECLINED' }));
+    mockRepo.findById.mockResolvedValue(makeOrder({ items }));
+    mockRepo.markAsCancelled.mockResolvedValue(makeOrder({ status: OrderStatus.CANCELLED, items }));
+    mockCatalog.incrementStock
+      .mockResolvedValueOnce(undefined)
+      .mockRejectedValueOnce(new Error('DB down'));
+
+    const result = await useCase.execute({ provider: 'mercadopago', eventId: 'ev-1', paymentId: 'pay-1' });
+
+    expect(result).toBe('cancelled');
+    expect(mockRepo.markStockRestored).not.toHaveBeenCalled();
   });
 
   it('PENDING → pending, no escribe ProcessedWebhook', async () => {

@@ -76,6 +76,9 @@ const mockRepo: jest.Mocked<OnlineOrderRepository> = {
   webhookExists: jest.fn(),
   saveProcessedWebhook: jest.fn(),
   updateStatus: jest.fn(),
+  tryCancelOrExpirePending: jest.fn(),
+  markStockRestored: jest.fn(),
+  findExpiredPending: jest.fn(),
 };
 
 // ─── DTO validation tests ────────────────────────────────────────────────────
