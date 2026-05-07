@@ -8,7 +8,7 @@ import {
 } from '../../domain/use-cases/online-orders';
 import { OnlineOrderRepositoryImpl, SaleRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaOnlineOrderDatasource, PrismaSaleDatasource } from '../../infrastructure/datasources';
-import { ProductCatalogAdapter, CustomerJwtAdapter, MercadoPagoGatewayAdapter } from '../../infrastructure/services';
+import { ProductCatalogAdapter, CustomerJwtAdapter, MercadoPagoGatewayAdapter, CustomerLinkAdapter } from '../../infrastructure/services';
 import { CustomerRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaCustomerDatasource } from '../../infrastructure/datasources';
 import { AuthMiddleware, checkRole } from '../middlewares';
@@ -65,7 +65,7 @@ export class OnlineOrderRouter {
       new UpdateOnlineOrderStatusUseCase(
         orderRepository,
         new SaleRepositoryImpl(new PrismaSaleDatasource()),
-        new CustomerRepositoryImpl(new PrismaCustomerDatasource()),
+        new CustomerLinkAdapter(new CustomerRepositoryImpl(new PrismaCustomerDatasource())),
       ),
     );
 

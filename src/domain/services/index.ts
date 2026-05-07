@@ -9,6 +9,7 @@ export { ClientLookupPort } from './client-lookup.port';
 export type { ClientSummary } from './client-lookup.port';
 export { ProductCatalogPort } from './product-catalog.port';
 export type { ProductForOrder } from './product-catalog.port';
+export { CustomerLinkPort } from './customer-link.port';
 export { IPaymentGateway } from './payment-gateway.port';
 export type { GatewayTransactionStatus } from './payment-gateway.port';
 export { MonthlySummaryPort } from './monthly-summary.port';
