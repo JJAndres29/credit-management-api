@@ -271,12 +271,29 @@ model OnlineOrder {
   expiresAt               DateTime?
   paidAt                  DateTime?
   stockRestoredAt         DateTime?
+  /// Request metadata for future antifraud / forensics (no scoring in P0)
+  ipAddress               String?
+  userAgent               String?
+  deviceFingerprintHash   String?
   createdAt               DateTime           @default(now())
 
   customer Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
   items    OnlineOrderItem[]
 
   @@index([status, expiresAt], map: "OnlineOrder_pending_expired_idx")
+}
+
+/// Stores replay responses for POST Idempotency-Key (payments, sales, online orders)
+model IdempotencyRecord {
+  id           String   @id @default(uuid())
+  key          String
+  operation    String
+  bodyHash     String
+  statusCode   Int
+  responseBody Json
+  createdAt    DateTime @default(now())
+
+  @@unique([key, operation])
 }
 
 model ProcessedWebhook {

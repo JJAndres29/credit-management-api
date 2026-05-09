@@ -16,6 +16,7 @@ import { CategoryRepositoryImpl, ProductRepositoryImpl } from '../../infrastruct
 import { PrismaCategoryDatasource, PrismaProductDatasource } from '../../infrastructure/datasources';
 import { CloudinaryAdapter } from '../../infrastructure/services';
 import { AuthMiddleware, checkRole, uploadImages } from '../middlewares';
+import { RateLimitMiddleware } from '../middlewares/rate-limit.middleware';
 import { JwtAdapter } from '../../infrastructure/services';
 import { AuthRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaAuthDatasource } from '../../infrastructure/datasources';
@@ -50,8 +51,8 @@ export class ProductRouter {
     );
 
     // Público
-    router.get('/', controller.getAll);
-    router.get('/:id', controller.getById);
+    router.get('/', RateLimitMiddleware.publicProductsReadLimiter, controller.getAll);
+    router.get('/:id', RateLimitMiddleware.publicProductsReadLimiter, controller.getById);
 
     // Staff JWT + ADMIN
     router.post('/:id/attributes', middleware.validateJwt, checkRole(Role.ADMIN), controller.assignAttributes);

@@ -72,6 +72,9 @@ export class OnlineOrderEntity {
     public readonly paymentUrl: string | null,
     public readonly customer: OrderCustomerSnapshot | null,
     public readonly stockRestoredAt: Date | null = null,
+    public readonly ipAddress: string | null = null,
+    public readonly userAgent: string | null = null,
+    public readonly deviceFingerprintHash: string | null = null,
   ) {}
 
   toJSON() {
@@ -92,6 +95,9 @@ export class OnlineOrderEntity {
       expiresAt: this.expiresAt,
       paidAt: this.paidAt,
       stockRestoredAt: this.stockRestoredAt,
+      ipAddress: this.ipAddress,
+      userAgent: this.userAgent,
+      deviceFingerprintHash: this.deviceFingerprintHash,
       createdAt: this.createdAt,
       items: this.items.map((i) => i.toJSON()),
     };
@@ -102,7 +108,8 @@ export class OnlineOrderEntity {
       id, orderNumber, customerId, guestName, guestPhone, guestEmail,
       shippingAddress, status, totalAmount, paymentMethod,
       paymentGatewayReference, paymentUrl,
-      expiresAt, paidAt, stockRestoredAt, createdAt, items, customer,
+      expiresAt, paidAt, stockRestoredAt, ipAddress, userAgent, deviceFingerprintHash,
+      createdAt, items, customer,
     } = object;
 
     if (!id) throw new Error('OnlineOrder id is required');
@@ -134,6 +141,9 @@ export class OnlineOrderEntity {
       (paymentUrl as string | null | undefined) ?? null,
       parsedCustomer,
       stockRestoredAt ? new Date(stockRestoredAt as string | Date) : null,
+      (ipAddress as string | null | undefined) ?? null,
+      (userAgent as string | null | undefined) ?? null,
+      (deviceFingerprintHash as string | null | undefined) ?? null,
     );
   }
 }

@@ -11,7 +11,7 @@ import { PaymentRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaPaymentDatasource } from '../../infrastructure/datasources';
 import { AuthRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaAuthDatasource } from '../../infrastructure/datasources';
-import { AuthMiddleware, checkRole } from '../middlewares';
+import { AuthMiddleware, checkRole, idempotencyKeyMiddleware } from '../middlewares';
 import { Role } from '../../domain/entities';
 import { JwtAdapter, MetaWhatsAppService, NodemailerEmailService, PdfkitPdfService } from '../../infrastructure/services';
 import { globalLogger } from '../../infrastructure/services/pino-logger.service';
@@ -92,7 +92,7 @@ export class SaleRouter {
     router.get('/:id', controller.getById);
 
     // POST /api/sales  — cualquier usuario autenticado puede crear ventas
-    router.post('/', controller.create);
+    router.post('/', idempotencyKeyMiddleware, controller.create);
 
     // PUT  /api/sales/:id  — solo ADMIN puede corregir fechas de cobro o fecha de la venta
     router.put('/:id', checkRole(Role.ADMIN), controller.update);

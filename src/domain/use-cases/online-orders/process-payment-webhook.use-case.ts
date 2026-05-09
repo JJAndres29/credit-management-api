@@ -31,21 +31,30 @@ export class ProcessPaymentWebhookUseCase {
 
     if (!paymentId) return 'ignored';
 
-    const exists = await this.orderRepository.webhookExists(provider, eventId);
-    if (exists) return 'already_processed';
+    const claimed = await this.orderRepository.tryClaimProcessedWebhook({ provider, eventId });
+    if (!claimed) return 'already_processed';
 
-    const { status, amount, externalReference } =
-      await this.paymentGateway.verifyTransaction(paymentId);
+    let status: Awaited<ReturnType<IPaymentGateway['verifyTransaction']>>['status'];
+    let amount: number;
+    let externalReference: string;
+
+    try {
+      const v = await this.paymentGateway.verifyTransaction(paymentId);
+      status = v.status;
+      amount = v.amount;
+      externalReference = v.externalReference;
+    } catch (err) {
+      await this.orderRepository.releaseProcessedWebhookClaim({ provider, eventId });
+      throw err;
+    }
 
     const order = await this.orderRepository.findById(externalReference);
 
     if (!order) {
-      await this.orderRepository.saveProcessedWebhook({ provider, eventId });
       return 'order_not_found';
     }
 
     if (order.status !== OrderStatus.PENDING_PAYMENT) {
-      await this.orderRepository.saveProcessedWebhook({ provider, eventId });
       return 'order_not_pending';
     }
 
@@ -62,14 +71,12 @@ export class ProcessPaymentWebhookUseCase {
           expected: order.totalAmount,
           received: amount,
         });
-        await this.orderRepository.saveProcessedWebhook({ provider, eventId });
         return 'amount_mismatch';
       }
       await this.orderRepository.markAsPaid(order.id, { provider, eventId });
       return 'paid';
     }
 
-    // DECLINED
     await this.orderRepository.markAsCancelled(order.id, { provider, eventId });
     let allRestored = true;
     for (const item of order.items) {

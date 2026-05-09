@@ -1,4 +1,5 @@
 import express, { Application, NextFunction, Request, Response } from 'express';
+import type { Server as HttpServer } from 'http';
 import { CustomError } from '../domain/errors';
 import { LoggerService } from '../domain/services/logger.service';
 import { AuthRouter } from './auth/auth.router';
@@ -28,12 +29,17 @@ interface ServerOptions {
 export class Server {
   private readonly app: Application = express();
   private readonly logger?: LoggerService;
+  private httpServer?: HttpServer;
 
   constructor(private readonly options: ServerOptions) {
     this.logger = options.logger;
   }
 
-  start(): void {
+  /**
+   * Returns the underlying HTTP server for graceful shutdown (close + Prisma disconnect).
+   */
+  start(): HttpServer {
+    this.app.set('trust proxy', 1);
 
     this.app.use(helmet({
       crossOriginOpenerPolicy: { policy: 'same-origin-allow-popups' },
@@ -42,7 +48,7 @@ export class Server {
     this.app.use(cors({
       origin: this.getAllowedOrigins(),
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-      allowedHeaders: ['Content-Type', 'Authorization'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key'],
       credentials: true,
     }));
 
@@ -71,9 +77,14 @@ export class Server {
 
     this.app.use(this.handleError);
 
-    this.app.listen(this.options.port,'0.0.0.0', () => {
+    this.httpServer = this.app.listen(this.options.port, '0.0.0.0', () => {
       this.logger?.info(`Server running on port ${this.options.port}`, { port: this.options.port });
     });
+    return this.httpServer;
+  }
+
+  getHttpServer(): HttpServer | undefined {
+    return this.httpServer;
   }
 
   private getAllowedOrigins(): string[] {

@@ -44,6 +44,14 @@ export class OnlineOrderRepositoryImpl implements OnlineOrderRepository {
     return this.datasource.webhookExists(provider, eventId);
   }
 
+  tryClaimProcessedWebhook(data: WebhookData): Promise<boolean> {
+    return this.datasource.tryClaimProcessedWebhook(data);
+  }
+
+  releaseProcessedWebhookClaim(data: WebhookData): Promise<void> {
+    return this.datasource.releaseProcessedWebhookClaim(data);
+  }
+
   saveProcessedWebhook(data: WebhookData): Promise<void> {
     return this.datasource.saveProcessedWebhook(data);
   }

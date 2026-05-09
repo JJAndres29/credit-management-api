@@ -10,6 +10,12 @@ const EXPIRY_MINUTES: Record<OrderPaymentMethod, number> = {
   [OrderPaymentMethod.WHATSAPP_MANUAL]: 24 * 60,
 };
 
+/** HTTP metadata stored on the order for future antifraud analysis (P0). */
+export type CreateOnlineOrderRequestMeta = {
+  ipAddress: string | null;
+  userAgent: string | null;
+};
+
 export interface CreateOnlineOrderResult {
   order: OnlineOrderEntity;
   paymentUrl: string | null;
@@ -25,6 +31,7 @@ export class CreateOnlineOrderUseCase {
   async execute(
     dto: CreateOnlineOrderDto,
     customerId: string | null,
+    requestMeta?: CreateOnlineOrderRequestMeta,
   ): Promise<CreateOnlineOrderResult> {
     if (dto.paymentMethod === OrderPaymentMethod.ONLINE_GATEWAY && !this.paymentGateway) {
       throw CustomError.badRequest('Pasarela de pagos no configurada');
@@ -34,7 +41,11 @@ export class CreateOnlineOrderUseCase {
       throw CustomError.badRequest('guestEmail es requerido para órdenes de invitado');
     }
 
-    // Phase 1: validate all products — collect info before touching stock
+    const meta: CreateOnlineOrderRequestMeta = requestMeta ?? {
+      ipAddress: null,
+      userAgent: null,
+    };
+
     const enriched: Array<{
       productId: string;
       quantity: number;
@@ -65,25 +76,6 @@ export class CreateOnlineOrderUseCase {
       });
     }
 
-    // Phase 2: reserve stock atomically, rolling back on first failure
-    const reserved: Array<{ productId: string; quantity: number }> = [];
-
-    for (const item of enriched) {
-      const ok = await this.productCatalogPort.decrementStockAtomic(item.productId, item.quantity);
-
-      if (!ok) {
-        for (const r of reserved) {
-          await this.productCatalogPort.incrementStock(r.productId, r.quantity);
-        }
-        throw CustomError.conflict(
-          `Stock insuficiente para el producto "${item.productNameSnapshot}"`,
-        );
-      }
-
-      reserved.push({ productId: item.productId, quantity: item.quantity });
-    }
-
-    // Phase 3: persist order — rollback all stock on DB failure
     const totalAmount = enriched.reduce(
       (sum, i) => Math.round((sum + i.unitPrice * i.quantity) * 100) / 100,
       0,
@@ -92,27 +84,21 @@ export class CreateOnlineOrderUseCase {
     const expiryMs = EXPIRY_MINUTES[dto.paymentMethod] * 60 * 1000;
     const expiresAt = new Date(Date.now() + expiryMs);
 
-    let order: OnlineOrderEntity;
-    try {
-      order = await this.onlineOrderRepository.create({
-        customerId,
-        guestName: dto.guestName,
-        guestPhone: dto.guestPhone,
-        guestEmail: dto.guestEmail,
-        shippingAddress: dto.shippingAddress,
-        totalAmount,
-        paymentMethod: dto.paymentMethod,
-        expiresAt,
-        items: enriched,
-      });
-    } catch (err) {
-      for (const r of reserved) {
-        await this.productCatalogPort.incrementStock(r.productId, r.quantity);
-      }
-      throw err;
-    }
+    const order = await this.onlineOrderRepository.create({
+      customerId,
+      guestName: dto.guestName,
+      guestPhone: dto.guestPhone,
+      guestEmail: dto.guestEmail,
+      shippingAddress: dto.shippingAddress,
+      totalAmount,
+      paymentMethod: dto.paymentMethod,
+      expiresAt,
+      items: enriched,
+      ipAddress: meta.ipAddress,
+      userAgent: meta.userAgent,
+      deviceFingerprintHash: dto.deviceFingerprintHash,
+    });
 
-    // Phase 4: generate payment link if ONLINE_GATEWAY
     if (dto.paymentMethod === OrderPaymentMethod.ONLINE_GATEWAY && this.paymentGateway) {
       try {
         const { url, gatewayReference } = await this.paymentGateway.generatePaymentLink(order);
@@ -123,7 +109,6 @@ export class CreateOnlineOrderUseCase {
         );
         return { order: updatedOrder, paymentUrl: url };
       } catch (err) {
-        // Order exists but has no payment link — let expiry handle cleanup
         throw err;
       }
     }

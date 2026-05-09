@@ -15,10 +15,13 @@ export class CreateOnlineOrderDto {
     public readonly guestName: string | null,
     public readonly guestPhone: string | null,
     public readonly guestEmail: string | null,
+    /** Optional client-side fingerprint (e.g. FingerprintJS hash) for antifraud history */
+    public readonly deviceFingerprintHash: string | null,
   ) {}
 
   static create(object: Record<string, unknown>): [string?, CreateOnlineOrderDto?] {
-    const { items, paymentMethod, shippingAddress, guestName, guestPhone, guestEmail } = object;
+    const { items, paymentMethod, shippingAddress, guestName, guestPhone, guestEmail, deviceFingerprintHash } =
+      object;
 
     // items
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -80,6 +83,18 @@ export class CreateOnlineOrderDto {
       parsedGuestEmail = normalizedEmail;
     }
 
+    let parsedFingerprint: string | null = null;
+    if (deviceFingerprintHash !== undefined && deviceFingerprintHash !== null) {
+      if (typeof deviceFingerprintHash !== 'string') {
+        return ['deviceFingerprintHash debe ser texto'];
+      }
+      const fp = deviceFingerprintHash.trim();
+      if (fp.length > 128) {
+        return ['deviceFingerprintHash no puede exceder 128 caracteres'];
+      }
+      parsedFingerprint = fp.length > 0 ? fp : null;
+    }
+
     return [
       undefined,
       new CreateOnlineOrderDto(
@@ -89,6 +104,7 @@ export class CreateOnlineOrderDto {
         parsedGuestName,
         parsedGuestPhone,
         parsedGuestEmail,
+        parsedFingerprint,
       ),
     ];
   }

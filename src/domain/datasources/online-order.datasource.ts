@@ -19,6 +19,10 @@ export type OnlineOrderCreateData = {
   paymentMethod: string;
   expiresAt: Date;
   items: OnlineOrderItemCreateData[];
+  /** P0 antifraud capture — optional, persisted with the order */
+  ipAddress?: string | null;
+  userAgent?: string | null;
+  deviceFingerprintHash?: string | null;
 };
 
 export type OnlineOrderFilters = {
@@ -42,6 +46,13 @@ export interface OnlineOrderDatasource {
   markAsPaid(id: string, webhookData: WebhookData): Promise<OnlineOrderEntity>;
   markAsCancelled(id: string, webhookData: WebhookData): Promise<OnlineOrderEntity>;
   webhookExists(provider: string, eventId: string): Promise<boolean>;
+  /**
+   * Atomically claims a webhook event (INSERT … ON CONFLICT DO NOTHING semantics).
+   * Returns true if this replica won the race and should process the payload.
+   */
+  tryClaimProcessedWebhook(data: WebhookData): Promise<boolean>;
+  /** Undo claim when MP verification fails transiently so Mercado Pago can retry. */
+  releaseProcessedWebhookClaim(data: WebhookData): Promise<void>;
   saveProcessedWebhook(data: WebhookData): Promise<void>;
   updateStatus(id: string, status: string): Promise<OnlineOrderEntity>;
 
