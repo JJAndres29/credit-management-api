@@ -12,6 +12,8 @@ export interface OnlineOrderRepository {
   markAsPaid(id: string, webhookData: WebhookData): Promise<OnlineOrderEntity>;
   markAsCancelled(id: string, webhookData: WebhookData): Promise<OnlineOrderEntity>;
   webhookExists(provider: string, eventId: string): Promise<boolean>;
+  tryClaimProcessedWebhook(data: WebhookData): Promise<boolean>;
+  releaseProcessedWebhookClaim(data: WebhookData): Promise<void>;
   saveProcessedWebhook(data: WebhookData): Promise<void>;
   updateStatus(id: string, status: string): Promise<OnlineOrderEntity>;
   tryCancelOrExpirePending(

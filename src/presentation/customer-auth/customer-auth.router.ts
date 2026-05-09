@@ -90,7 +90,7 @@ export class CustomerAuthRouter {
     router.post('/register', RateLimitMiddleware.loginLimiter, controller.register);
     router.post('/login', RateLimitMiddleware.loginLimiter, controller.login);
     router.post('/google', RateLimitMiddleware.loginLimiter, controller.googleAuth);
-    router.post('/forgot-password', controller.forgotPassword);
+    router.post('/forgot-password', RateLimitMiddleware.forgotPasswordLimiter, controller.forgotPassword);
 
     // Customer JWT
     router.post('/renew', customerMiddleware.validateCustomerJwt, controller.renewToken);

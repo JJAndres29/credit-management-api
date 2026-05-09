@@ -11,7 +11,8 @@ import { PrismaOnlineOrderDatasource, PrismaSaleDatasource } from '../../infrast
 import { ProductCatalogAdapter, CustomerJwtAdapter, MercadoPagoGatewayAdapter, CustomerLinkAdapter } from '../../infrastructure/services';
 import { CustomerRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaCustomerDatasource } from '../../infrastructure/datasources';
-import { AuthMiddleware, checkRole } from '../middlewares';
+import { AuthMiddleware, checkRole, idempotencyKeyMiddleware } from '../middlewares';
+import { RateLimitMiddleware } from '../middlewares/rate-limit.middleware';
 import { JwtAdapter } from '../../infrastructure/services';
 import { AuthRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaAuthDatasource } from '../../infrastructure/datasources';
@@ -71,7 +72,13 @@ export class OnlineOrderRouter {
     );
 
     // POST /api/online-orders — público, customer JWT opcional
-    router.post('/', optionalCustomerJwt, controller.create);
+    router.post(
+      '/',
+      RateLimitMiddleware.onlineOrderCreateLimiter,
+      idempotencyKeyMiddleware,
+      optionalCustomerJwt,
+      controller.create,
+    );
 
     // GET /api/online-orders/:id — público + email query O JWT customer dueño
     router.get('/:id', optionalCustomerJwt, controller.getById);

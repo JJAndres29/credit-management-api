@@ -17,7 +17,7 @@ import { SaleRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaSaleDatasource } from '../../infrastructure/datasources';
 import { AuthRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaAuthDatasource } from '../../infrastructure/datasources';
-import { AuthMiddleware, checkRole } from '../middlewares';
+import { AuthMiddleware, checkRole, idempotencyKeyMiddleware } from '../middlewares';
 import { Role } from '../../domain/entities';
 import { JwtAdapter, MetaWhatsAppService, NodemailerEmailService, PdfkitPdfService } from '../../infrastructure/services';
 import { globalLogger } from '../../infrastructure/services/pino-logger.service';
@@ -94,7 +94,7 @@ export class PaymentRouter {
     router.get('/:id', controller.getById);
 
     // POST /api/payments  — cualquier usuario autenticado puede registrar pagos
-    router.post('/', controller.create);
+    router.post('/', idempotencyKeyMiddleware, controller.create);
 
     // PUT  /api/payments/:id  — solo ADMIN puede modificar pagos existentes
     router.put('/:id', checkRole(Role.ADMIN), controller.update);

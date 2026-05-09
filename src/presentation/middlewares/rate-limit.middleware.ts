@@ -1,27 +1,63 @@
 import { rateLimit } from 'express-rate-limit';
 import { Request, Response } from 'express';
-import { CustomError } from '../../domain/errors';
-
 
 export class RateLimitMiddleware {
-
   static loginLimiter = rateLimit({
-    windowMs: 15 * 60 * 1000, // ventana de 15 minutos
-    max: 10,                   // máximo 10 intentos por IP en esa ventana
-    standardHeaders: true,     // envía headers RateLimit-* en la respuesta
-    legacyHeaders: false,      // desactiva los X-RateLimit-* más viejos
-
-    // Mensaje de error consistente con tu CustomError
+    windowMs: 15 * 60 * 1000,
+    max: 10,
+    standardHeaders: true,
+    legacyHeaders: false,
     message: {
       error: 'Demasiados intentos de inicio de sesión. Intenta de nuevo en 15 minutos.',
     },
-
-    // Handler cuando se supera el límite
-    handler: (req: Request, res: Response) => {
+    handler: (_req: Request, res: Response) => {
       res.status(429).json({
         error: 'Demasiados intentos de inicio de sesión. Intenta de nuevo en 15 minutos.',
       });
     },
   });
 
+  /** P0 — anonymous checkout / stock reservation abuse */
+  static onlineOrderCreateLimiter = rateLimit({
+    windowMs: 15 * 60 * 1000,
+    max: 30,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (_req: Request, res: Response) => {
+      res.status(429).json({ error: 'Demasiadas órdenes desde esta IP. Intenta más tarde.' });
+    },
+  });
+
+  /** P0 — forgot-password enumeration / email spam */
+  static forgotPasswordLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 5,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (_req: Request, res: Response) => {
+      res.status(429).json({ error: 'Demasiadas solicitudes de recuperación. Intenta más tarde.' });
+    },
+  });
+
+  /** P0 — notify triggers PDF + email */
+  static clientNotifyLimiter = rateLimit({
+    windowMs: 60 * 60 * 1000,
+    max: 20,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (_req: Request, res: Response) => {
+      res.status(429).json({ error: 'Demasiadas notificaciones enviadas. Intenta más tarde.' });
+    },
+  });
+
+  /** P0 — public catalog scraping */
+  static publicProductsReadLimiter = rateLimit({
+    windowMs: 60 * 1000,
+    max: 200,
+    standardHeaders: true,
+    legacyHeaders: false,
+    handler: (_req: Request, res: Response) => {
+      res.status(429).json({ error: 'Demasiadas solicitudes al catálogo. Espera un momento.' });
+    },
+  });
 }

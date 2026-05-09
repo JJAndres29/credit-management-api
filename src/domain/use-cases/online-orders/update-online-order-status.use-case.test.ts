@@ -58,6 +58,8 @@ const mockRepo: jest.Mocked<OnlineOrderRepository> = {
   markAsPaid: jest.fn(),
   markAsCancelled: jest.fn(),
   webhookExists: jest.fn(),
+  tryClaimProcessedWebhook: jest.fn(),
+  releaseProcessedWebhookClaim: jest.fn(),
   saveProcessedWebhook: jest.fn(),
   updateStatus: jest.fn(),
   tryCancelOrExpirePending: jest.fn(),

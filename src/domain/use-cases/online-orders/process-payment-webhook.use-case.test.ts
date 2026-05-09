@@ -65,6 +65,8 @@ const mockRepo: jest.Mocked<OnlineOrderRepository> = {
   markAsPaid: jest.fn(),
   markAsCancelled: jest.fn(),
   webhookExists: jest.fn(),
+  tryClaimProcessedWebhook: jest.fn(),
+  releaseProcessedWebhookClaim: jest.fn(),
   saveProcessedWebhook: jest.fn(),
   updateStatus: jest.fn(),
   tryCancelOrExpirePending: jest.fn(),
@@ -99,17 +101,33 @@ describe('ProcessPaymentWebhookUseCase', () => {
     const result = await useCase.execute({ provider: 'mercadopago', eventId: 'ev-1', paymentId: '' });
     expect(result).toBe('ignored');
     expect(mockGateway.verifyTransaction).not.toHaveBeenCalled();
+    expect(mockRepo.tryClaimProcessedWebhook).not.toHaveBeenCalled();
   });
 
   it('eventId duplicado → already_processed sin llamar verifyTransaction', async () => {
-    mockRepo.webhookExists.mockResolvedValue(true);
+    mockRepo.tryClaimProcessedWebhook.mockResolvedValue(false);
     const result = await useCase.execute({ provider: 'mercadopago', eventId: 'ev-dup', paymentId: 'pay-1' });
     expect(result).toBe('already_processed');
     expect(mockGateway.verifyTransaction).not.toHaveBeenCalled();
   });
 
+  it('verifyTransaction falla → libera el claim y relanza', async () => {
+    mockRepo.tryClaimProcessedWebhook.mockResolvedValue(true);
+    mockGateway.verifyTransaction.mockRejectedValue(new Error('MP down'));
+    mockRepo.releaseProcessedWebhookClaim.mockResolvedValue(undefined);
+
+    await expect(
+      useCase.execute({ provider: 'mercadopago', eventId: 'ev-1', paymentId: 'pay-1' }),
+    ).rejects.toThrow('MP down');
+
+    expect(mockRepo.releaseProcessedWebhookClaim).toHaveBeenCalledWith({
+      provider: 'mercadopago',
+      eventId: 'ev-1',
+    });
+  });
+
   it('APPROVED monto correcto → paid, marca orden como pagada', async () => {
-    mockRepo.webhookExists.mockResolvedValue(false);
+    mockRepo.tryClaimProcessedWebhook.mockResolvedValue(true);
     mockGateway.verifyTransaction.mockResolvedValue(makeVerifyResult({ status: 'APPROVED', amount: 100 }));
     mockRepo.findById.mockResolvedValue(makeOrder({ totalAmount: 100 }));
     mockRepo.markAsPaid.mockResolvedValue(makeOrder({ status: OrderStatus.PAID }));
@@ -122,20 +140,19 @@ describe('ProcessPaymentWebhookUseCase', () => {
   });
 
   it('APPROVED monto incorrecto (diferencia > 1 COP) → amount_mismatch, no cambia status', async () => {
-    mockRepo.webhookExists.mockResolvedValue(false);
+    mockRepo.tryClaimProcessedWebhook.mockResolvedValue(true);
     mockGateway.verifyTransaction.mockResolvedValue(makeVerifyResult({ status: 'APPROVED', amount: 150 }));
     mockRepo.findById.mockResolvedValue(makeOrder({ totalAmount: 100 }));
-    mockRepo.saveProcessedWebhook.mockResolvedValue(undefined);
 
     const result = await useCase.execute({ provider: 'mercadopago', eventId: 'ev-1', paymentId: 'pay-1' });
 
     expect(result).toBe('amount_mismatch');
     expect(mockRepo.markAsPaid).not.toHaveBeenCalled();
-    expect(mockRepo.saveProcessedWebhook).toHaveBeenCalledWith({ provider: 'mercadopago', eventId: 'ev-1' });
+    expect(mockRepo.saveProcessedWebhook).not.toHaveBeenCalled();
   });
 
   it('APPROVED monto dentro de tolerancia ±1 COP → paid', async () => {
-    mockRepo.webhookExists.mockResolvedValue(false);
+    mockRepo.tryClaimProcessedWebhook.mockResolvedValue(true);
     mockGateway.verifyTransaction.mockResolvedValue(makeVerifyResult({ status: 'APPROVED', amount: 100.5 }));
     mockRepo.findById.mockResolvedValue(makeOrder({ totalAmount: 100 }));
     mockRepo.markAsPaid.mockResolvedValue(makeOrder({ status: OrderStatus.PAID }));
@@ -146,7 +163,7 @@ describe('ProcessPaymentWebhookUseCase', () => {
 
   it('DECLINED → cancelled + incrementStock por cada item + markStockRestored', async () => {
     const items = [makeItem('prod-A', 3), makeItem('prod-B', 1)];
-    mockRepo.webhookExists.mockResolvedValue(false);
+    mockRepo.tryClaimProcessedWebhook.mockResolvedValue(true);
     mockGateway.verifyTransaction.mockResolvedValue(makeVerifyResult({ status: 'DECLINED' }));
     mockRepo.findById.mockResolvedValue(makeOrder({ items }));
     mockRepo.markAsCancelled.mockResolvedValue(makeOrder({ status: OrderStatus.CANCELLED, items }));
@@ -165,7 +182,7 @@ describe('ProcessPaymentWebhookUseCase', () => {
 
   it('DECLINED con incrementStock fallido → no marca stockRestored (consistency)', async () => {
     const items = [makeItem('prod-A', 3), makeItem('prod-B', 1)];
-    mockRepo.webhookExists.mockResolvedValue(false);
+    mockRepo.tryClaimProcessedWebhook.mockResolvedValue(true);
     mockGateway.verifyTransaction.mockResolvedValue(makeVerifyResult({ status: 'DECLINED' }));
     mockRepo.findById.mockResolvedValue(makeOrder({ items }));
     mockRepo.markAsCancelled.mockResolvedValue(makeOrder({ status: OrderStatus.CANCELLED, items }));
@@ -179,8 +196,8 @@ describe('ProcessPaymentWebhookUseCase', () => {
     expect(mockRepo.markStockRestored).not.toHaveBeenCalled();
   });
 
-  it('PENDING → pending, no escribe ProcessedWebhook', async () => {
-    mockRepo.webhookExists.mockResolvedValue(false);
+  it('PENDING → pending (evento ya reclamado en BD para deduplicar entregas concurrentes)', async () => {
+    mockRepo.tryClaimProcessedWebhook.mockResolvedValue(true);
     mockGateway.verifyTransaction.mockResolvedValue(makeVerifyResult({ status: 'PENDING' }));
     mockRepo.findById.mockResolvedValue(makeOrder());
 
@@ -192,28 +209,26 @@ describe('ProcessPaymentWebhookUseCase', () => {
     expect(mockRepo.markAsCancelled).not.toHaveBeenCalled();
   });
 
-  it('Order no encontrada → order_not_found, escribe ProcessedWebhook', async () => {
-    mockRepo.webhookExists.mockResolvedValue(false);
+  it('Order no encontrada → order_not_found (claim ya persistido)', async () => {
+    mockRepo.tryClaimProcessedWebhook.mockResolvedValue(true);
     mockGateway.verifyTransaction.mockResolvedValue(makeVerifyResult({ externalReference: 'unknown-id' }));
     mockRepo.findById.mockResolvedValue(null);
-    mockRepo.saveProcessedWebhook.mockResolvedValue(undefined);
 
     const result = await useCase.execute({ provider: 'mercadopago', eventId: 'ev-1', paymentId: 'pay-1' });
 
     expect(result).toBe('order_not_found');
-    expect(mockRepo.saveProcessedWebhook).toHaveBeenCalledWith({ provider: 'mercadopago', eventId: 'ev-1' });
+    expect(mockRepo.saveProcessedWebhook).not.toHaveBeenCalled();
   });
 
-  it('Order ya PAID → order_not_pending, escribe ProcessedWebhook', async () => {
-    mockRepo.webhookExists.mockResolvedValue(false);
+  it('Order ya PAID → order_not_pending (claim ya persistido)', async () => {
+    mockRepo.tryClaimProcessedWebhook.mockResolvedValue(true);
     mockGateway.verifyTransaction.mockResolvedValue(makeVerifyResult({ status: 'APPROVED', amount: 100 }));
     mockRepo.findById.mockResolvedValue(makeOrder({ status: OrderStatus.PAID }));
-    mockRepo.saveProcessedWebhook.mockResolvedValue(undefined);
 
     const result = await useCase.execute({ provider: 'mercadopago', eventId: 'ev-1', paymentId: 'pay-1' });
 
     expect(result).toBe('order_not_pending');
     expect(mockRepo.markAsPaid).not.toHaveBeenCalled();
-    expect(mockRepo.saveProcessedWebhook).toHaveBeenCalledWith({ provider: 'mercadopago', eventId: 'ev-1' });
+    expect(mockRepo.saveProcessedWebhook).not.toHaveBeenCalled();
   });
 });

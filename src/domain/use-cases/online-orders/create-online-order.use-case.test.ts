@@ -1,4 +1,5 @@
 import { CreateOnlineOrderUseCase } from './create-online-order.use-case';
+import { CustomError } from '../../errors';
 import { CreateOnlineOrderDto } from '../../dtos/online-orders';
 import { OnlineOrderRepository } from '../../repositories/online-order.repository';
 import { ProductCatalogPort, ProductForOrder } from '../../services/product-catalog.port';
@@ -74,6 +75,8 @@ const mockRepo: jest.Mocked<OnlineOrderRepository> = {
   markAsPaid: jest.fn(),
   markAsCancelled: jest.fn(),
   webhookExists: jest.fn(),
+  tryClaimProcessedWebhook: jest.fn(),
+  releaseProcessedWebhookClaim: jest.fn(),
   saveProcessedWebhook: jest.fn(),
   updateStatus: jest.fn(),
   tryCancelOrExpirePending: jest.fn(),
@@ -177,6 +180,7 @@ describe('CreateOnlineOrderUseCase', () => {
         message: expect.stringContaining('precio de venta en línea'),
       });
       expect(mockCatalog.decrementStockAtomic).not.toHaveBeenCalled();
+      expect(mockRepo.create).not.toHaveBeenCalled();
     });
   });
 
@@ -200,8 +204,8 @@ describe('CreateOnlineOrderUseCase', () => {
     });
   });
 
-  describe('stock insuficiente → 409 + rollback', () => {
-    it('lanza conflict y llama incrementStock de los items ya reservados', async () => {
+  describe('stock insuficiente → 409 (transacción atómica en repositorio)', () => {
+    it('propaga conflict del create sin decrementStockAtomic en el use case', async () => {
       const dto = CreateOnlineOrderDto.create({
         items: [
           { productId: 'prod-1', quantity: 2 },
@@ -216,24 +220,21 @@ describe('CreateOnlineOrderUseCase', () => {
       mockCatalog.getForOrder.mockImplementation(async (id) =>
         makeProduct({ id, name: `Product ${id}`, retailPrice: 10 }),
       );
-      // prod-1 reserves OK, prod-2 fails
-      mockCatalog.decrementStockAtomic
-        .mockResolvedValueOnce(true)
-        .mockResolvedValueOnce(false);
-      mockCatalog.incrementStock.mockResolvedValue(undefined);
+      mockRepo.create.mockRejectedValue(
+        CustomError.conflict('Stock insuficiente para el producto "Product prod-2"'),
+      );
 
       await expect(useCase.execute(dto, null)).rejects.toMatchObject({ statusCode: 409 });
 
-      // Must rollback prod-1
-      expect(mockCatalog.incrementStock).toHaveBeenCalledWith('prod-1', 2);
-      expect(mockRepo.create).not.toHaveBeenCalled();
+      expect(mockCatalog.decrementStockAtomic).not.toHaveBeenCalled();
+      expect(mockCatalog.incrementStock).not.toHaveBeenCalled();
+      expect(mockRepo.create).toHaveBeenCalled();
     });
   });
 
   describe('éxito como invitado', () => {
     beforeEach(() => {
       mockCatalog.getForOrder.mockResolvedValue(makeProduct({ retailPrice: 50 }));
-      mockCatalog.decrementStockAtomic.mockResolvedValue(true);
       mockRepo.create.mockResolvedValue(makeOrder());
     });
 
@@ -306,7 +307,6 @@ describe('CreateOnlineOrderUseCase', () => {
 
     beforeEach(() => {
       mockCatalog.getForOrder.mockResolvedValue(makeProduct({ retailPrice: 30 }));
-      mockCatalog.decrementStockAtomic.mockResolvedValue(true);
       mockRepo.create.mockResolvedValue(makeOrder());
       mockGateway.generatePaymentLink.mockResolvedValue({ url: 'https://mp.com/pay', gatewayReference: 'pref-1' });
       mockRepo.updatePaymentLink.mockResolvedValue(makeOrder());
@@ -328,15 +328,13 @@ describe('CreateOnlineOrderUseCase', () => {
     });
   });
 
-  describe('rollback de stock si falla la persistencia', () => {
-    it('libera el stock reservado si onlineOrderRepository.create lanza error', async () => {
+  describe('fallo al persistir orden', () => {
+    it('si create falla, el use case no llama incrementStock (rollback lo hace la transacción Prisma)', async () => {
       mockCatalog.getForOrder.mockResolvedValue(makeProduct({ retailPrice: 20 }));
-      mockCatalog.decrementStockAtomic.mockResolvedValue(true);
-      mockCatalog.incrementStock.mockResolvedValue(undefined);
       mockRepo.create.mockRejectedValue(new Error('DB error'));
 
       await expect(useCase.execute(makeGuestDto(), null)).rejects.toThrow('DB error');
-      expect(mockCatalog.incrementStock).toHaveBeenCalledWith('prod-1', 2);
+      expect(mockCatalog.incrementStock).not.toHaveBeenCalled();
     });
   });
 });

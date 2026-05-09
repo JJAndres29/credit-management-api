@@ -31,7 +31,10 @@ export class OnlineOrderController {
     }
 
     try {
-      const result = await this.createOnlineOrderUseCase.execute(dto!, customerId);
+      const result = await this.createOnlineOrderUseCase.execute(dto!, customerId, {
+        ipAddress: typeof req.ip === 'string' ? req.ip : null,
+        userAgent: req.get('user-agent') ?? null,
+      });
       res.status(201).json(result);
     } catch (err) {
       this.handleError(err, res);

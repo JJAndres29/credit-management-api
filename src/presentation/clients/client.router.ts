@@ -11,6 +11,7 @@ import {
 import { ClientRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaClientDatasource } from '../../infrastructure/datasources';
 import { AuthMiddleware, checkRole } from '../middlewares';
+import { RateLimitMiddleware } from '../middlewares/rate-limit.middleware';
 import { JwtAdapter, NodemailerEmailService, PdfkitPdfService } from '../../infrastructure/services';
 import { AuthRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaAuthDatasource } from '../../infrastructure/datasources';
@@ -87,7 +88,7 @@ export class ClientRouter {
     router.delete('/:id', checkRole(Role.ADMIN), controller.delete);
 
     // POST /api/clients/:id/notify — reenvía estado de cuenta por WhatsApp payload + email
-    router.post('/:id/notify', controller.notify);
+    router.post('/:id/notify', RateLimitMiddleware.clientNotifyLimiter, controller.notify);
 
     return router;
   }
