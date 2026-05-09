@@ -3,6 +3,7 @@ import { GetCollectionsUseCase } from '../../domain/use-cases/collections';
 import { FilterInstallmentsDto } from '../../domain/dtos/collections';
 import { PaginationDto } from '../../domain/dtos/shared';
 import { CustomError } from '../../domain/errors';
+import { globalLogger } from '../../infrastructure/services';
 
 export class CollectionController {
   constructor(private readonly getCollectionsUseCase: GetCollectionsUseCase) {}
@@ -37,7 +38,7 @@ export class CollectionController {
       res.status(error.statusCode).json({ error: error.message });
       return;
     }
-    console.error('[CollectionController]', error);
+    globalLogger.error('[CollectionController]', error);
     res.status(500).json({ error: 'Internal server error' });
   }
 }

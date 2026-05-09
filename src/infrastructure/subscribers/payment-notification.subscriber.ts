@@ -65,9 +65,7 @@ export class PaymentNotificationSubscriber {
       const { paymentId, clientId, amount, newBalance, note } = data as PaymentRegisteredData;
 
       if (!throttle.canSend(clientId)) {
-        console.warn(
-          `[PaymentNotificationSubscriber] Throttle activado para cliente ${clientId} — notificación omitida`,
-        );
+        this.logger?.warn('[PaymentNotificationSubscriber] Throttle activado - notificacion omitida', { clientId });
         return;
       }
 
@@ -96,7 +94,10 @@ export class PaymentNotificationSubscriber {
         try {
           pdfBuffer = await this.accountStatementUseCase.execute(clientId, 'Sistema');
         } catch (pdfError) {
-          console.warn('[PaymentNotificationSubscriber] No se pudo generar el PDF adjunto:', pdfError);
+          this.logger?.warn('[PaymentNotificationSubscriber] No se pudo generar el PDF adjunto', {
+            clientId,
+            error: pdfError instanceof Error ? pdfError.message : String(pdfError),
+          });
         }
       }
 
@@ -178,7 +179,7 @@ export class PaymentNotificationSubscriber {
       await Promise.allSettled(tasks);
     } catch (error) {
       // Los errores de notificación nunca deben afectar la transacción financiera
-      console.error('[PaymentNotificationSubscriber] Error inesperado:', error);
+      this.logger?.error('[PaymentNotificationSubscriber] Error inesperado', error);
     }
   };
 
@@ -213,13 +214,16 @@ export class PaymentNotificationSubscriber {
     });
 
     if (status === 'SENT') {
-      console.log(
-        `[Notification] ${params.channel} PAYMENT_REGISTERED → cliente ${params.clientId} ✓`,
-      );
+      this.logger?.info('[Notification] PAYMENT_REGISTERED sent', {
+        channel: params.channel,
+        clientId: params.clientId,
+      });
     } else {
-      console.warn(
-        `[Notification] ${params.channel} PAYMENT_REGISTERED → cliente ${params.clientId} ✗ — ${errorMessage}`,
-      );
+      this.logger?.warn('[Notification] PAYMENT_REGISTERED failed', {
+        channel: params.channel,
+        clientId: params.clientId,
+        errorMessage,
+      });
     }
   }
 

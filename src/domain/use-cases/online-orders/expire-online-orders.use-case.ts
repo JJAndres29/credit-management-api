@@ -1,5 +1,6 @@
 import { OnlineOrderRepository } from '../../repositories/online-order.repository';
 import { ProductCatalogPort } from '../../services/product-catalog.port';
+import { LoggerService } from '../../services';
 
 export interface ExpireOnlineOrdersResult {
   scanned: number;
@@ -21,6 +22,7 @@ export class ExpireOnlineOrdersUseCase {
   constructor(
     private readonly orderRepository: OnlineOrderRepository,
     private readonly productCatalogPort: ProductCatalogPort,
+    private readonly logger?: LoggerService,
   ) {}
 
   async execute(now: Date = new Date(), batchSize: number = 100): Promise<ExpireOnlineOrdersResult> {
@@ -48,11 +50,10 @@ export class ExpireOnlineOrdersUseCase {
           } catch (err) {
             allRestored = false;
             errors++;
-            console.error('[ExpireOnlineOrders] Falló incrementStock', {
+            this.logger?.error('[ExpireOnlineOrders] Fallo incrementStock', err, {
               orderId: transitioned.id,
               productId: item.productId,
               quantity: item.quantity,
-              error: err instanceof Error ? err.message : String(err),
             });
           }
         }
@@ -63,9 +64,8 @@ export class ExpireOnlineOrdersUseCase {
         expired++;
       } catch (err) {
         errors++;
-        console.error('[ExpireOnlineOrders] Falló al expirar orden', {
+        this.logger?.error('[ExpireOnlineOrders] Fallo al expirar orden', err, {
           orderId: order.id,
-          error: err instanceof Error ? err.message : String(err),
         });
       }
     }

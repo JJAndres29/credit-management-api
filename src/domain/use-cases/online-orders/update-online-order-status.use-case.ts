@@ -6,6 +6,7 @@ import { OnlineOrderEntity, OrderStatus } from '../../entities/online-order.enti
 import { CustomError } from '../../errors';
 import { UpdateOnlineOrderStatusDto } from '../../dtos/online-orders/update-online-order-status.dto';
 import { SaleType } from '../../entities';
+import { LoggerService } from '../../services';
 
 export class UpdateOnlineOrderStatusUseCase {
   constructor(
@@ -13,6 +14,7 @@ export class UpdateOnlineOrderStatusUseCase {
     private readonly saleRepository?: SaleRepository,
     private readonly customerLink?: CustomerLinkPort,
     private readonly productCatalogPort?: ProductCatalogPort,
+    private readonly logger?: LoggerService,
   ) {}
 
   async execute(id: string, dto: UpdateOnlineOrderStatusDto): Promise<OnlineOrderEntity> {
@@ -74,11 +76,10 @@ export class UpdateOnlineOrderStatusUseCase {
         await this.productCatalogPort!.incrementStock(item.productId, item.quantity);
       } catch (err) {
         allOk = false;
-        console.error('[UpdateOnlineOrderStatus] Falló incrementStock', {
+        this.logger?.error('[UpdateOnlineOrderStatus] Fallo incrementStock', err, {
           orderId: order.id,
           productId: item.productId,
           quantity: item.quantity,
-          error: err instanceof Error ? err.message : String(err),
         });
       }
     }

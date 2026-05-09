@@ -8,16 +8,16 @@ import {
 } from '../../domain/use-cases/online-orders';
 import { OnlineOrderRepositoryImpl, SaleRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaOnlineOrderDatasource, PrismaSaleDatasource } from '../../infrastructure/datasources';
-import { ProductCatalogAdapter, CustomerJwtAdapter, MercadoPagoGatewayAdapter, CustomerLinkAdapter } from '../../infrastructure/services';
+import { ProductCatalogAdapter, CustomerJwtAdapter, MercadoPagoGatewayAdapter, CustomerLinkAdapter, PostgresFeatureFlagAdapter, globalLogger } from '../../infrastructure/services';
 import { CustomerRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaCustomerDatasource } from '../../infrastructure/datasources';
-import { AuthMiddleware, checkRole, idempotencyKeyMiddleware } from '../middlewares';
+import { AuthMiddleware, checkRole, FeatureFlagMiddleware, idempotencyKeyMiddleware } from '../middlewares';
 import { RateLimitMiddleware } from '../middlewares/rate-limit.middleware';
 import { JwtAdapter } from '../../infrastructure/services';
 import { AuthRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaAuthDatasource } from '../../infrastructure/datasources';
 import { Role, CustomerEntity } from '../../domain/entities';
-import { CustomerJwtService } from '../../domain/services';
+import { CustomerJwtService, FeatureFlagKey } from '../../domain/services';
 import { CustomerRepository } from '../../domain/repositories';
 
 function buildOptionalCustomerJwt(
@@ -48,7 +48,8 @@ export class OnlineOrderRouter {
 
     const orderRepository = new OnlineOrderRepositoryImpl(new PrismaOnlineOrderDatasource());
     const productCatalog = new ProductCatalogAdapter();
-    const paymentGateway = new MercadoPagoGatewayAdapter();
+    const featureFlags = new PostgresFeatureFlagAdapter();
+    const paymentGateway = new MercadoPagoGatewayAdapter(featureFlags);
 
     const customerRepository = new CustomerRepositoryImpl(new PrismaCustomerDatasource());
     const customerJwt = new CustomerJwtAdapter();
@@ -60,7 +61,7 @@ export class OnlineOrderRouter {
     );
 
     const controller = new OnlineOrderController(
-      new CreateOnlineOrderUseCase(orderRepository, productCatalog, paymentGateway),
+      new CreateOnlineOrderUseCase(orderRepository, productCatalog, paymentGateway, featureFlags),
       new GetOnlineOrderByIdUseCase(orderRepository),
       new GetOnlineOrdersUseCase(orderRepository),
       new UpdateOnlineOrderStatusUseCase(
@@ -68,12 +69,17 @@ export class OnlineOrderRouter {
         new SaleRepositoryImpl(new PrismaSaleDatasource()),
         new CustomerLinkAdapter(new CustomerRepositoryImpl(new PrismaCustomerDatasource())),
         productCatalog,
+        globalLogger,
       ),
     );
 
     // POST /api/online-orders — público, customer JWT opcional
     router.post(
       '/',
+      FeatureFlagMiddleware.requireEnabled(featureFlags, FeatureFlagKey.CHECKOUT_ENABLED, {
+        disabledStatus: 503,
+        disabledMessage: 'Compras temporalmente deshabilitadas',
+      }),
       RateLimitMiddleware.onlineOrderCreateLimiter,
       idempotencyKeyMiddleware,
       optionalCustomerJwt,

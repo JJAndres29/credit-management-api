@@ -15,7 +15,7 @@ import { AssignProductAttributesUseCase, RemoveProductAttributeUseCase, ReplaceP
 import { CategoryRepositoryImpl, ProductRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaCategoryDatasource, PrismaProductDatasource } from '../../infrastructure/datasources';
 import { CloudinaryAdapter } from '../../infrastructure/services';
-import { AuthMiddleware, checkRole, uploadImages } from '../middlewares';
+import { AuthMiddleware, cachePublic, checkRole, uploadImages, validateImageMagicBytes } from '../middlewares';
 import { RateLimitMiddleware } from '../middlewares/rate-limit.middleware';
 import { JwtAdapter } from '../../infrastructure/services';
 import { AuthRepositoryImpl } from '../../infrastructure/repositories';
@@ -51,8 +51,8 @@ export class ProductRouter {
     );
 
     // Público
-    router.get('/', RateLimitMiddleware.publicProductsReadLimiter, controller.getAll);
-    router.get('/:id', RateLimitMiddleware.publicProductsReadLimiter, controller.getById);
+    router.get('/', RateLimitMiddleware.publicProductsReadLimiter, cachePublic({ maxAgeSeconds: 120 }), controller.getAll);
+    router.get('/:id', RateLimitMiddleware.publicProductsReadLimiter, cachePublic({ maxAgeSeconds: 120 }), controller.getById);
 
     // Staff JWT + ADMIN
     router.post('/:id/attributes', middleware.validateJwt, checkRole(Role.ADMIN), controller.assignAttributes);
@@ -62,7 +62,7 @@ export class ProductRouter {
     router.put('/:id', middleware.validateJwt, checkRole(Role.ADMIN), controller.update);
     router.patch('/:id/stock', middleware.validateJwt, checkRole(Role.ADMIN), controller.adjustStock);
     router.patch('/:id/retail-price', middleware.validateJwt, checkRole(Role.ADMIN), controller.updateRetailPrice);
-    router.post('/:id/images', middleware.validateJwt, checkRole(Role.ADMIN), uploadImages, controller.uploadImages);
+    router.post('/:id/images', middleware.validateJwt, checkRole(Role.ADMIN), uploadImages, validateImageMagicBytes, controller.uploadImages);
     router.delete('/:id/images/:imageId', middleware.validateJwt, checkRole(Role.ADMIN), controller.deleteImage);
     router.delete('/:id', middleware.validateJwt, checkRole(Role.ADMIN), controller.delete);
 

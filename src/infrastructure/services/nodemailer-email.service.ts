@@ -1,6 +1,7 @@
 import nodemailer, { Transporter } from 'nodemailer';
 import { envs } from '../../config/envs';
 import { EmailAttachment, EmailService, SendEmailOptions } from '../../domain/services/email.service';
+import { globalLogger } from './pino-logger.service';
 
 /**
  * Adapter de Nodemailer para envío de emails.
@@ -25,10 +26,7 @@ export class NodemailerEmailService implements EmailService {
     const { email, secretKey, service } = envs.mailer;
 
     if (!email || !secretKey) {
-      console.warn(
-        '⚠️  MAILER_EMAIL o MAILER_SECRET_KEY no configurados — ' +
-          'notificaciones por email deshabilitadas.',
-      );
+      globalLogger.warn('MAILER_EMAIL o MAILER_SECRET_KEY no configurados - notificaciones por email deshabilitadas');
       this.enabled = false;
       this.from = '';
       return;
@@ -70,7 +68,7 @@ export class NodemailerEmailService implements EmailService {
       });
       return true;
     } catch (error) {
-      console.error('[NodemailerEmailService] Error al enviar email:', error);
+      globalLogger.error('[NodemailerEmailService] Error al enviar email', error);
       return false;
     }
   }

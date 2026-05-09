@@ -1,7 +1,7 @@
 import { Router } from 'express';
 import express from 'express';
 import { WebhookController } from './webhook.controller';
-import { MercadoPagoGatewayAdapter } from '../../infrastructure/services';
+import { MercadoPagoGatewayAdapter, PostgresFeatureFlagAdapter, globalLogger } from '../../infrastructure/services';
 import { ProcessPaymentWebhookUseCase } from '../../domain/use-cases/online-orders';
 import { OnlineOrderRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaOnlineOrderDatasource } from '../../infrastructure/datasources';
@@ -13,12 +13,14 @@ export class EcommerceRouter {
 
     const orderRepository = new OnlineOrderRepositoryImpl(new PrismaOnlineOrderDatasource());
     const productCatalog = new ProductCatalogAdapter();
-    const gateway = new MercadoPagoGatewayAdapter();
+    const featureFlags = new PostgresFeatureFlagAdapter();
+    const gateway = new MercadoPagoGatewayAdapter(featureFlags);
 
     const processWebhookUseCase = new ProcessPaymentWebhookUseCase(
       orderRepository,
       gateway,
       productCatalog,
+      globalLogger,
     );
 
     const controller = new WebhookController(gateway, processWebhookUseCase);

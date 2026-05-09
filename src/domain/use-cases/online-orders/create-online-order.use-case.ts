@@ -4,6 +4,7 @@ import { CreateOnlineOrderDto } from '../../dtos/online-orders';
 import { OnlineOrderRepository } from '../../repositories/online-order.repository';
 import { ProductCatalogPort } from '../../services/product-catalog.port';
 import { IPaymentGateway } from '../../services/payment-gateway.port';
+import { FeatureFlagKey, FeatureFlagPort } from '../../services';
 
 const EXPIRY_MINUTES: Record<OrderPaymentMethod, number> = {
   [OrderPaymentMethod.ONLINE_GATEWAY]: 30,
@@ -26,6 +27,7 @@ export class CreateOnlineOrderUseCase {
     private readonly onlineOrderRepository: OnlineOrderRepository,
     private readonly productCatalogPort: ProductCatalogPort,
     private readonly paymentGateway?: IPaymentGateway,
+    private readonly featureFlags?: FeatureFlagPort,
   ) {}
 
   async execute(
@@ -35,6 +37,13 @@ export class CreateOnlineOrderUseCase {
   ): Promise<CreateOnlineOrderResult> {
     if (dto.paymentMethod === OrderPaymentMethod.ONLINE_GATEWAY && !this.paymentGateway) {
       throw CustomError.badRequest('Pasarela de pagos no configurada');
+    }
+    if (
+      dto.paymentMethod === OrderPaymentMethod.ONLINE_GATEWAY
+      && this.featureFlags
+      && !(await this.featureFlags.isEnabled(FeatureFlagKey.MP_ENABLED, true))
+    ) {
+      throw CustomError.serviceUnavailable('Pasarela temporalmente no disponible');
     }
 
     if (!customerId && !dto.guestEmail) {

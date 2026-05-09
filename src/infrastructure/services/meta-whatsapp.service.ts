@@ -1,5 +1,6 @@
 import { envs } from '../../config/envs';
 import { NotificationService } from '../../domain/services/notification.service';
+import { globalLogger } from './pino-logger.service';
 
 /**
  * Adapter de Meta Cloud API para envío de mensajes de WhatsApp.
@@ -32,10 +33,7 @@ export class MetaWhatsAppService implements NotificationService {
     const { token, phoneNumberId } = envs.meta;
 
     if (!token || !phoneNumberId) {
-      console.warn(
-        '⚠️  META_WHATSAPP_TOKEN o META_WHATSAPP_PHONE_NUMBER_ID no configurados — ' +
-          'notificaciones por WhatsApp deshabilitadas.',
-      );
+      globalLogger.warn('META_WHATSAPP_TOKEN o META_WHATSAPP_PHONE_NUMBER_ID no configurados - notificaciones por WhatsApp deshabilitadas');
       this.enabled = false;
       this.token = '';
       this.apiUrl = '';
@@ -82,14 +80,14 @@ export class MetaWhatsAppService implements NotificationService {
 
       if (!response.ok) {
         const errorBody = await response.text();
-        console.error('[MetaWhatsAppService] Error de plantilla:', response.status, errorBody);
+        globalLogger.error('[MetaWhatsAppService] Error de plantilla', undefined, { status: response.status, errorBody });
         return false;
       }
 
-      console.log('[MetaWhatsAppService] Plantilla enviada a:', this.formatPhone(to));
+      globalLogger.info('[MetaWhatsAppService] Plantilla enviada', { to: this.formatPhone(to) });
       return true;
     } catch (error) {
-      console.error('[MetaWhatsAppService] Error al enviar plantilla:', error);
+      globalLogger.error('[MetaWhatsAppService] Error al enviar plantilla', error);
       return false;
     }
   }
@@ -114,14 +112,14 @@ export class MetaWhatsAppService implements NotificationService {
 
       if (!response.ok) {
         const errorBody = await response.text();
-        console.error('[MetaWhatsAppService] Error de API:', response.status, errorBody);
+        globalLogger.error('[MetaWhatsAppService] Error de API', undefined, { status: response.status, errorBody });
         return false;
       }
 
-      console.log('[MetaWhatsAppService] Mensaje enviado a:', this.formatPhone(to));
+      globalLogger.info('[MetaWhatsAppService] Mensaje enviado', { to: this.formatPhone(to) });
       return true;
     } catch (error) {
-      console.error('[MetaWhatsAppService] Error al enviar mensaje:', error);
+      globalLogger.error('[MetaWhatsAppService] Error al enviar mensaje', error);
       return false;
     }
   }
@@ -174,7 +172,7 @@ export class MetaWhatsAppService implements NotificationService {
         lastError = error;
         const is4xx = error instanceof Error && error.message.includes('4xx (no-retry)');
         if (is4xx || attempt === maxAttempts) break;
-        console.warn(`[MetaWhatsAppService] uploadMedia intento ${attempt} falló, reintentando…`);
+        globalLogger.warn('[MetaWhatsAppService] uploadMedia falló, reintentando', { attempt });
       }
     }
 
@@ -213,14 +211,14 @@ export class MetaWhatsAppService implements NotificationService {
 
       if (!response.ok) {
         const errorBody = await response.text();
-        console.error('[MetaWhatsAppService] Error al enviar documento:', response.status, errorBody);
+        globalLogger.error('[MetaWhatsAppService] Error al enviar documento', undefined, { status: response.status, errorBody });
         return false;
       }
 
-      console.log('[MetaWhatsAppService] Documento enviado a:', this.formatPhone(to));
+      globalLogger.info('[MetaWhatsAppService] Documento enviado', { to: this.formatPhone(to) });
       return true;
     } catch (error) {
-      console.error('[MetaWhatsAppService] Error en sendDocument:', error);
+      globalLogger.error('[MetaWhatsAppService] Error en sendDocument', error);
       return false;
     }
   }
@@ -285,21 +283,20 @@ export class MetaWhatsAppService implements NotificationService {
 
       if (!response.ok) {
         const errorBody = await response.text();
-        console.error(
-          '[MetaWhatsAppService] Error al enviar plantilla con documento:',
-          response.status,
+        globalLogger.error('[MetaWhatsAppService] Error al enviar plantilla con documento', undefined, {
+          status: response.status,
           errorBody,
-        );
+        });
         return false;
       }
 
-      console.log(
-        `[MetaWhatsAppService] Plantilla "${templateName}" con documento enviada a:`,
-        this.formatPhone(to),
-      );
+      globalLogger.info('[MetaWhatsAppService] Plantilla con documento enviada', {
+        templateName,
+        to: this.formatPhone(to),
+      });
       return true;
     } catch (error) {
-      console.error('[MetaWhatsAppService] Error en sendDocumentTemplate:', error);
+      globalLogger.error('[MetaWhatsAppService] Error en sendDocumentTemplate', error);
       return false;
     }
   }

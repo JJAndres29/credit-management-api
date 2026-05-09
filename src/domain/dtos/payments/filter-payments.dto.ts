@@ -1,5 +1,6 @@
 /** YYYY-MM regex — se acepta como atajo para dateFrom/dateTo de un mes completo. */
 const MONTH_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export class FilterPaymentsDto {
   private constructor(
@@ -15,9 +16,15 @@ export class FilterPaymentsDto {
     if (clientId !== undefined && typeof clientId !== 'string') {
       return ['clientId debe ser una cadena de texto'];
     }
+    if (typeof clientId === 'string' && !UUID_V4.test(clientId.trim())) {
+      return ['clientId debe ser un UUID v4 válido'];
+    }
 
     if (saleId !== undefined && typeof saleId !== 'string') {
       return ['saleId debe ser una cadena de texto'];
+    }
+    if (typeof saleId === 'string' && !UUID_V4.test(saleId.trim())) {
+      return ['saleId debe ser un UUID v4 válido'];
     }
 
     // month=YYYY-MM expands to dateFrom (1st) and dateTo (last day at 23:59:59).
@@ -32,8 +39,8 @@ export class FilterPaymentsDto {
       return [
         undefined,
         new FilterPaymentsDto(
-          clientId as string | undefined,
-          saleId as string | undefined,
+          typeof clientId === 'string' ? clientId.trim() : undefined,
+          typeof saleId === 'string' ? saleId.trim() : undefined,
           from,
           to,
         ),
@@ -64,8 +71,8 @@ export class FilterPaymentsDto {
     return [
       undefined,
       new FilterPaymentsDto(
-        clientId as string | undefined,
-        saleId as string | undefined,
+        typeof clientId === 'string' ? clientId.trim() : undefined,
+        typeof saleId === 'string' ? saleId.trim() : undefined,
         dateFromDate,
         dateToDate,
       ),

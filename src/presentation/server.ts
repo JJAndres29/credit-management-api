@@ -1,5 +1,7 @@
-import express, { Application, NextFunction, Request, Response } from 'express';
+import express, { Application, NextFunction, Request, RequestHandler, Response } from 'express';
 import type { Server as HttpServer } from 'http';
+import { randomUUID } from 'crypto';
+import pinoHttp from 'pino-http';
 import { CustomError } from '../domain/errors';
 import { LoggerService } from '../domain/services/logger.service';
 import { AuthRouter } from './auth/auth.router';
@@ -18,8 +20,13 @@ import { AttributeRouter } from './categories/attribute.router';
 import { OnlineOrderRouter } from './online-orders/online-order.router';
 import { EcommerceRouter } from './ecommerce/ecommerce.router';
 import { CollectionRouter } from './collections/collection.router';
+import { FeatureFlagRouter } from './admin/feature-flag.router';
 import helmet from 'helmet';
 import cors from 'cors';
+import type pino from 'pino';
+import { FeatureFlagKey, FeatureFlagPort } from '../domain/services';
+import { PostgresFeatureFlagAdapter } from '../infrastructure/services';
+import { FeatureFlagMiddleware } from './middlewares';
 
 interface ServerOptions {
   port: number;
@@ -29,6 +36,7 @@ interface ServerOptions {
 export class Server {
   private readonly app: Application = express();
   private readonly logger?: LoggerService;
+  private readonly featureFlags: FeatureFlagPort = new PostgresFeatureFlagAdapter();
   private httpServer?: HttpServer;
 
   constructor(private readonly options: ServerOptions) {
@@ -52,6 +60,37 @@ export class Server {
       credentials: true,
     }));
 
+    this.app.use(pinoHttp({
+      logger: this.getNativeLogger(),
+      genReqId: (req: Request, res: Response) => {
+        const existing = req.headers['x-request-id'];
+        const requestId = Array.isArray(existing) ? existing[0] : existing;
+        const id = requestId || randomUUID();
+        res.setHeader('X-Request-Id', id);
+        return id;
+      },
+      customLogLevel: (_req: Request, res: Response, err?: Error) => {
+        if (err || res.statusCode >= 500) return 'error';
+        if (res.statusCode >= 400) return 'warn';
+        return 'info';
+      },
+      customProps: (req: Request & { id?: string }) => ({
+        requestId: req.id,
+      }),
+      redact: {
+        paths: [
+          'req.headers.authorization',
+          'req.headers.cookie',
+          'res.headers["set-cookie"]',
+          'req.body.password',
+          'req.body.token',
+          'req.body.accessToken',
+          'req.body.refreshToken',
+        ],
+        censor: '[REDACTED]',
+      },
+    }) as unknown as RequestHandler);
+
     // Register webhook route BEFORE express.json() so rawBody is preserved for HMAC verification
     this.app.use('/api/ecommerce', EcommerceRouter.routes);
 
@@ -61,16 +100,63 @@ export class Server {
     this.app.use('/health', HealthRouter.routes(this.logger));
 
     this.app.use('/api/auth', AuthRouter.routes);
-    this.app.use('/api/clients', ClientRouter.routes);
+    this.app.use('/api/admin/feature-flags', FeatureFlagRouter.routes);
+    this.app.use(
+      '/api/clients',
+      FeatureFlagMiddleware.requireEnabled(this.featureFlags, FeatureFlagKey.CREDIT_MODULE_ENABLED, {
+        disabledStatus: 404,
+        disabledMessage: 'Ruta no disponible en el modo de operación actual',
+      }),
+      ClientRouter.routes,
+    );
     this.app.use('/api/products', ProductRouter.routes);
     this.app.use('/api/users', UserRouter.routes);
-    this.app.use('/api/sales', SaleRouter.routes);
-    this.app.use('/api/payments', PaymentRouter.routes);
-    this.app.use('/api/audit-logs', AuditLogRouter.routes);
-    this.app.use('/api/reports', ReportRouter.routes);
+    this.app.use(
+      '/api/sales',
+      FeatureFlagMiddleware.requireAllEnabled(
+        this.featureFlags,
+        [FeatureFlagKey.CREDIT_MODULE_ENABLED, FeatureFlagKey.PHYSICAL_SALES_ENABLED],
+        {
+          disabledStatus: 404,
+          disabledMessage: 'Ruta no disponible en el modo de operación actual',
+        },
+      ),
+      SaleRouter.routes,
+    );
+    this.app.use(
+      '/api/payments',
+      FeatureFlagMiddleware.requireEnabled(this.featureFlags, FeatureFlagKey.CREDIT_MODULE_ENABLED, {
+        disabledStatus: 404,
+        disabledMessage: 'Ruta no disponible en el modo de operación actual',
+      }),
+      PaymentRouter.routes,
+    );
+    this.app.use(
+      '/api/audit-logs',
+      FeatureFlagMiddleware.requireEnabled(this.featureFlags, FeatureFlagKey.CREDIT_MODULE_ENABLED, {
+        disabledStatus: 404,
+        disabledMessage: 'Ruta no disponible en el modo de operación actual',
+      }),
+      AuditLogRouter.routes,
+    );
+    this.app.use(
+      '/api/reports',
+      FeatureFlagMiddleware.requireEnabled(this.featureFlags, FeatureFlagKey.CREDIT_MODULE_ENABLED, {
+        disabledStatus: 404,
+        disabledMessage: 'Ruta no disponible en el modo de operación actual',
+      }),
+      ReportRouter.routes,
+    );
     this.app.use('/api/dashboard', DashboardRouter.routes);
     this.app.use('/api/customer-auth', CustomerAuthRouter.routes);
-    this.app.use('/api/collections', CollectionRouter.routes);
+    this.app.use(
+      '/api/collections',
+      FeatureFlagMiddleware.requireEnabled(this.featureFlags, FeatureFlagKey.CREDIT_MODULE_ENABLED, {
+        disabledStatus: 404,
+        disabledMessage: 'Ruta no disponible en el modo de operación actual',
+      }),
+      CollectionRouter.routes,
+    );
     this.app.use('/api/categories', CategoryRouter.routes);
     this.app.use('/api/online-orders', OnlineOrderRouter.routes);
     this.app.use('/api', AttributeRouter.routes);
@@ -96,6 +182,11 @@ export class Server {
     }
 
     return origins.split(',').map(o => o.trim());
+  }
+
+  private getNativeLogger(): pino.Logger | undefined {
+    const maybePino = this.logger as (LoggerService & { getNativeLogger?: () => pino.Logger }) | undefined;
+    return maybePino?.getNativeLogger?.();
   }
 
   private handleError = (err: unknown, _req: Request, res: Response, _next: NextFunction): void => {

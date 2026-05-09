@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { AuthMiddleware, checkRole } from '../middlewares';
+import { AuthMiddleware, cachePublic, checkRole } from '../middlewares';
 import { JwtAdapter } from '../../infrastructure/services';
 import { AuthRepositoryImpl, CategoryRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaAuthDatasource, PrismaCategoryDatasource } from '../../infrastructure/datasources';
@@ -36,7 +36,7 @@ export class CategoryRouter {
     );
 
     // Público
-    router.get('/', controller.getAll);
+    router.get('/', cachePublic({ maxAgeSeconds: 300 }), controller.getAll);
     router.get('/:id/attributes', controller.getCategoryAttributes);
 
     // Staff JWT + ADMIN

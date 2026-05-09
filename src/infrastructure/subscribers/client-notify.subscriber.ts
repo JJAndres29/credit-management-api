@@ -113,14 +113,19 @@ export class ClientNotifySubscriber {
       });
 
       if (status === 'SENT') {
-        this.logger?.info(`[Notification] EMAIL CLIENT_NOTIFY_REQUESTED → cliente ${clientId} ✓`);
+        this.logger?.info('[Notification] CLIENT_NOTIFY_REQUESTED sent', {
+          channel: 'EMAIL',
+          clientId,
+        });
       } else {
-        this.logger?.warn(
-          `[Notification] EMAIL CLIENT_NOTIFY_REQUESTED → cliente ${clientId} ✗ — ${errorMessage}`,
-        );
+        this.logger?.warn('[Notification] CLIENT_NOTIFY_REQUESTED failed', {
+          channel: 'EMAIL',
+          clientId,
+          errorMessage,
+        });
       }
     } catch (error) {
-      console.error('[ClientNotifySubscriber] Error inesperado:', error);
+      this.logger?.error('[ClientNotifySubscriber] Error inesperado', error);
     }
   };
 }

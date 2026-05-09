@@ -59,7 +59,10 @@ export class SaleNotificationSubscriber {
         try {
           pdfBuffer = await this.accountStatementUseCase.execute(clientId, 'Sistema');
         } catch (pdfError) {
-          console.warn('[SaleNotificationSubscriber] No se pudo generar el PDF adjunto:', pdfError);
+          this.logger?.warn('[SaleNotificationSubscriber] No se pudo generar el PDF adjunto', {
+            clientId,
+            error: pdfError instanceof Error ? pdfError.message : String(pdfError),
+          });
         }
       }
 
@@ -140,7 +143,7 @@ export class SaleNotificationSubscriber {
 
       await Promise.allSettled(tasks);
     } catch (error) {
-      console.error('[SaleNotificationSubscriber] Error inesperado:', error);
+      this.logger?.error('[SaleNotificationSubscriber] Error inesperado', error);
     }
   };
 
@@ -175,13 +178,16 @@ export class SaleNotificationSubscriber {
     });
 
     if (status === 'SENT') {
-      console.log(
-        `[Notification] ${params.channel} CREDIT_SALE_CREATED → cliente ${params.clientId} ✓`,
-      );
+      this.logger?.info('[Notification] CREDIT_SALE_CREATED sent', {
+        channel: params.channel,
+        clientId: params.clientId,
+      });
     } else {
-      console.warn(
-        `[Notification] ${params.channel} CREDIT_SALE_CREATED → cliente ${params.clientId} ✗ — ${errorMessage}`,
-      );
+      this.logger?.warn('[Notification] CREDIT_SALE_CREATED failed', {
+        channel: params.channel,
+        clientId: params.clientId,
+        errorMessage,
+      });
     }
   }
 

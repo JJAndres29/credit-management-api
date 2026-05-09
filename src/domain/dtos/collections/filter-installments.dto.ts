@@ -1,6 +1,7 @@
 import { InstallmentStatus } from '../../services/installments';
 
 const VALID_STATUSES: InstallmentStatus[] = ['PENDING', 'PARTIAL', 'OVERDUE', 'PAID'];
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export class FilterInstallmentsDto {
   private constructor(
@@ -15,6 +16,9 @@ export class FilterInstallmentsDto {
 
     if (status !== undefined && !VALID_STATUSES.includes(status as InstallmentStatus)) {
       return ['status debe ser PENDING, PARTIAL, OVERDUE o PAID'];
+    }
+    if (clientId !== undefined && (typeof clientId !== 'string' || !UUID_V4.test(clientId.trim()))) {
+      return ['clientId debe ser un UUID v4 válido'];
     }
 
     let parsedDueFrom: Date | undefined;
@@ -48,7 +52,7 @@ export class FilterInstallmentsDto {
       undefined,
       new FilterInstallmentsDto(
         status as InstallmentStatus | undefined,
-        clientId ? String(clientId) : undefined,
+        typeof clientId === 'string' ? clientId.trim() : undefined,
         parsedDueFrom,
         parsedDueTo,
       ),
