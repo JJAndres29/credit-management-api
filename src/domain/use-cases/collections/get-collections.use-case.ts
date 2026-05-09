@@ -43,10 +43,11 @@ export class GetCollectionsUseCase {
 
   async execute(
     pagination: PaginationDto,
-    filters: FilterInstallmentsDto,
+    filters?: FilterInstallmentsDto,
   ): Promise<PaginatedResult<CollectionInstallmentItem>> {
+    const activeFilters = filters ?? ({} as FilterInstallmentsDto);
     // 1. Cargar ventas CREDIT activas (PENDING/PARTIAL con plan de cuotas)
-    const sales = await this.saleRepository.findActiveCreditSales(filters.clientId);
+    const sales = await this.saleRepository.findActiveCreditSales(activeFilters.clientId);
 
     if (sales.length === 0) {
       return {
@@ -105,11 +106,11 @@ export class GetCollectionsUseCase {
 
       for (const inst of schedule.installments) {
         // Aplicar filtro de status
-        if (filters.status && inst.status !== filters.status) continue;
+        if (activeFilters.status && inst.status !== activeFilters.status) continue;
 
         // Aplicar filtros de fecha
-        if (filters.dueFrom && inst.dueDate < filters.dueFrom) continue;
-        if (filters.dueTo && inst.dueDate > filters.dueTo) continue;
+        if (activeFilters.dueFrom && inst.dueDate < activeFilters.dueFrom) continue;
+        if (activeFilters.dueTo && inst.dueDate > activeFilters.dueTo) continue;
 
         items.push({
           saleId: sale.id,

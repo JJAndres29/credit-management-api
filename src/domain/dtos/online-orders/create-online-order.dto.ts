@@ -1,7 +1,6 @@
 import { regularExps } from '../../../config/regular-exp';
 import { OrderPaymentMethod } from '../../entities/online-order.entity';
 
-const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_ITEMS = 50;
 const MAX_QUANTITY = 999;
 const MAX_SHIPPING_ADDRESS_LENGTH = 500;
@@ -46,9 +45,6 @@ export class CreateOnlineOrderDto {
       const { productId, quantity } = item;
       if (!productId || typeof productId !== 'string' || productId.trim().length === 0) {
         return [`items[${i}].productId es requerido`];
-      }
-      if (!UUID_V4.test(productId.trim())) {
-        return [`items[${i}].productId debe ser un UUID v4 válido`];
       }
       if (quantity === undefined || quantity === null) return [`items[${i}].quantity es requerido`];
       const qty = Number(quantity);
