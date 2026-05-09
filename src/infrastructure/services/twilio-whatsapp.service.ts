@@ -1,5 +1,6 @@
 import { envs } from '../../config/envs';
 import { NotificationService } from '../../domain/services/notification.service';
+import { globalLogger } from './pino-logger.service';
 //
 /**
  * Adapter de Twilio para envío de mensajes de WhatsApp.
@@ -24,10 +25,7 @@ export class TwilioWhatsAppService implements NotificationService {
     const whatsappFrom = '';
 
     if (!accountSid || !authToken || !whatsappFrom) {
-      console.warn(
-        '⚠️  TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN o TWILIO_WHATSAPP_FROM no configurados — ' +
-          'notificaciones por WhatsApp deshabilitadas.',
-      );
+      globalLogger.warn('TWILIO_ACCOUNT_SID, TWILIO_AUTH_TOKEN o TWILIO_WHATSAPP_FROM no configurados - notificaciones por WhatsApp deshabilitadas');
       this.enabled = false;
       this.from = '';
       return;
@@ -52,7 +50,7 @@ export class TwilioWhatsAppService implements NotificationService {
       });
       return true;
     } catch (error) {
-      console.error('[TwilioWhatsAppService] Error al enviar mensaje:', error);
+      globalLogger.error('[TwilioWhatsAppService] Error al enviar mensaje', error);
       return false;
     }
   }
@@ -71,7 +69,7 @@ export class TwilioWhatsAppService implements NotificationService {
       });
       return true;
     } catch (error) {
-      console.error('[TwilioWhatsAppService] Error al enviar template:', error);
+      globalLogger.error('[TwilioWhatsAppService] Error al enviar template', error);
       return false;
     }
   }
@@ -87,7 +85,7 @@ export class TwilioWhatsAppService implements NotificationService {
     _caption?: string,
     _mimeType?: string,
   ): Promise<boolean> {
-    console.warn('[TwilioWhatsAppService] sendDocument no soportado — usar MetaWhatsAppService');
+    globalLogger.warn('[TwilioWhatsAppService] sendDocument no soportado - usar MetaWhatsAppService');
     return false;
   }
 
@@ -103,7 +101,7 @@ export class TwilioWhatsAppService implements NotificationService {
     _bodyVariables: string[],
     _languageCode?: string,
   ): Promise<boolean> {
-    console.warn('[TwilioWhatsAppService] sendDocumentTemplate no soportado — usar MetaWhatsAppService');
+    globalLogger.warn('[TwilioWhatsAppService] sendDocumentTemplate no soportado - usar MetaWhatsAppService');
     return false;
   }
 

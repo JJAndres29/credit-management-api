@@ -1,3 +1,5 @@
+const MAX_SEARCH_LENGTH = 100;
+
 export class FilterClientsDto {
   private constructor(
     public readonly search?: string,
@@ -11,6 +13,9 @@ export class FilterClientsDto {
 
     if (search !== undefined && typeof search !== 'string') {
       return ['search debe ser una cadena de texto'];
+    }
+    if (typeof search === 'string' && search.trim().length > MAX_SEARCH_LENGTH) {
+      return [`search no puede superar los ${MAX_SEARCH_LENGTH} caracteres`];
     }
 
     let minBalanceNum: number | undefined;

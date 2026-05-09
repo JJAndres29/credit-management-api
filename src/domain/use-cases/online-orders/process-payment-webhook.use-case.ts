@@ -2,6 +2,7 @@ import { OnlineOrderRepository } from '../../repositories/online-order.repositor
 import { IPaymentGateway } from '../../services/payment-gateway.port';
 import { ProductCatalogPort } from '../../services/product-catalog.port';
 import { OrderStatus } from '../../entities/online-order.entity';
+import { LoggerService } from '../../services';
 
 export type WebhookProcessResult =
   | 'ignored'
@@ -24,6 +25,7 @@ export class ProcessPaymentWebhookUseCase {
     private readonly orderRepository: OnlineOrderRepository,
     private readonly paymentGateway: IPaymentGateway,
     private readonly productCatalogPort: ProductCatalogPort,
+    private readonly logger?: LoggerService,
   ) {}
 
   async execute(input: WebhookInput): Promise<WebhookProcessResult> {
@@ -65,7 +67,7 @@ export class ProcessPaymentWebhookUseCase {
     if (status === 'APPROVED') {
       const diff = Math.abs(amount - order.totalAmount);
       if (diff > 1) {
-        console.error('[ProcessWebhook] CRITICAL amount mismatch', {
+        this.logger?.error('[ProcessWebhook] CRITICAL amount mismatch', undefined, {
           paymentId,
           orderId: order.id,
           expected: order.totalAmount,
@@ -84,11 +86,10 @@ export class ProcessPaymentWebhookUseCase {
         await this.productCatalogPort.incrementStock(item.productId, item.quantity);
       } catch (err) {
         allRestored = false;
-        console.error('[ProcessWebhook] Falló incrementStock', {
+        this.logger?.error('[ProcessWebhook] Fallo incrementStock', err, {
           orderId: order.id,
           productId: item.productId,
           quantity: item.quantity,
-          error: err instanceof Error ? err.message : String(err),
         });
       }
     }

@@ -11,6 +11,7 @@ import { ProductCatalogAdapter } from './infrastructure/services';
 const expireUseCase = new ExpireOnlineOrdersUseCase(
   new OnlineOrderRepositoryImpl(new PrismaOnlineOrderDatasource()),
   new ProductCatalogAdapter(),
+  globalLogger,
 );
 const expiryJob = new OnlineOrderExpiryJob(expireUseCase, globalLogger);
 

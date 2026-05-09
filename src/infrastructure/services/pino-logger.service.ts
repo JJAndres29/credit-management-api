@@ -20,6 +20,24 @@ export class PinoLoggerService implements LoggerService {
     this.logger = pino({
       level: isDev ? 'debug' : 'info',
       timestamp: pino.stdTimeFunctions.isoTime,
+      redact: {
+        paths: [
+          'req.headers.authorization',
+          'req.headers.cookie',
+          'res.headers["set-cookie"]',
+          'password',
+          '*.password',
+          'token',
+          '*.token',
+          'accessToken',
+          '*.accessToken',
+          'refreshToken',
+          '*.refreshToken',
+          'authorization',
+          '*.authorization',
+        ],
+        censor: '[REDACTED]',
+      },
       ...(isDev
         ? {
             transport: {
@@ -45,6 +63,14 @@ export class PinoLoggerService implements LoggerService {
 
   debug(message: string, meta?: Record<string, unknown>): void {
     this.logger.debug(meta ?? {}, message);
+  }
+
+  child(bindings: Record<string, unknown>): pino.Logger {
+    return this.logger.child(bindings);
+  }
+
+  getNativeLogger(): pino.Logger {
+    return this.logger;
   }
 }
 

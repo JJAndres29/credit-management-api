@@ -1,6 +1,7 @@
 import { Request, Response } from 'express';
 import { IPaymentGateway } from '../../domain/services/payment-gateway.port';
 import { ProcessPaymentWebhookUseCase } from '../../domain/use-cases/online-orders';
+import { globalLogger } from '../../infrastructure/services';
 
 export class WebhookController {
   constructor(
@@ -19,7 +20,7 @@ export class WebhookController {
     }
 
     if (!this.mercadoPagoGateway.verifyWebhookSignature(rawBody, headers, req.query)) {
-      console.warn('[Webhook] Invalid Mercado Pago signature — request rejected');
+      globalLogger.warn('[Webhook] Invalid Mercado Pago signature - request rejected');
       res.status(401).json({ error: 'Invalid signature' });
       return;
     }

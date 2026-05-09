@@ -1,6 +1,7 @@
 import { EventEmitterPort } from '../../domain/events';
 import { CUSTOMER_PASSWORD_RESET, CustomerPasswordResetData } from '../../domain/events/customer-password-reset.event';
 import { EmailService } from '../../domain/services';
+import { globalLogger } from '../services';
 
 export class CustomerPasswordResetSubscriber {
   constructor(
@@ -9,7 +10,7 @@ export class CustomerPasswordResetSubscriber {
   ) {
     this.eventEmitter.on(CUSTOMER_PASSWORD_RESET, (data) => {
       this.handle(data as CustomerPasswordResetData).catch((err) => {
-        console.error('[CustomerPasswordReset] Subscriber error:', err);
+        globalLogger.error('[CustomerPasswordReset] Subscriber error', err);
       });
     });
   }
@@ -27,9 +28,9 @@ export class CustomerPasswordResetSubscriber {
           <p>Si no solicitaste este cambio, ignora este correo.</p>
         `,
       });
-      console.log(`[CustomerPasswordReset] Email enviado a ${data.customerEmail}`);
+      globalLogger.info('[CustomerPasswordReset] Email enviado', { customerEmail: data.customerEmail });
     } catch (err) {
-      console.error(`[CustomerPasswordReset] Email fallido para ${data.customerEmail}:`, err);
+      globalLogger.error('[CustomerPasswordReset] Email fallido', err, { customerEmail: data.customerEmail });
     }
   }
 }

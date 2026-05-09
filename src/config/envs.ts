@@ -3,9 +3,16 @@ import 'dotenv/config';
 const requiredEnvs = [
   'PORT',
   'DATABASE_URL',
+  'DIRECT_URL',
   'JWT_SECRET',
   'JWT_EXPIRES_IN',
 ] as const;
+
+const HEX_64_REGEX = /^[a-f0-9]{64,}$/i;
+
+function warnOptional(message: string): void {
+  process.stderr.write(`${message}\n`);
+}
 
 for (const key of requiredEnvs) {
   if (!process.env[key]) {
@@ -13,22 +20,27 @@ for (const key of requiredEnvs) {
   }
 }
 
+if (!HEX_64_REGEX.test(process.env.JWT_SECRET!)) {
+  throw new Error('JWT_SECRET must be a hexadecimal secret with at least 64 characters');
+}
+
 if (!process.env.JWT_CUSTOMER_SECRET) {
-  console.warn('[envs] JWT_CUSTOMER_SECRET not set — customer auth disabled');
+  warnOptional('[envs] JWT_CUSTOMER_SECRET not set - customer auth disabled');
 }
 
 if (!process.env.GOOGLE_CLIENT_ID) {
-  console.warn('[envs] GOOGLE_CLIENT_ID not set — Google OAuth disabled');
+  warnOptional('[envs] GOOGLE_CLIENT_ID not set - Google OAuth disabled');
 }
 
 if (!process.env.MP_ACCESS_TOKEN || !process.env.MP_WEBHOOK_SECRET) {
-  console.warn('[envs] MP_ACCESS_TOKEN or MP_WEBHOOK_SECRET not set — Mercado Pago gateway disabled');
+  warnOptional('[envs] MP_ACCESS_TOKEN or MP_WEBHOOK_SECRET not set - Mercado Pago gateway disabled');
 }
 
 export const envs = {
   port: Number(process.env.PORT),
   nodeEnv: process.env.NODE_ENV ?? 'development',
   databaseUrl: process.env.DATABASE_URL!,
+  directUrl: process.env.DIRECT_URL!,
   jwtSecret: process.env.JWT_SECRET!,
   jwtExpiresIn: process.env.JWT_EXPIRES_IN!,
   jwtCustomerSecret: process.env.JWT_CUSTOMER_SECRET ?? '',

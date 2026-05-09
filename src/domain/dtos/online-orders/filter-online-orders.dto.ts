@@ -1,5 +1,7 @@
 import { OrderStatus } from '../../entities/online-order.entity';
 
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export class FilterOnlineOrdersDto {
   private constructor(
     public readonly status?: OrderStatus,
@@ -16,6 +18,10 @@ export class FilterOnlineOrdersDto {
       const valid = Object.values(OrderStatus) as string[];
       if (!valid.includes(status as string)) return [`status debe ser uno de: ${valid.join(', ')}`];
       parsedStatus = status as OrderStatus;
+    }
+
+    if (customerId !== undefined && (typeof customerId !== 'string' || !UUID_V4.test(customerId.trim()))) {
+      return ['customerId debe ser un UUID v4 válido'];
     }
 
     let parsedFrom: Date | undefined;
@@ -37,7 +43,7 @@ export class FilterOnlineOrdersDto {
         parsedStatus,
         parsedFrom,
         parsedTo,
-        customerId ? (customerId as string).trim() : undefined,
+        typeof customerId === 'string' ? customerId.trim() : undefined,
       ),
     ];
   }

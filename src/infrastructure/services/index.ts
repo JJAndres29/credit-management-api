@@ -10,3 +10,4 @@ export { CustomerLinkAdapter } from './customer-link.adapter';
 export { ProductCatalogAdapter } from './product-catalog.adapter';
 export { MercadoPagoGatewayAdapter } from './mercadopago-gateway.adapter';
 export { PrismaMonthlySummaryAdapter } from './prisma-monthly-summary.adapter';
+export { PostgresFeatureFlagAdapter } from './postgres-feature-flag.adapter';

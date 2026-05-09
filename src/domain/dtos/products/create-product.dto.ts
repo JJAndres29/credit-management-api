@@ -1,3 +1,7 @@
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+const MAX_NAME_LENGTH = 200;
+const MAX_DESCRIPTION_LENGTH = 2000;
+
 export class CreateProductDto {
   private constructor(
     public readonly name: string,
@@ -13,13 +17,16 @@ export class CreateProductDto {
     if (!name || typeof name !== 'string' || name.trim().length < 2) {
       return ['El nombre es requerido y debe tener al menos 2 caracteres'];
     }
+    if (name.trim().length > MAX_NAME_LENGTH) {
+      return [`El nombre no puede superar los ${MAX_NAME_LENGTH} caracteres`];
+    }
 
     if (description !== undefined && description !== null) {
       if (typeof description !== 'string' || description.trim().length === 0) {
         return ['La descripción debe ser un texto no vacío'];
       }
-      if ((description as string).trim().length > 2000) {
-        return ['La descripción no puede superar los 2000 caracteres'];
+      if ((description as string).trim().length > MAX_DESCRIPTION_LENGTH) {
+        return [`La descripción no puede superar los ${MAX_DESCRIPTION_LENGTH} caracteres`];
       }
     }
 
@@ -29,8 +36,10 @@ export class CreateProductDto {
       }
     }
 
-    if (categoryId !== undefined && categoryId !== null && typeof categoryId !== 'string') {
-      return ['El categoryId debe ser un string'];
+    if (categoryId !== undefined && categoryId !== null) {
+      if (typeof categoryId !== 'string' || !UUID_V4.test(categoryId.trim())) {
+        return ['El categoryId debe ser un UUID v4 válido'];
+      }
     }
 
     if (investmentCost !== undefined && investmentCost !== null) {

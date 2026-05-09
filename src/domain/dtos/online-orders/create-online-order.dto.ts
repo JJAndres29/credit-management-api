@@ -1,6 +1,12 @@
 import { regularExps } from '../../../config/regular-exp';
 import { OrderPaymentMethod } from '../../entities/online-order.entity';
 
+const MAX_ITEMS = 50;
+const MAX_QUANTITY = 999;
+const MAX_SHIPPING_ADDRESS_LENGTH = 500;
+const MAX_GUEST_NAME_LENGTH = 120;
+const MAX_GUEST_PHONE_LENGTH = 30;
+
 export type OrderItemInput = {
   productId: string;
   quantity: number;
@@ -27,6 +33,9 @@ export class CreateOnlineOrderDto {
     if (!items || !Array.isArray(items) || items.length === 0) {
       return ['items debe ser un arreglo no vacío'];
     }
+    if (items.length > MAX_ITEMS) {
+      return [`items no puede tener más de ${MAX_ITEMS} productos`];
+    }
 
     const parsedItems: OrderItemInput[] = [];
     for (let i = 0; i < items.length; i++) {
@@ -40,6 +49,7 @@ export class CreateOnlineOrderDto {
       if (quantity === undefined || quantity === null) return [`items[${i}].quantity es requerido`];
       const qty = Number(quantity);
       if (!Number.isInteger(qty) || qty < 1) return [`items[${i}].quantity debe ser un entero mayor a 0`];
+      if (qty > MAX_QUANTITY) return [`items[${i}].quantity no puede ser mayor a ${MAX_QUANTITY}`];
 
       parsedItems.push({ productId: (productId as string).trim(), quantity: qty });
     }
@@ -58,6 +68,9 @@ export class CreateOnlineOrderDto {
     if (!shippingAddress || typeof shippingAddress !== 'string' || (shippingAddress as string).trim().length === 0) {
       return ['shippingAddress es requerido'];
     }
+    if ((shippingAddress as string).trim().length > MAX_SHIPPING_ADDRESS_LENGTH) {
+      return [`shippingAddress no puede exceder ${MAX_SHIPPING_ADDRESS_LENGTH} caracteres`];
+    }
 
     // Guest fields: if none are provided → authenticated mode (validated at use-case level with customerId)
     // If any guest field is provided → validate all required ones
@@ -70,6 +83,17 @@ export class CreateOnlineOrderDto {
     if (hasGuest) {
       if (!guestName || typeof guestName !== 'string' || (guestName as string).trim().length < 2) {
         return ['guestName debe tener al menos 2 caracteres'];
+      }
+      if ((guestName as string).trim().length > MAX_GUEST_NAME_LENGTH) {
+        return [`guestName no puede exceder ${MAX_GUEST_NAME_LENGTH} caracteres`];
+      }
+      if (guestPhone !== undefined && guestPhone !== null) {
+        if (typeof guestPhone !== 'string') {
+          return ['guestPhone debe ser texto'];
+        }
+        if ((guestPhone as string).trim().length > MAX_GUEST_PHONE_LENGTH) {
+          return [`guestPhone no puede exceder ${MAX_GUEST_PHONE_LENGTH} caracteres`];
+        }
       }
       if (!guestEmail || typeof guestEmail !== 'string') {
         return ['guestEmail es requerido para órdenes de invitado'];

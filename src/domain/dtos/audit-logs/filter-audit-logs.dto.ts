@@ -1,5 +1,7 @@
 import { AuditAction } from '../../entities';
 
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
+
 export class FilterAuditLogsDto {
   private constructor(
     public readonly clientId?: string,
@@ -15,9 +17,15 @@ export class FilterAuditLogsDto {
     if (clientId !== undefined && typeof clientId !== 'string') {
       return ['clientId debe ser una cadena de texto'];
     }
+    if (typeof clientId === 'string' && !UUID_V4.test(clientId.trim())) {
+      return ['clientId debe ser un UUID v4 válido'];
+    }
 
     if (userId !== undefined && typeof userId !== 'string') {
       return ['userId debe ser una cadena de texto'];
+    }
+    if (typeof userId === 'string' && !UUID_V4.test(userId.trim())) {
+      return ['userId debe ser un UUID v4 válido'];
     }
 
     if (action !== undefined && !Object.values(AuditAction).includes(action as AuditAction)) {
@@ -48,8 +56,8 @@ export class FilterAuditLogsDto {
     return [
       undefined,
       new FilterAuditLogsDto(
-        clientId as string | undefined,
-        userId as string | undefined,
+        typeof clientId === 'string' ? clientId.trim() : undefined,
+        typeof userId === 'string' ? userId.trim() : undefined,
         action as string | undefined,
         dateFromDate,
         dateToDate,

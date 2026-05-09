@@ -16,6 +16,9 @@ export class FilterInstallmentsDto {
     if (status !== undefined && !VALID_STATUSES.includes(status as InstallmentStatus)) {
       return ['status debe ser PENDING, PARTIAL, OVERDUE o PAID'];
     }
+    if (clientId !== undefined && (typeof clientId !== 'string' || clientId.trim().length === 0)) {
+      return ['clientId debe ser una cadena de texto no vacía'];
+    }
 
     let parsedDueFrom: Date | undefined;
     let parsedDueTo: Date | undefined;
@@ -48,7 +51,7 @@ export class FilterInstallmentsDto {
       undefined,
       new FilterInstallmentsDto(
         status as InstallmentStatus | undefined,
-        clientId ? String(clientId) : undefined,
+        typeof clientId === 'string' ? clientId.trim() : undefined,
         parsedDueFrom,
         parsedDueTo,
       ),

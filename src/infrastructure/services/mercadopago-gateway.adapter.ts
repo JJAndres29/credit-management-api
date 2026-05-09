@@ -1,12 +1,22 @@
 import { createHmac, randomUUID, timingSafeEqual } from 'crypto';
 import { CustomError } from '../../domain/errors';
 import { OnlineOrderEntity } from '../../domain/entities/online-order.entity';
-import { IPaymentGateway, GatewayTransactionStatus } from '../../domain/services/payment-gateway.port';
+import { FeatureFlagKey, FeatureFlagPort, IPaymentGateway, GatewayTransactionStatus } from '../../domain/services';
 import { envs } from '../../config/envs';
+import { globalLogger } from './pino-logger.service';
+
+const BREAKER_FAILURE_THRESHOLD = 5;
+const BREAKER_FAILURE_WINDOW_MS = 60_000;
+const BREAKER_OPEN_MS = 30_000;
+
+type CircuitState = 'CLOSED' | 'OPEN' | 'HALF_OPEN';
 
 export class MercadoPagoGatewayAdapter implements IPaymentGateway {
   private readonly enabled: boolean;
   private readonly webhookDebug: boolean;
+  private circuitState: CircuitState = 'CLOSED';
+  private openedUntil = 0;
+  private readonly failureTimestamps: number[] = [];
 
   private sanitizeSecret(secret: string | undefined): string {
     const trimmed = secret?.trim() ?? '';
@@ -39,15 +49,86 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
     return match ? match[1] : '';
   }
 
-  constructor() {
+  constructor(private readonly featureFlags?: FeatureFlagPort) {
     this.enabled = !!(envs.mercadopago.accessToken && envs.mercadopago.webhookSecret);
     this.webhookDebug = envs.mercadopago.webhookDebug;
     if (!this.enabled) {
-      console.warn('[MercadoPagoGatewayAdapter] Disabled — MP_ACCESS_TOKEN or MP_WEBHOOK_SECRET missing');
+      globalLogger.warn('[MercadoPagoGatewayAdapter] Disabled - MP_ACCESS_TOKEN or MP_WEBHOOK_SECRET missing');
     }
   }
 
+  private async ensureEnabled(): Promise<void> {
+    if (!this.enabled) {
+      throw CustomError.serviceUnavailable('Pasarela temporalmente no disponible');
+    }
+    if (this.featureFlags && !(await this.featureFlags.isEnabled(FeatureFlagKey.MP_ENABLED, true))) {
+      throw CustomError.serviceUnavailable('Pasarela temporalmente no disponible');
+    }
+  }
+
+  private async executeWithCircuitBreaker<T>(operation: string, fn: () => Promise<T>): Promise<T> {
+    const now = Date.now();
+
+    if (this.circuitState === 'OPEN') {
+      if (now < this.openedUntil) {
+        globalLogger.warn('[MercadoPagoGatewayAdapter] Circuit breaker abierto', {
+          operation,
+          openedUntil: new Date(this.openedUntil).toISOString(),
+        });
+        throw CustomError.serviceUnavailable('Pasarela temporalmente no disponible');
+      }
+      this.circuitState = 'HALF_OPEN';
+      globalLogger.info('[MercadoPagoGatewayAdapter] Circuit breaker en HALF_OPEN', { operation });
+    }
+
+    try {
+      const result = await fn();
+      this.recordSuccess(operation);
+      return result;
+    } catch (error) {
+      this.recordFailure(operation, error);
+      throw error;
+    }
+  }
+
+  private recordSuccess(operation: string): void {
+    if (this.circuitState !== 'CLOSED' || this.failureTimestamps.length > 0) {
+      globalLogger.info('[MercadoPagoGatewayAdapter] Circuit breaker cerrado', { operation });
+    }
+    this.circuitState = 'CLOSED';
+    this.openedUntil = 0;
+    this.failureTimestamps.length = 0;
+  }
+
+  private recordFailure(operation: string, error: unknown): void {
+    const now = Date.now();
+    this.failureTimestamps.push(now);
+    while (
+      this.failureTimestamps.length > 0
+      && this.failureTimestamps[0] < now - BREAKER_FAILURE_WINDOW_MS
+    ) {
+      this.failureTimestamps.shift();
+    }
+
+    if (this.circuitState === 'HALF_OPEN' || this.failureTimestamps.length >= BREAKER_FAILURE_THRESHOLD) {
+      this.circuitState = 'OPEN';
+      this.openedUntil = now + BREAKER_OPEN_MS;
+      globalLogger.error('[MercadoPagoGatewayAdapter] Circuit breaker abierto', error, {
+        operation,
+        failureCount: this.failureTimestamps.length,
+        openedUntil: new Date(this.openedUntil).toISOString(),
+      });
+      return;
+    }
+
+    globalLogger.warn('[MercadoPagoGatewayAdapter] Falla registrada en circuit breaker', {
+      operation,
+      failureCount: this.failureTimestamps.length,
+    });
+  }
+
   async generatePaymentLink(order: OnlineOrderEntity): Promise<{ url: string; gatewayReference: string }> {
+    await this.ensureEnabled();
     const { accessToken, baseUrl, appUrl, backUrls } = envs.mercadopago;
 
     const body = {
@@ -70,14 +151,14 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
         : {}),
     };
 
-    const response = await fetch(`${baseUrl}/checkout/preferences`, {
+    const response = await this.executeWithCircuitBreaker('generatePaymentLink', () => fetch(`${baseUrl}/checkout/preferences`, {
       method: 'POST',
       headers: {
         'Authorization': `Bearer ${accessToken}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify(body),
-    });
+    }));
 
     if (!response.ok) {
       const text = await response.text().catch(() => '');
@@ -104,11 +185,12 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
     amount: number;
     externalReference: string;
   }> {
+    await this.ensureEnabled();
     const { accessToken, baseUrl } = envs.mercadopago;
 
-    const response = await fetch(`${baseUrl}/v1/payments/${paymentId}`, {
+    const response = await this.executeWithCircuitBreaker('verifyTransaction', () => fetch(`${baseUrl}/v1/payments/${paymentId}`, {
       headers: { 'Authorization': `Bearer ${accessToken}` },
-    });
+    }));
 
     if (!response.ok) {
       if (response.status === 404) {
@@ -185,11 +267,15 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
       const bodySha256 = createHmac('sha256', 'mp-body-fingerprint')
         .update(rawBody)
         .digest('hex');
-      console.log(
-        `[Webhook Debug] request-id=${xRequestId} ts=${ts} signature=${xSignature} `
-        + `secret.len=${webhookSecret.length} secret.fp=${this.mask(secretFingerprint)} `
-        + `body.len=${rawBody.length} body.fp=${this.mask(bodySha256)}`,
-      );
+      globalLogger.debug('[Webhook Debug] Mercado Pago signature input', {
+        requestId: xRequestId,
+        ts,
+        signature: xSignature,
+        secretLength: webhookSecret.length,
+        secretFingerprint: this.mask(secretFingerprint),
+        bodyLength: rawBody.length,
+        bodyFingerprint: this.mask(bodySha256),
+      });
     }
 
     // ── Collect candidate IDs from query and body ──────────────────────────
@@ -233,11 +319,14 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
     }
 
     if (this.webhookDebug) {
-      console.log(
-        `[Webhook Debug] candidateIds=${candidateIds.join('|') || '<empty>'} bodyParsed=${bodyParsed} `
-        + `body.data.id=${bodyDataId || '<empty>'} body.id=${bodyEventId || '<empty>'} `
-        + `body.resource.id=${bodyResourceId || '<empty>'} body.topic=${bodyTopic || '<empty>'}`,
-      );
+      globalLogger.debug('[Webhook Debug] Mercado Pago candidate ids', {
+        candidateIds,
+        bodyParsed,
+        bodyDataId: bodyDataId || '<empty>',
+        bodyEventId: bodyEventId || '<empty>',
+        bodyResourceId: bodyResourceId || '<empty>',
+        bodyTopic: bodyTopic || '<empty>',
+      });
     }
 
     // ── Build candidate manifests ──────────────────────────────────────────
@@ -295,20 +384,17 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
     });
 
     if (isValid) {
-      console.log(`[Webhook Signature OK] manifest: "${matchedManifest}"`);
+      globalLogger.debug('[Webhook Signature OK]', { manifest: matchedManifest });
       return true;
     }
 
-    console.warn(
-      `[Webhook Signature Mismatch] manifestCandidates: "${manifests.join('" | "')}", expected(last): ${lastExpected}, received: ${v1s.join(' OR ')}`,
-    );
+    globalLogger.warn('[Webhook Signature Mismatch]', {
+      manifestCandidates: manifests,
+      expectedLast: lastExpected,
+      received: v1s,
+    });
     if (this.webhookDebug) {
-      console.warn(
-        '[Webhook Debug] expectedByManifest='
-          + expectedByManifest
-            .map((entry) => `{manifest:"${entry.manifest}",expected:"${entry.expected}"}`)
-            .join(','),
-      );
+      globalLogger.debug('[Webhook Debug] expectedByManifest', { expectedByManifest });
     }
 
     // ── Pragmatic fallback for legacy IPN topic notifications ──────────────
@@ -334,11 +420,9 @@ export class MercadoPagoGatewayAdapter implements IPaymentGateway {
     // money moves, no DB rows change, no emails are sent.
     const isLegacyIpn = bodyParsed && !!bodyTopic && !bodyEventId && !bodyDataId;
     if (isLegacyIpn) {
-      console.warn(
-        `[Webhook] Accepting legacy IPN notification (topic=${bodyTopic}) despite ` +
-        'signature mismatch — these events are ignored and have no financial impact. ' +
-        'The real payment will arrive on a separately-verified type=payment webhook.',
-      );
+      globalLogger.warn('[Webhook] Accepting legacy IPN notification despite signature mismatch', {
+        topic: bodyTopic,
+      });
       return true;
     }
 

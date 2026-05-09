@@ -14,3 +14,5 @@ export { IPaymentGateway } from './payment-gateway.port';
 export type { GatewayTransactionStatus } from './payment-gateway.port';
 export { MonthlySummaryPort } from './monthly-summary.port';
 export type { MonthlySummaryResult } from './monthly-summary.port';
+export { FeatureFlagKey } from './feature-flag.port';
+export type { FeatureFlag, FeatureFlagPort, UpdateFeatureFlagData } from './feature-flag.port';

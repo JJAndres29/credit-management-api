@@ -2,6 +2,7 @@ import { SaleType, SaleStatus } from '../../entities';
 
 /** YYYY-MM regex — se acepta como atajo para dateFrom/dateTo de un mes completo. */
 const MONTH_REGEX = /^\d{4}-(0[1-9]|1[0-2])$/;
+const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 
 export class FilterSalesDto {
   private constructor(
@@ -17,6 +18,9 @@ export class FilterSalesDto {
 
     if (clientId !== undefined && typeof clientId !== 'string') {
       return ['clientId debe ser una cadena de texto'];
+    }
+    if (typeof clientId === 'string' && !UUID_V4.test(clientId.trim())) {
+      return ['clientId debe ser un UUID v4 válido'];
     }
 
     if (type !== undefined && !Object.values(SaleType).includes(type as SaleType)) {
@@ -39,7 +43,7 @@ export class FilterSalesDto {
       return [
         undefined,
         new FilterSalesDto(
-          clientId as string | undefined,
+          typeof clientId === 'string' ? clientId.trim() : undefined,
           type as SaleType | undefined,
           status as SaleStatus | undefined,
           from,
@@ -73,7 +77,7 @@ export class FilterSalesDto {
     return [
       undefined,
       new FilterSalesDto(
-        clientId as string | undefined,
+        typeof clientId === 'string' ? clientId.trim() : undefined,
         type as SaleType | undefined,
         status as SaleStatus | undefined,
         dateFromDate,
