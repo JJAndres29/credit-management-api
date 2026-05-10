@@ -114,6 +114,11 @@ model Product {
   id             String   @id @default(uuid())
   name           String
   description    String?
+  /// URL-safe unique handle for storefront SEO (canonical product page)
+  slug           String?  @unique
+  brand          String?
+  metaTitle      String?
+  metaDescription String?
   stock          Int      @default(0)
   retailPrice    Decimal? @db.Decimal(10, 2)
   investmentCost Decimal? @db.Decimal(10, 2)
@@ -138,11 +143,28 @@ model Product {
   stockMovements   StockMovement[]
   cartItems        CartItem[]
   scopedCoupons    Coupon[]
+  slugHistory      ProductSlugHistory[]
+}
+
+/// Old product slugs → current slug (HTTP 301). Populated when admin changes `Product.slug`.
+model ProductSlugHistory {
+  id        String   @id @default(uuid())
+  oldSlug   String   @unique
+  productId String
+  createdAt DateTime @default(now())
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
 }
 
 model Category {
   id        String   @id @default(uuid())
   name      String   @unique
+  slug      String?  @unique
+  description String?
+  metaTitle String?
+  metaDescription String?
   /// Default IVA % for products in this category (Colombia: 19 / 5 / 0). Null → app default (19).
   ivaRate   Decimal? @db.Decimal(5, 2)
   createdAt DateTime @default(now())

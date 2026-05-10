@@ -79,4 +79,9 @@ export const envs = {
   },
   /** P3 — BullMQ (`redis://` or TLS URL). Optional: without it, staff notifications stay synchronous. */
   redisUrl: process.env.REDIS_URL ?? '',
+  /** P4 — canonical origin for SEO redirects, sitemap and JSON-LD URLs (no trailing slash). */
+  publicSiteUrl: (process.env.APP_URL ?? 'http://localhost:3000').replace(/\/$/, ''),
+  /** Path prefix for product URLs in sitemap / JSON-LD (default: this API’s public slug route). */
+  seoProductPathPrefix: process.env.SEO_PRODUCT_PATH_PREFIX ?? '/api/products/by-slug',
+  seoCategoryPathPrefix: process.env.SEO_CATEGORY_PATH_PREFIX ?? '/api/categories/by-slug',
 };

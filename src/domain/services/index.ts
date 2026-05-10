@@ -25,3 +25,11 @@ export type {
 } from './electronic-invoice-provider.port';
 export { DEFAULT_IVA_PERCENT, resolveIvaPercent, splitGrossLineIntoNetAndTax } from './tax';
 export type { CustomerRiskProfilePort } from './customer-risk-profile.port';
+export { slugify, normalizeSlugParam, isValidSlugFormat } from './slug';
+export type {
+  StorefrontCatalogReadPort,
+  StorefrontProductSnapshot,
+  StorefrontCategorySnapshot,
+  SitemapUrlEntry,
+  StorefrontCategoryRef,
+} from './storefront-catalog-read.port';

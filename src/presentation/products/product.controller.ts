@@ -15,6 +15,8 @@ import { DeleteProductImageUseCase } from '../../domain/use-cases/products/delet
 import { AssignProductAttributesUseCase } from '../../domain/use-cases/categories/assign-product-attributes.use-case';
 import { RemoveProductAttributeUseCase } from '../../domain/use-cases/categories/remove-product-attribute.use-case';
 import { ReplaceProductAttributesUseCase } from '../../domain/use-cases/categories/replace-product-attributes.use-case';
+import type { GetProductBySlugConfig } from '../../domain/use-cases/seo';
+import { GetProductBySlugUseCase } from '../../domain/use-cases/seo';
 
 export class ProductController {
   constructor(
@@ -30,7 +32,31 @@ export class ProductController {
     private readonly assignProductAttributesUseCase: AssignProductAttributesUseCase,
     private readonly replaceProductAttributesUseCase: ReplaceProductAttributesUseCase,
     private readonly removeProductAttributeUseCase: RemoveProductAttributeUseCase,
+    private readonly getProductBySlugUseCase: GetProductBySlugUseCase,
+    private readonly productSeoConfig: GetProductBySlugConfig,
   ) {}
+
+  getBySlug = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const result = await this.getProductBySlugUseCase.execute(
+        req.params.slug,
+        this.productSeoConfig,
+      );
+      if (result.kind === 'redirect') {
+        res.redirect(result.statusCode, result.location);
+        return;
+      }
+      res.json({
+        product: result.product,
+        pageTitle: result.pageTitle,
+        pageDescription: result.pageDescription,
+        canonicalUrl: result.canonicalUrl,
+        jsonLd: result.jsonLd,
+      });
+    } catch (err) {
+      this.handleError(err, res);
+    }
+  };
 
   getAll = async (req: Request, res: Response): Promise<void> => {
     const [pError, pagination] = PaginationDto.create(req.query as Record<string, unknown>);

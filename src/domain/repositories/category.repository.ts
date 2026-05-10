@@ -1,10 +1,11 @@
+import type { CategoryCreateData, CategoryUpdateData } from '../datasources/category.datasource';
 import { CategoryEntity, CategoryAttributeEntity, AttributeValueEntity } from '../entities';
 
 export interface CategoryRepository {
-  create(name: string): Promise<CategoryEntity>;
+  create(data: CategoryCreateData): Promise<CategoryEntity>;
   findAll(): Promise<CategoryEntity[]>;
   findById(id: string): Promise<CategoryEntity | null>;
-  update(id: string, name: string): Promise<CategoryEntity>;
+  update(id: string, data: CategoryUpdateData): Promise<CategoryEntity>;
   delete(id: string): Promise<CategoryEntity>;
 
   createAttribute(categoryId: string, name: string): Promise<CategoryAttributeEntity>;

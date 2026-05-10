@@ -28,6 +28,11 @@ export class ProductEntity {
     public readonly isActive: boolean,
     public readonly createdAt: Date,
     public readonly updatedAt: Date,
+    public readonly slug: string | null = null,
+    public readonly brand: string | null = null,
+    public readonly metaTitle: string | null = null,
+    public readonly metaDescription: string | null = null,
+    public readonly categorySlug: string | null = null,
   ) {}
 
   toJSON() {
@@ -42,8 +47,13 @@ export class ProductEntity {
       images: this.images,
       categoryId: this.categoryId,
       categoryName: this.categoryName,
+      categorySlug: this.categorySlug,
       attributes: this.attributes.map((a) => ({ attribute: a.attribute, value: a.value })),
       isActive: this.isActive,
+      slug: this.slug,
+      brand: this.brand,
+      metaTitle: this.metaTitle,
+      metaDescription: this.metaDescription,
       createdAt: this.createdAt,
       updatedAt: this.updatedAt,
     };
@@ -65,6 +75,10 @@ export class ProductEntity {
       isActive,
       createdAt,
       updatedAt,
+      slug,
+      brand,
+      metaTitle,
+      metaDescription,
     } = object;
 
     if (!id) throw new Error('Product id is required');
@@ -76,6 +90,10 @@ export class ProductEntity {
 
     const categoryName = category && typeof category === 'object'
       ? ((category as Record<string, unknown>).name as string | undefined) ?? null
+      : null;
+
+    const categorySlug = category && typeof category === 'object'
+      ? ((category as Record<string, unknown>).slug as string | null | undefined) ?? null
       : null;
 
     const parsedAttributes = Array.isArray(attributes)
@@ -109,6 +127,11 @@ export class ProductEntity {
       (isActive as boolean) ?? true,
       (createdAt as Date) ?? new Date(),
       (updatedAt as Date) ?? new Date(),
+      (slug as string | null | undefined) ?? null,
+      (brand as string | null | undefined) ?? null,
+      (metaTitle as string | null | undefined) ?? null,
+      (metaDescription as string | null | undefined) ?? null,
+      categorySlug,
     );
   }
 }

@@ -1,6 +1,11 @@
+import { isValidSlugFormat } from '../../services/slug';
+
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_NAME_LENGTH = 200;
 const MAX_DESCRIPTION_LENGTH = 2000;
+const MAX_META_TITLE = 200;
+const MAX_META_DESCRIPTION = 500;
+const MAX_BRAND = 120;
 
 const MAX_WEIGHT_KG = 500;
 
@@ -13,10 +18,25 @@ export class CreateProductDto {
     public readonly investmentCost: number | null,
     /** kg por unidad para envío (opcional) */
     public readonly weightKg: number | null,
+    public readonly slug: string | null,
+    public readonly brand: string | null,
+    public readonly metaTitle: string | null,
+    public readonly metaDescription: string | null,
   ) {}
 
   static create(object: Record<string, unknown>): [string?, CreateProductDto?] {
-    const { name, description, stock, categoryId, investmentCost, weightKg } = object;
+    const {
+      name,
+      description,
+      stock,
+      categoryId,
+      investmentCost,
+      weightKg,
+      slug,
+      brand,
+      metaTitle,
+      metaDescription,
+    } = object;
 
     if (!name || typeof name !== 'string' || name.trim().length < 2) {
       return ['El nombre es requerido y debe tener al menos 2 caracteres'];
@@ -52,6 +72,30 @@ export class CreateProductDto {
       }
     }
 
+    if (slug !== undefined && slug !== null) {
+      if (typeof slug !== 'string' || !isValidSlugFormat(slug.trim())) {
+        return ['slug debe ser minúsculas, números y guiones (formato URL)'];
+      }
+    }
+
+    if (brand !== undefined && brand !== null) {
+      if (typeof brand !== 'string' || brand.trim().length > MAX_BRAND) {
+        return [`brand máximo ${MAX_BRAND} caracteres`];
+      }
+    }
+
+    if (metaTitle !== undefined && metaTitle !== null) {
+      if (typeof metaTitle !== 'string' || metaTitle.trim().length > MAX_META_TITLE) {
+        return [`metaTitle máximo ${MAX_META_TITLE} caracteres`];
+      }
+    }
+
+    if (metaDescription !== undefined && metaDescription !== null) {
+      if (typeof metaDescription !== 'string' || metaDescription.trim().length > MAX_META_DESCRIPTION) {
+        return [`metaDescription máximo ${MAX_META_DESCRIPTION} caracteres`];
+      }
+    }
+
     let parsedWeightKg: number | null = null;
     if (weightKg !== undefined && weightKg !== null) {
       const w = Number(weightKg);
@@ -70,6 +114,10 @@ export class CreateProductDto {
         typeof categoryId === 'string' ? categoryId.trim() : null,
         typeof investmentCost === 'number' ? investmentCost : null,
         parsedWeightKg,
+        typeof slug === 'string' ? slug.trim() : null,
+        typeof brand === 'string' ? brand.trim() : null,
+        typeof metaTitle === 'string' ? metaTitle.trim() : null,
+        typeof metaDescription === 'string' ? metaDescription.trim() : null,
       ),
     ];
   }

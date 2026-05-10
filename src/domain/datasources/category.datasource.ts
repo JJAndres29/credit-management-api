@@ -1,10 +1,26 @@
 import { CategoryEntity, CategoryAttributeEntity, AttributeValueEntity } from '../entities';
 
+export interface CategoryCreateData {
+  name: string;
+  slug?: string | null;
+  description?: string | null;
+  metaTitle?: string | null;
+  metaDescription?: string | null;
+}
+
+export interface CategoryUpdateData {
+  name?: string;
+  slug?: string | null;
+  description?: string | null;
+  metaTitle?: string | null;
+  metaDescription?: string | null;
+}
+
 export interface CategoryDatasource {
-  create(name: string): Promise<CategoryEntity>;
+  create(data: CategoryCreateData): Promise<CategoryEntity>;
   findAll(): Promise<CategoryEntity[]>;
   findById(id: string): Promise<CategoryEntity | null>;
-  update(id: string, name: string): Promise<CategoryEntity>;
+  update(id: string, data: CategoryUpdateData): Promise<CategoryEntity>;
   delete(id: string): Promise<CategoryEntity>;
 
   createAttribute(categoryId: string, name: string): Promise<CategoryAttributeEntity>;

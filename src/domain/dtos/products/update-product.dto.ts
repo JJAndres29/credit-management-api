@@ -1,6 +1,11 @@
+import { isValidSlugFormat } from '../../services/slug';
+
 const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const MAX_NAME_LENGTH = 200;
 const MAX_DESCRIPTION_LENGTH = 2000;
+const MAX_META_TITLE = 200;
+const MAX_META_DESCRIPTION = 500;
+const MAX_BRAND = 120;
 
 const MAX_WEIGHT_KG = 500;
 
@@ -11,10 +16,24 @@ export class UpdateProductDto {
     public readonly categoryId: string | null | undefined,
     public readonly investmentCost: number | null | undefined,
     public readonly weightKg: number | null | undefined,
+    public readonly slug: string | undefined,
+    public readonly brand: string | null | undefined,
+    public readonly metaTitle: string | null | undefined,
+    public readonly metaDescription: string | null | undefined,
   ) {}
 
   static create(object: Record<string, unknown>): [string?, UpdateProductDto?] {
-    const { name, description, categoryId, investmentCost, weightKg } = object;
+    const {
+      name,
+      description,
+      categoryId,
+      investmentCost,
+      weightKg,
+      slug,
+      brand,
+      metaTitle,
+      metaDescription,
+    } = object;
 
     if (name !== undefined && (typeof name !== 'string' || name.trim().length < 2)) {
       return ['El nombre debe tener al menos 2 caracteres'];
@@ -51,12 +70,43 @@ export class UpdateProductDto {
       }
     }
 
+    if (slug !== undefined) {
+      if (slug === null) {
+        return ['slug no puede ser null; omita el campo para no cambiarlo'];
+      }
+      if (typeof slug !== 'string' || !isValidSlugFormat(slug.trim())) {
+        return ['slug debe ser minúsculas, números y guiones (formato URL)'];
+      }
+    }
+
+    if (brand !== undefined && brand !== null) {
+      if (typeof brand !== 'string' || brand.trim().length > MAX_BRAND) {
+        return [`brand máximo ${MAX_BRAND} caracteres`];
+      }
+    }
+
+    if (metaTitle !== undefined && metaTitle !== null) {
+      if (typeof metaTitle !== 'string' || metaTitle.trim().length > MAX_META_TITLE) {
+        return [`metaTitle máximo ${MAX_META_TITLE} caracteres`];
+      }
+    }
+
+    if (metaDescription !== undefined && metaDescription !== null) {
+      if (typeof metaDescription !== 'string' || metaDescription.trim().length > MAX_META_DESCRIPTION) {
+        return [`metaDescription máximo ${MAX_META_DESCRIPTION} caracteres`];
+      }
+    }
+
     if (
       name === undefined
       && description === undefined
       && categoryId === undefined
       && investmentCost === undefined
       && weightKg === undefined
+      && slug === undefined
+      && brand === undefined
+      && metaTitle === undefined
+      && metaDescription === undefined
     ) {
       return ['Debe enviar al menos un campo para actualizar'];
     }
@@ -69,6 +119,14 @@ export class UpdateProductDto {
         categoryId === null ? null : typeof categoryId === 'string' ? categoryId.trim() : undefined,
         investmentCost === null ? null : typeof investmentCost === 'number' ? investmentCost : undefined,
         weightKg === null ? null : typeof weightKg === 'number' ? weightKg : undefined,
+        typeof slug === 'string' ? slug.trim() : undefined,
+        brand === null ? null : typeof brand === 'string' ? brand.trim() : undefined,
+        metaTitle === null ? null : typeof metaTitle === 'string' ? metaTitle.trim() : undefined,
+        metaDescription === null
+          ? null
+          : typeof metaDescription === 'string'
+            ? metaDescription.trim()
+            : undefined,
       ),
     ];
   }

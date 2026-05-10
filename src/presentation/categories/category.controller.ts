@@ -14,6 +14,8 @@ import {
   GetCategoryAttributesUseCase,
   UpdateCategoryUseCase,
 } from '../../domain/use-cases/categories';
+import type { GetCategoryBySlugConfig } from '../../domain/use-cases/seo';
+import { GetCategoryBySlugUseCase } from '../../domain/use-cases/seo';
 
 export class CategoryController {
   constructor(
@@ -24,6 +26,8 @@ export class CategoryController {
     private readonly createCategoryAttributeUseCase: CreateCategoryAttributeUseCase,
     private readonly getCategoryAttributesUseCase: GetCategoryAttributesUseCase,
     private readonly deleteCategoryAttributeUseCase: DeleteCategoryAttributeUseCase,
+    private readonly getCategoryBySlugUseCase: GetCategoryBySlugUseCase,
+    private readonly categorySeoConfig: GetCategoryBySlugConfig,
   ) {}
 
   create = async (req: Request, res: Response): Promise<void> => {
@@ -31,8 +35,26 @@ export class CategoryController {
     if (error) { res.status(400).json({ error }); return; }
 
     try {
-      const category = await this.createCategoryUseCase.execute(dto!.name);
+      const category = await this.createCategoryUseCase.execute(dto!);
       res.status(201).json(category);
+    } catch (err) {
+      this.handleError(err, res);
+    }
+  };
+
+  getBySlug = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const out = await this.getCategoryBySlugUseCase.execute(
+        req.params.slug,
+        this.categorySeoConfig,
+      );
+      res.json({
+        category: out.category,
+        pageTitle: out.pageTitle,
+        pageDescription: out.pageDescription,
+        canonicalUrl: out.canonicalUrl,
+        jsonLd: out.jsonLd,
+      });
     } catch (err) {
       this.handleError(err, res);
     }
@@ -52,7 +74,7 @@ export class CategoryController {
     if (error) { res.status(400).json({ error }); return; }
 
     try {
-      const category = await this.updateCategoryUseCase.execute(req.params.id, dto!.name);
+      const category = await this.updateCategoryUseCase.execute(req.params.id, dto!);
       res.json(category);
     } catch (err) {
       this.handleError(err, res);
