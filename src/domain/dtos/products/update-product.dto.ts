@@ -2,16 +2,19 @@ const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
 const MAX_NAME_LENGTH = 200;
 const MAX_DESCRIPTION_LENGTH = 2000;
 
+const MAX_WEIGHT_KG = 500;
+
 export class UpdateProductDto {
   private constructor(
     public readonly name: string | undefined,
     public readonly description: string | null | undefined,
     public readonly categoryId: string | null | undefined,
     public readonly investmentCost: number | null | undefined,
+    public readonly weightKg: number | null | undefined,
   ) {}
 
   static create(object: Record<string, unknown>): [string?, UpdateProductDto?] {
-    const { name, description, categoryId, investmentCost } = object;
+    const { name, description, categoryId, investmentCost, weightKg } = object;
 
     if (name !== undefined && (typeof name !== 'string' || name.trim().length < 2)) {
       return ['El nombre debe tener al menos 2 caracteres'];
@@ -41,7 +44,20 @@ export class UpdateProductDto {
       }
     }
 
-    if (name === undefined && description === undefined && categoryId === undefined && investmentCost === undefined) {
+    if (weightKg !== undefined && weightKg !== null) {
+      const w = Number(weightKg);
+      if (!Number.isFinite(w) || w <= 0 || w > MAX_WEIGHT_KG) {
+        return [`weightKg debe ser un número positivo hasta ${MAX_WEIGHT_KG} kg`];
+      }
+    }
+
+    if (
+      name === undefined
+      && description === undefined
+      && categoryId === undefined
+      && investmentCost === undefined
+      && weightKg === undefined
+    ) {
       return ['Debe enviar al menos un campo para actualizar'];
     }
 
@@ -52,6 +68,7 @@ export class UpdateProductDto {
         description === null ? null : typeof description === 'string' ? description.trim() : undefined,
         categoryId === null ? null : typeof categoryId === 'string' ? categoryId.trim() : undefined,
         investmentCost === null ? null : typeof investmentCost === 'number' ? investmentCost : undefined,
+        weightKg === null ? null : typeof weightKg === 'number' ? weightKg : undefined,
       ),
     ];
   }

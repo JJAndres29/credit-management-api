@@ -42,6 +42,16 @@ export type OnlineOrderCreateData = {
   couponCodeSnapshot?: string | null;
   customerAddressId?: string | null;
   couponConsume?: CouponConsumeData | null;
+  /** Datos de envío para transportista (checkout) */
+  shippingRecipientName?: string | null;
+  shippingRecipientDocumentType?: string | null;
+  shippingRecipientDocumentNumber?: string | null;
+  shippingLine1?: string | null;
+  shippingLine2?: string | null;
+  shippingCity?: string | null;
+  shippingDepartment?: string | null;
+  shippingPostalCode?: string | null;
+  shippingRecipientPhone?: string | null;
 };
 
 export type OnlineOrderFilters = {

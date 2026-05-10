@@ -2,6 +2,8 @@ const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
 const MAX_NAME_LENGTH = 200;
 const MAX_DESCRIPTION_LENGTH = 2000;
 
+const MAX_WEIGHT_KG = 500;
+
 export class CreateProductDto {
   private constructor(
     public readonly name: string,
@@ -9,10 +11,12 @@ export class CreateProductDto {
     public readonly stock: number,
     public readonly categoryId: string | null,
     public readonly investmentCost: number | null,
+    /** kg por unidad para envío (opcional) */
+    public readonly weightKg: number | null,
   ) {}
 
   static create(object: Record<string, unknown>): [string?, CreateProductDto?] {
-    const { name, description, stock, categoryId, investmentCost } = object;
+    const { name, description, stock, categoryId, investmentCost, weightKg } = object;
 
     if (!name || typeof name !== 'string' || name.trim().length < 2) {
       return ['El nombre es requerido y debe tener al menos 2 caracteres'];
@@ -48,6 +52,15 @@ export class CreateProductDto {
       }
     }
 
+    let parsedWeightKg: number | null = null;
+    if (weightKg !== undefined && weightKg !== null) {
+      const w = Number(weightKg);
+      if (!Number.isFinite(w) || w <= 0 || w > MAX_WEIGHT_KG) {
+        return [`weightKg debe ser un número positivo hasta ${MAX_WEIGHT_KG} kg`];
+      }
+      parsedWeightKg = w;
+    }
+
     return [
       undefined,
       new CreateProductDto(
@@ -56,6 +69,7 @@ export class CreateProductDto {
         typeof stock === 'number' ? stock : 0,
         typeof categoryId === 'string' ? categoryId.trim() : null,
         typeof investmentCost === 'number' ? investmentCost : null,
+        parsedWeightKg,
       ),
     ];
   }

@@ -16,6 +16,8 @@ import {
   ListCustomerAddressesUseCase,
   CreateCustomerAddressUseCase,
   SetDefaultCustomerAddressUseCase,
+  UpdateCustomerAddressUseCase,
+  DeleteCustomerAddressUseCase,
 } from '../../domain/use-cases/customer-auth';
 import { MergeCartOnLoginUseCase } from '../../domain/use-cases/cart';
 import { Role } from '../../domain/entities';
@@ -99,6 +101,8 @@ export class CustomerAuthRouter {
       new ListCustomerAddressesUseCase(customerAddressRepository),
       new CreateCustomerAddressUseCase(customerAddressRepository),
       new SetDefaultCustomerAddressUseCase(customerAddressRepository),
+      new UpdateCustomerAddressUseCase(customerAddressRepository),
+      new DeleteCustomerAddressUseCase(customerAddressRepository),
     );
 
     // ─── Routes — STATIC before DYNAMIC ─────────────────────────────────────
@@ -121,6 +125,8 @@ export class CustomerAuthRouter {
       customerMiddleware.validateCustomerJwt,
       controller.setDefaultAddress,
     );
+    router.patch('/me/addresses/:addressId', customerMiddleware.validateCustomerJwt, controller.updateAddress);
+    router.delete('/me/addresses/:addressId', customerMiddleware.validateCustomerJwt, controller.deleteAddress);
     router.patch('/change-password', customerMiddleware.validateCustomerJwt, controller.changePassword);
 
     // Admin (staff JWT + ADMIN role)

@@ -123,6 +123,8 @@ model Product {
   currencyCode   String   @default("COP")
   /// IVA % override (e.g. 19, 5, 0). Null → inherit Category.ivaRate or platform default in app code
   ivaRate        Decimal? @db.Decimal(5, 2)
+  /// Peso por unidad para envío (kg). El checkout suma (peso × cantidad); null → usa fallback en servidor.
+  weightKg       Decimal? @db.Decimal(10, 3)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -542,6 +544,17 @@ model OnlineOrder {
   couponCodeSnapshot   String? @db.VarChar(40)
   customerAddressId    String?
   shippingZoneCode     String? @db.VarChar(40)
+
+  /// Snapshot envío — obligatorio en checkout (transportista); legacy puede ser null
+  shippingRecipientName           String? @db.VarChar(120)
+  shippingRecipientDocumentType   String? @db.VarChar(4)
+  shippingRecipientDocumentNumber String? @db.VarChar(32)
+  shippingLine1                   String? @db.VarChar(300)
+  shippingLine2                   String? @db.VarChar(200)
+  shippingCity                    String? @db.VarChar(120)
+  shippingDepartment              String? @db.VarChar(120)
+  shippingPostalCode              String? @db.VarChar(16)
+  shippingRecipientPhone          String? @db.VarChar(30)
 
   customer           Customer?         @relation(fields: [customerId], references: [id], onDelete: SetNull)
   customerAddressRef CustomerAddress?  @relation(fields: [customerAddressId], references: [id], onDelete: SetNull)

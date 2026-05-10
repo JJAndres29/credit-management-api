@@ -5,11 +5,18 @@ import { OnlineOrderRepository } from '../../repositories/online-order.repositor
 import { ProductCatalogPort, ProductForOrder } from '../../services/product-catalog.port';
 import { IPaymentGateway } from '../../services/payment-gateway.port';
 import { OnlineOrderEntity, OrderStatus, OrderPaymentMethod } from '../../entities/online-order.entity';
-import { PaginationDto } from '../../dtos/shared';
-import { FilterOnlineOrdersDto } from '../../dtos/online-orders';
-import { PaginatedResult } from '../../types/paginated.type';
-
 // ─── Helpers ────────────────────────────────────────────────────────────────
+
+const sampleShippingContact = {
+  recipientName: 'Juan Guest',
+  documentType: 'CC',
+  documentNumber: '1234567890',
+  phone: '+573001234567',
+  addressLine1: 'Calle 1 #2-3',
+  city: 'Bogotá',
+  department: 'Cundinamarca',
+  postalCode: '110111',
+};
 
 const makeProduct = (overrides: Partial<ProductForOrder> = {}): ProductForOrder => ({
   id: 'prod-1',
@@ -19,6 +26,7 @@ const makeProduct = (overrides: Partial<ProductForOrder> = {}): ProductForOrder 
   isActive: true,
   defaultVariantId: 'var-default-1',
   categoryId: null,
+  weightKg: null,
   productIvaRate: null,
   categoryIvaRate: null,
   ...overrides,
@@ -49,8 +57,7 @@ const makeGuestDto = (overrides: Partial<Record<string, unknown>> = {}): CreateO
   CreateOnlineOrderDto.create({
     items: [{ productId: 'prod-1', quantity: 2 }],
     paymentMethod: OrderPaymentMethod.WHATSAPP_MANUAL,
-    shippingAddress: 'Calle 1 #2-3',
-    guestName: 'Juan Guest',
+    shippingContact: sampleShippingContact,
     guestEmail: 'juan@example.com',
     ...overrides,
   })[1]!;
@@ -91,12 +98,20 @@ const mockRepo: jest.Mocked<OnlineOrderRepository> = {
 // ─── DTO validation tests ────────────────────────────────────────────────────
 
 describe('CreateOnlineOrderDto.create()', () => {
+  it('rechaza sin shippingContact', () => {
+    const [error] = CreateOnlineOrderDto.create({
+      items: [{ productId: 'p1', quantity: 1 }],
+      paymentMethod: OrderPaymentMethod.WHATSAPP_MANUAL,
+      guestEmail: 'a@b.com',
+    });
+    expect(error).toMatch(/shippingContact/i);
+  });
+
   it('rechaza items vacío', () => {
     const [error] = CreateOnlineOrderDto.create({
       items: [],
       paymentMethod: OrderPaymentMethod.WHATSAPP_MANUAL,
-      shippingAddress: 'Dir 1',
-      guestName: 'A',
+      shippingContact: sampleShippingContact,
       guestEmail: 'a@b.com',
     });
     expect(error).toMatch(/items/i);
@@ -106,8 +121,7 @@ describe('CreateOnlineOrderDto.create()', () => {
     const [error] = CreateOnlineOrderDto.create({
       items: [{ productId: 'p1', quantity: 0 }],
       paymentMethod: OrderPaymentMethod.WHATSAPP_MANUAL,
-      shippingAddress: 'Dir 1',
-      guestName: 'Ana',
+      shippingContact: sampleShippingContact,
       guestEmail: 'a@b.com',
     });
     expect(error).toMatch(/quantity/i);
@@ -117,19 +131,17 @@ describe('CreateOnlineOrderDto.create()', () => {
     const [error] = CreateOnlineOrderDto.create({
       items: [{ productId: 'p1', quantity: 1 }],
       paymentMethod: 'INVALID',
-      shippingAddress: 'Dir 1',
-      guestName: 'Ana',
+      shippingContact: sampleShippingContact,
       guestEmail: 'a@b.com',
     });
     expect(error).toMatch(/paymentMethod/i);
   });
 
-  it('rechaza guestEmail inválido cuando hay campos de invitado', () => {
+  it('rechaza guestEmail inválido cuando se envía', () => {
     const [error] = CreateOnlineOrderDto.create({
       items: [{ productId: 'p1', quantity: 1 }],
       paymentMethod: OrderPaymentMethod.WHATSAPP_MANUAL,
-      shippingAddress: 'Dir 1',
-      guestName: 'Ana',
+      shippingContact: sampleShippingContact,
       guestEmail: 'no-es-email',
     });
     expect(error).toMatch(/guestEmail/i);
@@ -142,26 +154,38 @@ describe('CreateOnlineOrderDto.create()', () => {
         { productId: 'p1', quantity: 2 },
       ],
       paymentMethod: OrderPaymentMethod.WHATSAPP_MANUAL,
-      shippingAddress: 'Dir 1',
-      guestName: 'Ana',
+      shippingContact: sampleShippingContact,
       guestEmail: 'ana@test.com',
     });
     expect(error).toMatch(/mismo producto/i);
   });
 
-  it('crea DTO válido para invitado', () => {
+  it('arma shippingAddress desde shippingContact si no se envía shippingAddress', () => {
     const [error, dto] = CreateOnlineOrderDto.create({
       items: [{ productId: 'p1', quantity: 3 }],
       paymentMethod: OrderPaymentMethod.ONLINE_GATEWAY,
+      shippingContact: sampleShippingContact,
+      guestEmail: '  Ana@EXAMPLE.COM  ',
+    });
+    expect(error).toBeUndefined();
+    expect(dto!.guestEmail).toBe('ana@example.com');
+    expect(dto!.shippingAddress).toContain('Calle 1 #2-3');
+    expect(dto!.shippingAddress).toContain('CP 110111');
+    expect(dto!.items[0].quantity).toBe(3);
+  });
+
+  it('crea DTO válido para invitado con shippingAddress explícito', () => {
+    const [error, dto] = CreateOnlineOrderDto.create({
+      items: [{ productId: 'p1', quantity: 3 }],
+      paymentMethod: OrderPaymentMethod.ONLINE_GATEWAY,
+      shippingContact: sampleShippingContact,
       shippingAddress: '  Carrera 5 #10  ',
       guestName: '  Ana  ',
       guestEmail: '  Ana@EXAMPLE.COM  ',
     });
     expect(error).toBeUndefined();
-    expect(dto!.guestEmail).toBe('ana@example.com');
-    expect(dto!.guestName).toBe('Ana');
     expect(dto!.shippingAddress).toBe('Carrera 5 #10');
-    expect(dto!.items[0].quantity).toBe(3);
+    expect(dto!.guestName).toBe('Ana');
   });
 });
 
@@ -216,8 +240,7 @@ describe('CreateOnlineOrderUseCase', () => {
           { productId: 'prod-2', quantity: 3 },
         ],
         paymentMethod: OrderPaymentMethod.WHATSAPP_MANUAL,
-        shippingAddress: 'Calle 1',
-        guestName: 'Juan',
+        shippingContact: sampleShippingContact,
         guestEmail: 'juan@test.com',
       })[1]!;
 
@@ -263,6 +286,16 @@ describe('CreateOnlineOrderUseCase', () => {
       expect(createArg.items[0].productNameSnapshot).toBe('Camisa Azul');
     });
 
+    it('persiste snapshot de envío para transportista', async () => {
+      await useCase.execute(makeGuestDto(), null);
+      const createArg = mockRepo.create.mock.calls[0][0];
+      expect(createArg.shippingRecipientName).toBe('Juan Guest');
+      expect(createArg.shippingRecipientDocumentType).toBe('CC');
+      expect(createArg.shippingRecipientDocumentNumber).toBe('1234567890');
+      expect(createArg.shippingPostalCode).toBe('110111');
+      expect(createArg.shippingRecipientPhone).toBe('+573001234567');
+    });
+
     it('expiresAt = now+24h para WHATSAPP_MANUAL', async () => {
       const before = Date.now();
       await useCase.execute(makeGuestDto(), null);
@@ -279,8 +312,7 @@ describe('CreateOnlineOrderUseCase', () => {
       const dto = CreateOnlineOrderDto.create({
         items: [{ productId: 'prod-1', quantity: 2 }],
         paymentMethod: OrderPaymentMethod.ONLINE_GATEWAY,
-        shippingAddress: 'Calle 1',
-        guestName: 'Ana',
+        shippingContact: sampleShippingContact,
         guestEmail: 'ana@test.com',
       })[1]!;
 
@@ -321,6 +353,7 @@ describe('CreateOnlineOrderUseCase', () => {
       const dto = CreateOnlineOrderDto.create({
         items: [{ productId: 'prod-1', quantity: 1 }],
         paymentMethod: OrderPaymentMethod.ONLINE_GATEWAY,
+        shippingContact: sampleShippingContact,
         shippingAddress: 'Av. 10',
       })[1]!;
 
@@ -329,6 +362,7 @@ describe('CreateOnlineOrderUseCase', () => {
       const createArg = mockRepo.create.mock.calls[0][0];
       expect(createArg.customerId).toBe('customer-uuid-123');
       expect(createArg.guestEmail).toBeNull();
+      expect(createArg.shippingRecipientName).toBe('Juan Guest');
     });
   });
 

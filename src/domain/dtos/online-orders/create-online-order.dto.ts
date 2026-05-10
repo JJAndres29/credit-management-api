@@ -1,5 +1,6 @@
 import { regularExps } from '../../../config/regular-exp';
 import { OrderPaymentMethod } from '../../entities/online-order.entity';
+import { ShippingContactDto } from './shipping-contact.dto';
 
 const MAX_ITEMS = 50;
 const MAX_QUANTITY = 999;
@@ -16,7 +17,10 @@ export class CreateOnlineOrderDto {
   private constructor(
     public readonly items: OrderItemInput[],
     public readonly paymentMethod: OrderPaymentMethod,
+    /** Texto legible; si el cliente no envía `shippingAddress`, se arma desde `shippingContact`. */
     public readonly shippingAddress: string,
+    /** Obligatorio en checkout — datos para transportista (no en registro). */
+    public readonly shippingContact: ShippingContactDto,
     // Guest fields (null when authenticated customer)
     public readonly guestName: string | null,
     public readonly guestPhone: string | null,
@@ -27,7 +31,7 @@ export class CreateOnlineOrderDto {
     public readonly couponCode: string | null,
     /** P3 — must match ShippingZone.code seeded (e.g. BOGOTA) */
     public readonly shippingZoneCode: string | null,
-    /** P3 — for perKg component; defaults to 1 in use case */
+    /** Solo respaldo si ningún producto del carrito tiene `weightKg` en catálogo (preferir peso en BD). */
     public readonly estimatedWeightKg: number | null,
     /** P3 — CustomerAddress.id for authenticated checkout */
     public readonly customerAddressId: string | null,
@@ -38,6 +42,7 @@ export class CreateOnlineOrderDto {
       items,
       paymentMethod,
       shippingAddress,
+      shippingContact,
       guestName,
       guestPhone,
       guestEmail,
@@ -47,6 +52,11 @@ export class CreateOnlineOrderDto {
       estimatedWeightKg,
       customerAddressId,
     } = object;
+
+    const [contactErr, contactDto] = ShippingContactDto.create(shippingContact);
+    if (contactErr || !contactDto) {
+      return [contactErr ?? 'shippingContact inválido'];
+    }
 
     // items
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -83,46 +93,49 @@ export class CreateOnlineOrderDto {
       return [`paymentMethod debe ser uno de: ${validMethods.join(', ')}`];
     }
 
-    // shippingAddress
-    if (!shippingAddress || typeof shippingAddress !== 'string' || (shippingAddress as string).trim().length === 0) {
-      return ['shippingAddress es requerido'];
-    }
-    if ((shippingAddress as string).trim().length > MAX_SHIPPING_ADDRESS_LENGTH) {
-      return [`shippingAddress no puede exceder ${MAX_SHIPPING_ADDRESS_LENGTH} caracteres`];
-    }
-
-    // Guest fields: if none are provided → authenticated mode (validated at use-case level with customerId)
-    // If any guest field is provided → validate all required ones
-    const hasGuest = guestName !== undefined || guestPhone !== undefined || guestEmail !== undefined;
-
-    let parsedGuestName: string | null = null;
-    let parsedGuestPhone: string | null = null;
-    let parsedGuestEmail: string | null = null;
-
-    if (hasGuest) {
-      if (!guestName || typeof guestName !== 'string' || (guestName as string).trim().length < 2) {
-        return ['guestName debe tener al menos 2 caracteres'];
+    let resolvedShippingAddress: string;
+    if (shippingAddress !== undefined && shippingAddress !== null && String(shippingAddress).trim().length > 0) {
+      const sa = String(shippingAddress).trim();
+      if (sa.length > MAX_SHIPPING_ADDRESS_LENGTH) {
+        return [`shippingAddress no puede exceder ${MAX_SHIPPING_ADDRESS_LENGTH} caracteres`];
       }
-      if ((guestName as string).trim().length > MAX_GUEST_NAME_LENGTH) {
+      resolvedShippingAddress = sa;
+    } else {
+      resolvedShippingAddress = ShippingContactDto.formatSnapshotAddress(contactDto);
+    }
+
+    // Guest fields opcionales en body; invitado sigue requiriendo guestEmail en use case.
+    let parsedGuestName: string | null = null;
+    if (guestName !== undefined && guestName !== null) {
+      if (typeof guestName !== 'string' || guestName.trim().length < 2) {
+        return ['guestName debe tener al menos 2 caracteres si se envía'];
+      }
+      if (guestName.trim().length > MAX_GUEST_NAME_LENGTH) {
         return [`guestName no puede exceder ${MAX_GUEST_NAME_LENGTH} caracteres`];
       }
-      if (guestPhone !== undefined && guestPhone !== null) {
-        if (typeof guestPhone !== 'string') {
-          return ['guestPhone debe ser texto'];
-        }
-        if ((guestPhone as string).trim().length > MAX_GUEST_PHONE_LENGTH) {
-          return [`guestPhone no puede exceder ${MAX_GUEST_PHONE_LENGTH} caracteres`];
-        }
+      parsedGuestName = guestName.trim();
+    }
+
+    let parsedGuestPhone: string | null = null;
+    if (guestPhone !== undefined && guestPhone !== null) {
+      if (typeof guestPhone !== 'string') {
+        return ['guestPhone debe ser texto'];
       }
-      if (!guestEmail || typeof guestEmail !== 'string') {
-        return ['guestEmail es requerido para órdenes de invitado'];
+      if (guestPhone.trim().length > MAX_GUEST_PHONE_LENGTH) {
+        return [`guestPhone no puede exceder ${MAX_GUEST_PHONE_LENGTH} caracteres`];
       }
-      const normalizedEmail = (guestEmail as string).trim().toLowerCase();
+      parsedGuestPhone = guestPhone.trim().length > 0 ? guestPhone.trim() : null;
+    }
+
+    let parsedGuestEmail: string | null = null;
+    if (guestEmail !== undefined && guestEmail !== null) {
+      if (typeof guestEmail !== 'string') {
+        return ['guestEmail debe ser texto'];
+      }
+      const normalizedEmail = guestEmail.trim().toLowerCase();
       if (!regularExps.email.test(normalizedEmail)) {
         return ['guestEmail no tiene un formato válido'];
       }
-      parsedGuestName = (guestName as string).trim();
-      parsedGuestPhone = guestPhone ? (guestPhone as string).trim() : null;
       parsedGuestEmail = normalizedEmail;
     }
 
@@ -176,7 +189,8 @@ export class CreateOnlineOrderDto {
       new CreateOnlineOrderDto(
         parsedItems,
         paymentMethod as OrderPaymentMethod,
-        (shippingAddress as string).trim(),
+        resolvedShippingAddress,
+        contactDto,
         parsedGuestName,
         parsedGuestPhone,
         parsedGuestEmail,

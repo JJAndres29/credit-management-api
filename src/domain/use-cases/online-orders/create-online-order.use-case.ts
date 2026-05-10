@@ -78,12 +78,19 @@ export class CreateOnlineOrderUseCase {
       throw CustomError.badRequest('guestEmail es requerido para órdenes de invitado');
     }
 
+    const sc = dto.shippingContact;
+    const guestNameForStore = customerId ? null : dto.guestName ?? sc.recipientName;
+    const guestPhoneForStore = customerId ? null : dto.guestPhone ?? sc.phone;
+
     if (dto.customerAddressId) {
       if (!customerId) {
         throw CustomError.badRequest('customerAddressId solo aplica a clientes autenticados');
       }
       if (this.customerAddressVerify) {
-        await this.customerAddressVerify.assertOwnedByCustomer(dto.customerAddressId, customerId);
+        await this.customerAddressVerify.assertOwnedAndCarrierReadyForCheckout(
+          dto.customerAddressId,
+          customerId,
+        );
       }
     }
 
@@ -99,6 +106,7 @@ export class CreateOnlineOrderUseCase {
       unitPrice: number;
       productNameSnapshot: string;
       categoryId: string | null;
+      weightKgPerUnit: number | null;
     }> = [];
 
     let subtotalNet = 0;
@@ -137,6 +145,7 @@ export class CreateOnlineOrderUseCase {
         unitPrice: product.retailPrice,
         productNameSnapshot: product.name,
         categoryId: product.categoryId,
+        weightKgPerUnit: product.weightKg,
       });
     }
 
@@ -158,7 +167,7 @@ export class CreateOnlineOrderUseCase {
       const evalResult = await this.evaluateRisk.execute({
         ipAddress: meta.ipAddress,
         guestEmail: dto.guestEmail,
-        guestPhone: dto.guestPhone,
+        guestPhone: customerId ? dto.guestPhone : guestPhoneForStore,
         customerId,
         customerAccountCreatedAt,
         merchandiseTotalCop: merchandiseGross,
@@ -200,8 +209,19 @@ export class CreateOnlineOrderUseCase {
       throw CustomError.badRequest('Los cupones están temporalmente deshabilitados');
     }
 
+    const computedShippingKg = enriched.reduce((sum, row) => {
+      const w = row.weightKgPerUnit;
+      if (w == null || !Number.isFinite(w) || w <= 0) return sum;
+      return sum + w * row.quantity;
+    }, 0);
+    const roundedComputedKg = Math.round(computedShippingKg * 1000) / 1000;
+
     const weightKg =
-      dto.estimatedWeightKg != null && dto.estimatedWeightKg > 0 ? dto.estimatedWeightKg : 1;
+      roundedComputedKg > 0
+        ? roundedComputedKg
+        : dto.estimatedWeightKg != null && dto.estimatedWeightKg > 0
+          ? dto.estimatedWeightKg
+          : 1;
 
     let shippingAmount = 0;
     let shippingZoneCode: string | null = null;
@@ -225,8 +245,8 @@ export class CreateOnlineOrderUseCase {
 
     const order = await this.onlineOrderRepository.create({
       customerId,
-      guestName: dto.guestName,
-      guestPhone: dto.guestPhone,
+      guestName: guestNameForStore,
+      guestPhone: guestPhoneForStore,
       guestEmail: dto.guestEmail,
       shippingAddress: dto.shippingAddress,
       totalAmount,
@@ -237,7 +257,7 @@ export class CreateOnlineOrderUseCase {
       currencyCode: 'COP',
       paymentMethod: dto.paymentMethod,
       expiresAt,
-      items: enriched.map(({ categoryId: _c, ...rest }) => rest),
+      items: enriched.map(({ categoryId: _c, weightKgPerUnit: _w, ...rest }) => rest),
       ipAddress: meta.ipAddress,
       userAgent: meta.userAgent,
       deviceFingerprintHash: dto.deviceFingerprintHash,
@@ -247,6 +267,15 @@ export class CreateOnlineOrderUseCase {
       couponCodeSnapshot,
       customerAddressId: dto.customerAddressId,
       couponConsume,
+      shippingRecipientName: sc.recipientName,
+      shippingRecipientDocumentType: sc.documentType,
+      shippingRecipientDocumentNumber: sc.documentNumber,
+      shippingLine1: sc.addressLine1,
+      shippingLine2: sc.addressLine2,
+      shippingCity: sc.city,
+      shippingDepartment: sc.department,
+      shippingPostalCode: sc.postalCode,
+      shippingRecipientPhone: sc.phone,
     });
 
     if (dto.paymentMethod === OrderPaymentMethod.ONLINE_GATEWAY && this.paymentGateway) {

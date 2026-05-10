@@ -8,6 +8,8 @@ export type ProductForOrder = {
   defaultVariantId: string | null;
   /** For scoped coupons (P3) */
   categoryId: string | null;
+  /** kg por unidad para cotización envío; null si el catálogo aún no lo tiene */
+  weightKg: number | null;
   /** IVA % stored on product, if any */
   productIvaRate: number | null;
   /** IVA % from category, if any */

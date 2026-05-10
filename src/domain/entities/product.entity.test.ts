@@ -45,6 +45,7 @@ describe('ProductEntity.toJSON', () => {
       4,
       null,
       null,
+      null,
       [],
       'cat-1',
       'Sabanas',

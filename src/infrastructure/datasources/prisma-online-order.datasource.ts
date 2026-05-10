@@ -121,6 +121,15 @@ export class PrismaOnlineOrderDatasource implements OnlineOrderDatasource {
           riskTier: data.riskTier ?? undefined,
           couponCodeSnapshot: data.couponCodeSnapshot ?? undefined,
           customerAddressId: data.customerAddressId ?? undefined,
+          shippingRecipientName: data.shippingRecipientName ?? undefined,
+          shippingRecipientDocumentType: data.shippingRecipientDocumentType ?? undefined,
+          shippingRecipientDocumentNumber: data.shippingRecipientDocumentNumber ?? undefined,
+          shippingLine1: data.shippingLine1 ?? undefined,
+          shippingLine2: data.shippingLine2 ?? undefined,
+          shippingCity: data.shippingCity ?? undefined,
+          shippingDepartment: data.shippingDepartment ?? undefined,
+          shippingPostalCode: data.shippingPostalCode ?? undefined,
+          shippingRecipientPhone: data.shippingRecipientPhone ?? undefined,
           items: {
             create: data.items.map((item) => ({
               productId: item.productId,
