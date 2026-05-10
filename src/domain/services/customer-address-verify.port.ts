@@ -1,7 +1,10 @@
 /**
- * Ensures a saved address belongs to the authenticated customer (P3 checkout).
+ * Saved address checks at checkout (P3).
  */
 export interface CustomerAddressVerifyPort {
-  /** @throws CustomError.notFound if missing or wrong owner */
-  assertOwnedByCustomer(addressId: string, customerId: string): Promise<void>;
+  /**
+   * Address must belong to customer and include código postal + teléfono para envío.
+   * @throws CustomError.notFound | CustomError.badRequest
+   */
+  assertOwnedAndCarrierReadyForCheckout(addressId: string, customerId: string): Promise<void>;
 }

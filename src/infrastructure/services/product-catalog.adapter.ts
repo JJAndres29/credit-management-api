@@ -18,6 +18,7 @@ export class ProductCatalogAdapter implements ProductCatalogPort {
         isActive: true,
         ivaRate: true,
         category: { select: { ivaRate: true } },
+        weightKg: true,
         variants: {
           where: { isDefault: true },
           take: 1,
@@ -38,6 +39,7 @@ export class ProductCatalogAdapter implements ProductCatalogPort {
       productIvaRate: product.ivaRate != null ? Number(product.ivaRate) : null,
       categoryIvaRate:
         product.category?.ivaRate != null ? Number(product.category.ivaRate) : null,
+      weightKg: product.weightKg != null ? Number(product.weightKg) : null,
     };
   }
 

@@ -56,6 +56,7 @@ function makeProduct(overrides: Partial<{
     overrides.stock ?? 50,
     null,
     null,
+    null,
     [],
     null,
     null,
