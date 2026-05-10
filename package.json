@@ -7,6 +7,7 @@
     "dev": "ts-node-dev --respawn --transpile-only src/app.ts",
     "build": "tsc",
     "start": "node dist/app.js",
+    "worker:notifications": "ts-node src/workers/notification.worker.ts",
     "test": "jest --passWithNoTests",
     "test:watch": "jest --watchAll",
     "db:migrate": "prisma migrate dev",
@@ -20,6 +21,7 @@
   "dependencies": {
     "@prisma/client": "^5.22.0",
     "bcryptjs": "^2.4.3",
+    "bullmq": "^5.76.6",
     "cloudinary": "^2.9.0",
     "cors": "^2.8.6",
     "dotenv": "^16.4.5",
@@ -28,6 +30,7 @@
     "file-type": "^16.5.4",
     "google-auth-library": "^10.6.2",
     "helmet": "^8.1.0",
+    "ioredis": "^5.10.1",
     "jsonwebtoken": "^9.0.2",
     "multer": "^2.1.1",
     "nodemailer": "^8.0.5",

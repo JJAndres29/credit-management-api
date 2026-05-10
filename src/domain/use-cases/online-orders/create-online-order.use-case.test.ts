@@ -18,6 +18,7 @@ const makeProduct = (overrides: Partial<ProductForOrder> = {}): ProductForOrder 
   stock: 10,
   isActive: true,
   defaultVariantId: 'var-default-1',
+  categoryId: null,
   productIvaRate: null,
   categoryIvaRate: null,
   ...overrides,

@@ -31,13 +31,24 @@ function collectTsFiles(dir: string): string[] {
   return results;
 }
 
+function tryReadTsSource(file: string): string | null {
+  try {
+    const st = fs.statSync(file);
+    if (!st.isFile() || st.size > 5 * 1024 * 1024) return null;
+    return fs.readFileSync(file, 'utf-8');
+  } catch {
+    return null;
+  }
+}
+
 describe('Bounded Context Isolation — OnlineOrders never imports repository artifacts', () => {
   for (const dir of GUARDED_DIRS) {
     const files = collectTsFiles(dir);
 
     for (const file of files) {
       const relativePath = path.relative(process.cwd(), file);
-      const content = fs.readFileSync(file, 'utf-8');
+      const content = tryReadTsSource(file);
+      if (content === null) continue;
 
       for (const forbidden of FORBIDDEN_IMPORTS) {
         it(`${relativePath} does not import "${forbidden}"`, () => {

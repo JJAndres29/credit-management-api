@@ -23,11 +23,30 @@ export class CreateOnlineOrderDto {
     public readonly guestEmail: string | null,
     /** Optional client-side fingerprint (e.g. FingerprintJS hash) for antifraud history */
     public readonly deviceFingerprintHash: string | null,
+    /** P3 — uppercase normalized in use case */
+    public readonly couponCode: string | null,
+    /** P3 — must match ShippingZone.code seeded (e.g. BOGOTA) */
+    public readonly shippingZoneCode: string | null,
+    /** P3 — for perKg component; defaults to 1 in use case */
+    public readonly estimatedWeightKg: number | null,
+    /** P3 — CustomerAddress.id for authenticated checkout */
+    public readonly customerAddressId: string | null,
   ) {}
 
   static create(object: Record<string, unknown>): [string?, CreateOnlineOrderDto?] {
-    const { items, paymentMethod, shippingAddress, guestName, guestPhone, guestEmail, deviceFingerprintHash } =
-      object;
+    const {
+      items,
+      paymentMethod,
+      shippingAddress,
+      guestName,
+      guestPhone,
+      guestEmail,
+      deviceFingerprintHash,
+      couponCode,
+      shippingZoneCode,
+      estimatedWeightKg,
+      customerAddressId,
+    } = object;
 
     // items
     if (!items || !Array.isArray(items) || items.length === 0) {
@@ -119,6 +138,39 @@ export class CreateOnlineOrderDto {
       parsedFingerprint = fp.length > 0 ? fp : null;
     }
 
+    let parsedCoupon: string | null = null;
+    if (couponCode !== undefined && couponCode !== null) {
+      if (typeof couponCode !== 'string') return ['couponCode debe ser texto'];
+      const c = couponCode.trim().toUpperCase();
+      if (c.length > 40) return ['couponCode demasiado largo'];
+      parsedCoupon = c.length > 0 ? c : null;
+    }
+
+    let parsedZone: string | null = null;
+    if (shippingZoneCode !== undefined && shippingZoneCode !== null) {
+      if (typeof shippingZoneCode !== 'string') return ['shippingZoneCode debe ser texto'];
+      const z = shippingZoneCode.trim().toUpperCase();
+      if (z.length > 40) return ['shippingZoneCode demasiado largo'];
+      parsedZone = z.length > 0 ? z : null;
+    }
+
+    let parsedWeight: number | null = null;
+    if (estimatedWeightKg !== undefined && estimatedWeightKg !== null) {
+      const w = Number(estimatedWeightKg);
+      if (!Number.isFinite(w) || w <= 0 || w > 500) {
+        return ['estimatedWeightKg debe ser un número positivo razonable (máx 500 kg)'];
+      }
+      parsedWeight = Math.round(w * 100) / 100;
+    }
+
+    let parsedAddrId: string | null = null;
+    if (customerAddressId !== undefined && customerAddressId !== null) {
+      if (typeof customerAddressId !== 'string' || customerAddressId.trim().length === 0) {
+        return ['customerAddressId inválido'];
+      }
+      parsedAddrId = customerAddressId.trim();
+    }
+
     return [
       undefined,
       new CreateOnlineOrderDto(
@@ -129,6 +181,10 @@ export class CreateOnlineOrderDto {
         parsedGuestPhone,
         parsedGuestEmail,
         parsedFingerprint,
+        parsedCoupon,
+        parsedZone,
+        parsedWeight,
+        parsedAddrId,
       ),
     ];
   }

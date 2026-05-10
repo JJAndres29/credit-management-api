@@ -9,3 +9,5 @@ export { DashboardRepositoryImpl } from './dashboard.repository.impl';
 export { CustomerRepositoryImpl } from './customer.repository.impl';
 export { CategoryRepositoryImpl } from './category.repository.impl';
 export { OnlineOrderRepositoryImpl } from './online-order.repository.impl';
+export { CartRepositoryImpl } from './cart.repository.impl';
+export { CustomerAddressRepositoryImpl } from './customer-address.repository.impl';

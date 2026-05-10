@@ -13,8 +13,9 @@ import { AuthRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaAuthDatasource } from '../../infrastructure/datasources';
 import { AuthMiddleware, checkRole, idempotencyKeyMiddleware } from '../middlewares';
 import { Role } from '../../domain/entities';
-import { JwtAdapter, MetaWhatsAppService, NodemailerEmailService, PdfkitPdfService } from '../../infrastructure/services';
+import { JwtAdapter, PdfkitPdfService } from '../../infrastructure/services';
 import { globalLogger } from '../../infrastructure/services/pino-logger.service';
+import { buildStaffChannelServices } from '../../infrastructure/messaging/build-staff-channel-services';
 import { InstallmentCalculatorService } from '../../domain/services/installments';
 import { globalEventEmitter } from '../../infrastructure/events';
 import { SaleNotificationSubscriber } from '../../infrastructure/subscribers';
@@ -30,9 +31,7 @@ export class SaleRouter {
     const productRepository = new ProductRepositoryImpl(new PrismaProductDatasource());
     const paymentRepository = new PaymentRepositoryImpl(new PrismaPaymentDatasource());
 
-    // Servicios de notificación — se deshabilitan automáticamente si faltan las env vars
-    const whatsAppService = new MetaWhatsAppService();
-    const emailService = new NodemailerEmailService();
+    const { emailService, whatsAppService } = buildStaffChannelServices(globalLogger);
 
     // Use case de PDF para adjuntarlo al email de notificación de venta
     const accountStatementUseCase = new GenerateAccountStatementUseCase(
@@ -48,8 +47,8 @@ export class SaleRouter {
     new SaleNotificationSubscriber(
       globalEventEmitter,
       clientRepository,
-      whatsAppService.isEnabled ? whatsAppService : null,
-      emailService.isEnabled ? emailService : null,
+      whatsAppService,
+      emailService,
       accountStatementUseCase,
       globalLogger,
     );

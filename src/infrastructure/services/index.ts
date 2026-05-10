@@ -12,3 +12,8 @@ export { NoopElectronicInvoiceProviderAdapter } from './noop-electronic-invoice-
 export { MercadoPagoGatewayAdapter } from './mercadopago-gateway.adapter';
 export { PrismaMonthlySummaryAdapter } from './prisma-monthly-summary.adapter';
 export { PostgresFeatureFlagAdapter } from './postgres-feature-flag.adapter';
+export { PrismaShippingQuoteAdapter } from './shipping-quote.adapter';
+export { PrismaCouponLookupAdapter } from './coupon-lookup.adapter';
+export { PrismaCustomerAddressVerifyAdapter } from './customer-address-verify.adapter';
+export { PrismaOrderVelocityAdapter } from './order-velocity.adapter';
+export { CustomerRiskProfileAdapter } from './customer-risk-profile.adapter';

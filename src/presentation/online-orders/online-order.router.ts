@@ -2,15 +2,28 @@ import { Router, Request, Response, NextFunction } from 'express';
 import { OnlineOrderController } from './online-order.controller';
 import {
   CreateOnlineOrderUseCase,
+  EvaluateOrderRiskUseCase,
   GetOnlineOrderByIdUseCase,
   GetOnlineOrdersUseCase,
   UpdateOnlineOrderStatusUseCase,
 } from '../../domain/use-cases/online-orders';
-import { OnlineOrderRepositoryImpl, SaleRepositoryImpl } from '../../infrastructure/repositories';
-import { PrismaOnlineOrderDatasource, PrismaSaleDatasource } from '../../infrastructure/datasources';
-import { ProductCatalogAdapter, CustomerJwtAdapter, MercadoPagoGatewayAdapter, CustomerLinkAdapter, PostgresFeatureFlagAdapter, globalLogger } from '../../infrastructure/services';
+import { ClearCheckoutCartUseCase } from '../../domain/use-cases/cart';
+import { OnlineOrderRepositoryImpl, SaleRepositoryImpl, CartRepositoryImpl } from '../../infrastructure/repositories';
+import { PrismaOnlineOrderDatasource, PrismaSaleDatasource, PrismaCartDatasource, PrismaCustomerDatasource } from '../../infrastructure/datasources';
+import {
+  ProductCatalogAdapter,
+  CustomerJwtAdapter,
+  MercadoPagoGatewayAdapter,
+  CustomerLinkAdapter,
+  PostgresFeatureFlagAdapter,
+  globalLogger,
+  PrismaOrderVelocityAdapter,
+  PrismaShippingQuoteAdapter,
+  PrismaCouponLookupAdapter,
+  PrismaCustomerAddressVerifyAdapter,
+  CustomerRiskProfileAdapter,
+} from '../../infrastructure/services';
 import { CustomerRepositoryImpl } from '../../infrastructure/repositories';
-import { PrismaCustomerDatasource } from '../../infrastructure/datasources';
 import { AuthMiddleware, checkRole, FeatureFlagMiddleware, idempotencyKeyMiddleware } from '../middlewares';
 import { RateLimitMiddleware } from '../middlewares/rate-limit.middleware';
 import { JwtAdapter } from '../../infrastructure/services';
@@ -60,8 +73,27 @@ export class OnlineOrderRouter {
       new AuthRepositoryImpl(new PrismaAuthDatasource()),
     );
 
+    const velocityPort = new PrismaOrderVelocityAdapter();
+    const evaluateRisk = new EvaluateOrderRiskUseCase(velocityPort);
+
+    const createOnlineOrderUseCase = new CreateOnlineOrderUseCase(
+      orderRepository,
+      productCatalog,
+      paymentGateway,
+      featureFlags,
+      evaluateRisk,
+      new PrismaShippingQuoteAdapter(),
+      new PrismaCouponLookupAdapter(),
+      new PrismaCustomerAddressVerifyAdapter(),
+      new CustomerRiskProfileAdapter(customerRepository),
+    );
+
+    const clearCheckoutCartUseCase = new ClearCheckoutCartUseCase(
+      new CartRepositoryImpl(new PrismaCartDatasource()),
+    );
+
     const controller = new OnlineOrderController(
-      new CreateOnlineOrderUseCase(orderRepository, productCatalog, paymentGateway, featureFlags),
+      createOnlineOrderUseCase,
       new GetOnlineOrderByIdUseCase(orderRepository),
       new GetOnlineOrdersUseCase(orderRepository),
       new UpdateOnlineOrderStatusUseCase(
@@ -71,6 +103,7 @@ export class OnlineOrderRouter {
         productCatalog,
         globalLogger,
       ),
+      clearCheckoutCartUseCase,
     );
 
     // POST /api/online-orders — público, customer JWT opcional

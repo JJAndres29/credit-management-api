@@ -21,6 +21,10 @@ import { OnlineOrderRouter } from './online-orders/online-order.router';
 import { EcommerceRouter } from './ecommerce/ecommerce.router';
 import { CollectionRouter } from './collections/collection.router';
 import { FeatureFlagRouter } from './admin/feature-flag.router';
+import { CartRouter } from './cart/cart.router';
+import { ShippingRouter } from './shipping/shipping.router';
+import { CouponAdminRouter } from './admin/coupon.router';
+import { DeadLetterRouter } from './admin/dead-letter.router';
 import helmet from 'helmet';
 import cors from 'cors';
 import type pino from 'pino';
@@ -56,7 +60,7 @@ export class Server {
     this.app.use(cors({
       origin: this.getAllowedOrigins(),
       methods: ['GET', 'POST', 'PUT', 'PATCH', 'DELETE'],
-      allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key'],
+      allowedHeaders: ['Content-Type', 'Authorization', 'Idempotency-Key', 'X-Cart-Session'],
       credentials: true,
     }));
 
@@ -101,6 +105,8 @@ export class Server {
 
     this.app.use('/api/auth', AuthRouter.routes);
     this.app.use('/api/admin/feature-flags', FeatureFlagRouter.routes);
+    this.app.use('/api/admin/coupons', CouponAdminRouter.routes);
+    this.app.use('/api/admin/dead-letters', DeadLetterRouter.routes);
     this.app.use(
       '/api/clients',
       FeatureFlagMiddleware.requireEnabled(this.featureFlags, FeatureFlagKey.CREDIT_MODULE_ENABLED, {
@@ -158,6 +164,22 @@ export class Server {
       CollectionRouter.routes,
     );
     this.app.use('/api/categories', CategoryRouter.routes);
+    this.app.use(
+      '/api/cart',
+      FeatureFlagMiddleware.requireEnabled(this.featureFlags, FeatureFlagKey.CHECKOUT_ENABLED, {
+        disabledStatus: 503,
+        disabledMessage: 'Carrito no disponible — checkout deshabilitado',
+      }),
+      CartRouter.routes,
+    );
+    this.app.use(
+      '/api/shipping',
+      FeatureFlagMiddleware.requireEnabled(this.featureFlags, FeatureFlagKey.CHECKOUT_ENABLED, {
+        disabledStatus: 503,
+        disabledMessage: 'Envíos no disponibles — checkout deshabilitado',
+      }),
+      ShippingRouter.routes,
+    );
     this.app.use('/api/online-orders', OnlineOrderRouter.routes);
     this.app.use('/api', AttributeRouter.routes);
 

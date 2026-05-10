@@ -6,10 +6,11 @@ export class RegisterCustomerDto {
     public readonly email: string,
     public readonly password: string,
     public readonly phone: string,
+    public readonly mergeCartSessionToken: string | null,
   ) {}
 
   static create(object: Record<string, unknown>): [string?, RegisterCustomerDto?] {
-    const { name, email, password, phone } = object;
+    const { name, email, password, phone, mergeCartSessionToken } = object;
 
     if (!name || typeof name !== 'string' || name.trim().length < 2) {
       return ['Name must be at least 2 characters'];
@@ -24,9 +25,23 @@ export class RegisterCustomerDto {
       return ['Phone must be at least 7 characters'];
     }
 
+    let mergeTok: string | null = null;
+    if (mergeCartSessionToken !== undefined && mergeCartSessionToken !== null) {
+      if (typeof mergeCartSessionToken !== 'string') return ['mergeCartSessionToken debe ser texto'];
+      const t = mergeCartSessionToken.trim();
+      if (t.length > 0 && t.length < 8) return ['mergeCartSessionToken inválido'];
+      mergeTok = t.length >= 8 ? t : null;
+    }
+
     return [
       undefined,
-      new RegisterCustomerDto(name.trim(), email.toLowerCase().trim(), password, phone.trim()),
+      new RegisterCustomerDto(
+        name.trim(),
+        email.toLowerCase().trim(),
+        password,
+        phone.trim(),
+        mergeTok,
+      ),
     ];
   }
 }

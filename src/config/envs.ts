@@ -36,6 +36,10 @@ if (!process.env.MP_ACCESS_TOKEN || !process.env.MP_WEBHOOK_SECRET) {
   warnOptional('[envs] MP_ACCESS_TOKEN or MP_WEBHOOK_SECRET not set - Mercado Pago gateway disabled');
 }
 
+if (!process.env.REDIS_URL) {
+  warnOptional('[envs] REDIS_URL not set - BullMQ notification queue disabled (emails/WhatsApp inline)');
+}
+
 export const envs = {
   port: Number(process.env.PORT),
   nodeEnv: process.env.NODE_ENV ?? 'development',
@@ -73,4 +77,6 @@ export const envs = {
       pending: process.env.MP_BACK_URL_PENDING ?? '',
     },
   },
+  /** P3 — BullMQ (`redis://` or TLS URL). Optional: without it, staff notifications stay synchronous. */
+  redisUrl: process.env.REDIS_URL ?? '',
 };

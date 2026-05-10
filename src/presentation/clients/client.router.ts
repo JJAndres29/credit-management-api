@@ -12,7 +12,8 @@ import { ClientRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaClientDatasource } from '../../infrastructure/datasources';
 import { AuthMiddleware, checkRole } from '../middlewares';
 import { RateLimitMiddleware } from '../middlewares/rate-limit.middleware';
-import { JwtAdapter, NodemailerEmailService, PdfkitPdfService } from '../../infrastructure/services';
+import { JwtAdapter, PdfkitPdfService } from '../../infrastructure/services';
+import { buildStaffChannelServices } from '../../infrastructure/messaging/build-staff-channel-services';
 import { AuthRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaAuthDatasource } from '../../infrastructure/datasources';
 import { Role } from '../../domain/entities';
@@ -33,8 +34,7 @@ export class ClientRouter {
 
     const clientRepository = new ClientRepositoryImpl(new PrismaClientDatasource());
 
-    // Dependencias para el subscriber de notificación
-    const emailService = new NodemailerEmailService();
+    const { emailService } = buildStaffChannelServices(globalLogger);
     const saleRepository = new SaleRepositoryImpl(new PrismaSaleDatasource());
     const paymentRepository = new PaymentRepositoryImpl(new PrismaPaymentDatasource());
     const productRepository = new ProductRepositoryImpl(new PrismaProductDatasource());
@@ -51,7 +51,7 @@ export class ClientRouter {
     new ClientNotifySubscriber(
       globalEventEmitter,
       clientRepository,
-      emailService.isEnabled ? emailService : null,
+      emailService,
       accountStatementUseCase,
       globalLogger,
     );

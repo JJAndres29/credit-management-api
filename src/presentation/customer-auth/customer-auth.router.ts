@@ -13,24 +13,32 @@ import {
   ChangeCustomerPasswordUseCase,
   ForgotCustomerPasswordUseCase,
   ResetCustomerPasswordUseCase,
+  ListCustomerAddressesUseCase,
+  CreateCustomerAddressUseCase,
+  SetDefaultCustomerAddressUseCase,
 } from '../../domain/use-cases/customer-auth';
+import { MergeCartOnLoginUseCase } from '../../domain/use-cases/cart';
 import { Role } from '../../domain/entities';
 import {
   PrismaCustomerDatasource,
   PrismaClientDatasource,
   PrismaAuthDatasource,
+  PrismaCartDatasource,
+  PrismaCustomerAddressDatasource,
 } from '../../infrastructure/datasources';
 import {
   CustomerRepositoryImpl,
   ClientRepositoryImpl,
   AuthRepositoryImpl,
+  CartRepositoryImpl,
+  CustomerAddressRepositoryImpl,
 } from '../../infrastructure/repositories';
 import {
   CustomerJwtAdapter,
   ClientLookupAdapter,
   JwtAdapter,
-  NodemailerEmailService,
 } from '../../infrastructure/services';
+import { buildStaffChannelServices } from '../../infrastructure/messaging/build-staff-channel-services';
 import { CustomerPasswordResetSubscriber } from '../../infrastructure/subscribers';
 import { CustomerAuthMiddleware } from '../middlewares/customer-auth.middleware';
 import { AuthMiddleware } from '../middlewares/auth.middleware';
@@ -38,16 +46,15 @@ import { checkRole } from '../middlewares/rbac.middleware';
 import { RateLimitMiddleware } from '../middlewares/rate-limit.middleware';
 import { envs } from '../../config/envs';
 import { globalEventEmitter } from '../../infrastructure/events';
+import { globalLogger } from '../../infrastructure/services/pino-logger.service';
 
 export class CustomerAuthRouter {
   static get routes(): Router {
     const router = Router();
 
     // ─── Subscribers ────────────────────────────────────────────────────────
-    new CustomerPasswordResetSubscriber(
-      globalEventEmitter,
-      new NodemailerEmailService(),
-    );
+    const { emailService: staffEmailForCustomerReset } = buildStaffChannelServices(globalLogger);
+    new CustomerPasswordResetSubscriber(globalEventEmitter, staffEmailForCustomerReset);
 
     // ─── Repositories ───────────────────────────────────────────────────────
     const customerDatasource = new PrismaCustomerDatasource();
@@ -55,6 +62,13 @@ export class CustomerAuthRouter {
 
     const clientDatasource = new PrismaClientDatasource();
     const clientRepository = new ClientRepositoryImpl(clientDatasource);
+
+    const cartRepository = new CartRepositoryImpl(new PrismaCartDatasource());
+    const mergeCartOnLogin = new MergeCartOnLoginUseCase(cartRepository);
+
+    const customerAddressRepository = new CustomerAddressRepositoryImpl(
+      new PrismaCustomerAddressDatasource(),
+    );
 
     const clientLookupPort = new ClientLookupAdapter(clientRepository, customerRepository);
 
@@ -70,18 +84,21 @@ export class CustomerAuthRouter {
 
     // ─── Controller ─────────────────────────────────────────────────────────
     const controller = new CustomerAuthController(
-      new GoogleAuthUseCase(customerRepository, customerJwtService, envs.googleClientId),
+      new GoogleAuthUseCase(customerRepository, customerJwtService, envs.googleClientId, mergeCartOnLogin),
       new RenewCustomerTokenUseCase(customerRepository, customerJwtService),
       new ClaimClientUseCase(customerRepository, clientLookupPort),
       new GetCustomerProfileUseCase(customerRepository, clientLookupPort),
       new GetCustomersUseCase(customerRepository),
       new UpdateCustomerUseCase(customerRepository),
       new UpdateCustomerProfileUseCase(customerRepository),
-      new RegisterCustomerUseCase(customerRepository, customerJwtService),
-      new LoginCustomerUseCase(customerRepository, customerJwtService),
+      new RegisterCustomerUseCase(customerRepository, customerJwtService, mergeCartOnLogin),
+      new LoginCustomerUseCase(customerRepository, customerJwtService, mergeCartOnLogin),
       new ChangeCustomerPasswordUseCase(customerRepository),
       new ForgotCustomerPasswordUseCase(customerRepository, globalEventEmitter),
       new ResetCustomerPasswordUseCase(customerRepository, globalEventEmitter),
+      new ListCustomerAddressesUseCase(customerAddressRepository),
+      new CreateCustomerAddressUseCase(customerAddressRepository),
+      new SetDefaultCustomerAddressUseCase(customerAddressRepository),
     );
 
     // ─── Routes — STATIC before DYNAMIC ─────────────────────────────────────
@@ -97,6 +114,13 @@ export class CustomerAuthRouter {
     router.post('/claim-client', customerMiddleware.validateCustomerJwt, controller.claimClient);
     router.get('/me', customerMiddleware.validateCustomerJwt, controller.getProfile);
     router.patch('/me', customerMiddleware.validateCustomerJwt, controller.updateProfile);
+    router.get('/me/addresses', customerMiddleware.validateCustomerJwt, controller.listAddresses);
+    router.post('/me/addresses', customerMiddleware.validateCustomerJwt, controller.createAddress);
+    router.patch(
+      '/me/addresses/:addressId/default',
+      customerMiddleware.validateCustomerJwt,
+      controller.setDefaultAddress,
+    );
     router.patch('/change-password', customerMiddleware.validateCustomerJwt, controller.changePassword);
 
     // Admin (staff JWT + ADMIN role)

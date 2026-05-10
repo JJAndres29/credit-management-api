@@ -6,7 +6,7 @@ import { globalLogger } from '../services';
 export class CustomerPasswordResetSubscriber {
   constructor(
     private readonly eventEmitter: EventEmitterPort,
-    private readonly emailService: EmailService,
+    private readonly emailService: EmailService | null,
   ) {
     this.eventEmitter.on(CUSTOMER_PASSWORD_RESET, (data) => {
       this.handle(data as CustomerPasswordResetData).catch((err) => {
@@ -16,6 +16,10 @@ export class CustomerPasswordResetSubscriber {
   }
 
   private async handle(data: CustomerPasswordResetData): Promise<void> {
+    if (!this.emailService) {
+      globalLogger.warn('[CustomerPasswordReset] Email no configurado — omitido');
+      return;
+    }
     try {
       await this.emailService.sendEmail({
         to: data.customerEmail,

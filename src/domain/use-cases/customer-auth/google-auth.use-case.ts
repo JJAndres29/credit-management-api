@@ -3,12 +3,14 @@ import { CustomerRepository } from '../../repositories';
 import { CustomerJwtService } from '../../services';
 import { CustomError } from '../../errors';
 import { GoogleAuthDto } from '../../dtos/customer-auth';
+import { MergeCartOnLoginUseCase } from '../cart/merge-cart-on-login.use-case';
 
 export class GoogleAuthUseCase {
   constructor(
     private readonly customerRepository: CustomerRepository,
     private readonly jwtService: CustomerJwtService,
     private readonly googleClientId: string,
+    private readonly mergeCart?: MergeCartOnLoginUseCase,
   ) {}
 
   async execute(dto: GoogleAuthDto) {
@@ -53,6 +55,8 @@ export class GoogleAuthUseCase {
     }
 
     const token = await this.jwtService.generateToken({ id: customer.id });
+
+    await this.mergeCart?.execute(dto.mergeCartSessionToken, customer.id);
 
     return { token, customer: customer.toJSON() };
   }
