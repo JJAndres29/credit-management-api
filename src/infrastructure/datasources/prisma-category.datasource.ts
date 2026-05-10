@@ -1,10 +1,53 @@
 import { prisma } from '../../config/prisma';
-import { CategoryDatasource } from '../../domain/datasources';
+import type {
+  CategoryCreateData,
+  CategoryUpdateData,
+} from '../../domain/datasources/category.datasource';
+import { CategoryDatasource } from '../../domain/datasources/category.datasource';
 import { CategoryEntity, CategoryAttributeEntity, AttributeValueEntity } from '../../domain/entities';
+import { CustomError } from '../../domain/errors';
+import { isValidSlugFormat, slugify } from '../../domain/services/slug';
+
+async function ensureUniqueCategorySlug(candidate: string, excludeId?: string): Promise<string> {
+  let s = candidate;
+  for (let n = 0; n < 500; n += 1) {
+    const clash = await prisma.category.findFirst({
+      where: {
+        slug: s,
+        ...(excludeId ? { id: { not: excludeId } } : {}),
+      },
+    });
+    if (!clash) return s;
+    s = `${candidate}-${n + 2}`;
+  }
+  throw new Error('No se pudo generar slug único para categoría');
+}
 
 export class PrismaCategoryDatasource implements CategoryDatasource {
-  async create(name: string): Promise<CategoryEntity> {
-    const category = await prisma.category.create({ data: { name } });
+  async create(data: CategoryCreateData): Promise<CategoryEntity> {
+    const requested = data.slug?.trim() ?? null;
+    const base = requested && isValidSlugFormat(requested)
+      ? requested
+      : slugify(data.name);
+
+    let slug: string;
+    if (requested) {
+      const taken = await prisma.category.findFirst({ where: { slug: requested } });
+      if (taken) throw CustomError.conflict('Slug de categoría ya en uso');
+      slug = requested;
+    } else {
+      slug = await ensureUniqueCategorySlug(base);
+    }
+
+    const category = await prisma.category.create({
+      data: {
+        name: data.name,
+        slug,
+        description: data.description ?? null,
+        metaTitle: data.metaTitle ?? null,
+        metaDescription: data.metaDescription ?? null,
+      },
+    });
     return CategoryEntity.fromObject(category as unknown as Record<string, unknown>);
   }
 
@@ -19,8 +62,28 @@ export class PrismaCategoryDatasource implements CategoryDatasource {
     return CategoryEntity.fromObject(category as unknown as Record<string, unknown>);
   }
 
-  async update(id: string, name: string): Promise<CategoryEntity> {
-    const category = await prisma.category.update({ where: { id }, data: { name } });
+  async update(id: string, data: CategoryUpdateData): Promise<CategoryEntity> {
+    if (data.slug !== undefined && data.slug !== null) {
+      const s = data.slug.trim();
+      if (!isValidSlugFormat(s)) {
+        throw CustomError.badRequest('slug inválido');
+      }
+      const taken = await prisma.category.findFirst({
+        where: { slug: s, id: { not: id } },
+      });
+      if (taken) throw CustomError.conflict('Slug de categoría ya en uso');
+    }
+
+    const category = await prisma.category.update({
+      where: { id },
+      data: {
+        ...(data.name !== undefined && { name: data.name }),
+        ...(data.slug !== undefined && { slug: data.slug }),
+        ...(data.description !== undefined && { description: data.description }),
+        ...(data.metaTitle !== undefined && { metaTitle: data.metaTitle }),
+        ...(data.metaDescription !== undefined && { metaDescription: data.metaDescription }),
+      },
+    });
     return CategoryEntity.fromObject(category as unknown as Record<string, unknown>);
   }
 

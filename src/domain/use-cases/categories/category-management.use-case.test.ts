@@ -1,3 +1,4 @@
+import { CreateCategoryDto } from '../../dtos/categories';
 import {
   CreateAttributeValueUseCase,
   CreateCategoryAttributeUseCase,
@@ -39,7 +40,8 @@ describe('Category management use cases', () => {
     const createAttribute = new CreateCategoryAttributeUseCase(mockCategoryRepo);
     const createValue = new CreateAttributeValueUseCase(mockCategoryRepo);
 
-    const category = await createCategory.execute('Sabanas');
+    const [, catDto] = CreateCategoryDto.create({ name: 'Sabanas' });
+    const category = await createCategory.execute(catDto!);
     const attribute = await createAttribute.execute('cat-1', 'Color');
     const value = await createValue.execute('attr-1', 'Rojo');
 

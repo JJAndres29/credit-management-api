@@ -1,3 +1,4 @@
+import type { CategoryCreateData, CategoryUpdateData } from '../../domain/datasources/category.datasource';
 import { CategoryDatasource } from '../../domain/datasources';
 import { CategoryRepository } from '../../domain/repositories';
 import { CategoryEntity, CategoryAttributeEntity, AttributeValueEntity } from '../../domain/entities';
@@ -5,8 +6,8 @@ import { CategoryEntity, CategoryAttributeEntity, AttributeValueEntity } from '.
 export class CategoryRepositoryImpl implements CategoryRepository {
   constructor(private readonly datasource: CategoryDatasource) {}
 
-  create(name: string): Promise<CategoryEntity> {
-    return this.datasource.create(name);
+  create(data: CategoryCreateData): Promise<CategoryEntity> {
+    return this.datasource.create(data);
   }
 
   findAll(): Promise<CategoryEntity[]> {
@@ -17,8 +18,8 @@ export class CategoryRepositoryImpl implements CategoryRepository {
     return this.datasource.findById(id);
   }
 
-  update(id: string, name: string): Promise<CategoryEntity> {
-    return this.datasource.update(id, name);
+  update(id: string, data: CategoryUpdateData): Promise<CategoryEntity> {
+    return this.datasource.update(id, data);
   }
 
   delete(id: string): Promise<CategoryEntity> {

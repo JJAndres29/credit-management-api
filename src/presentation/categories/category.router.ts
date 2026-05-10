@@ -1,5 +1,6 @@
 import { Router } from 'express';
 import { AuthMiddleware, cachePublic, checkRole } from '../middlewares';
+import { RateLimitMiddleware } from '../middlewares/rate-limit.middleware';
 import { JwtAdapter } from '../../infrastructure/services';
 import { AuthRepositoryImpl, CategoryRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaAuthDatasource, PrismaCategoryDatasource } from '../../infrastructure/datasources';
@@ -14,12 +15,21 @@ import {
   UpdateCategoryUseCase,
 } from '../../domain/use-cases/categories';
 import { CategoryController } from './category.controller';
+import { PrismaStorefrontCatalogDatasource } from '../../infrastructure/datasources/prisma-storefront-catalog.datasource';
+import { envs } from '../../config/envs';
+import { GetCategoryBySlugUseCase } from '../../domain/use-cases/seo';
 
 export class CategoryRouter {
   static get routes(): Router {
     const router = Router();
 
     const categoryRepository = new CategoryRepositoryImpl(new PrismaCategoryDatasource());
+    const storefrontCatalog = new PrismaStorefrontCatalogDatasource();
+    const categorySeoConfig = {
+      publicOrigin: envs.publicSiteUrl,
+      categoryPathPrefix: envs.seoCategoryPathPrefix,
+    };
+
     const controller = new CategoryController(
       new CreateCategoryUseCase(categoryRepository),
       new GetCategoriesUseCase(categoryRepository),
@@ -28,6 +38,8 @@ export class CategoryRouter {
       new CreateCategoryAttributeUseCase(categoryRepository),
       new GetCategoryAttributesUseCase(categoryRepository),
       new DeleteCategoryAttributeUseCase(categoryRepository),
+      new GetCategoryBySlugUseCase(storefrontCatalog),
+      categorySeoConfig,
     );
 
     const middleware = new AuthMiddleware(
@@ -35,7 +47,13 @@ export class CategoryRouter {
       new AuthRepositoryImpl(new PrismaAuthDatasource()),
     );
 
-    // Público
+    // Público (estáticas antes de /:id/attributes)
+    router.get(
+      '/by-slug/:slug',
+      RateLimitMiddleware.publicProductsReadLimiter,
+      cachePublic({ maxAgeSeconds: 300 }),
+      controller.getBySlug,
+    );
     router.get('/', cachePublic({ maxAgeSeconds: 300 }), controller.getAll);
     router.get('/:id/attributes', controller.getCategoryAttributes);
 

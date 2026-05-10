@@ -1,10 +1,32 @@
+import type { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { ProductDatasource } from '../../domain/datasources';
 import { ProductEntity } from '../../domain/entities';
 import { CreateProductDto, UpdateProductDto, FilterProductsDto } from '../../domain/dtos/products';
+import { CustomError } from '../../domain/errors';
 import { UploadResult } from '../../domain/services/file-storage.service';
+import { isValidSlugFormat, slugify } from '../../domain/services/slug';
 import { PaginationDto } from '../../domain/dtos/shared';
 import { PaginatedResult } from '../../domain/types/paginated.type';
+
+async function ensureUniqueProductSlug(
+  tx: Prisma.TransactionClient,
+  base: string,
+  excludeProductId?: string,
+): Promise<string> {
+  let s = base;
+  for (let n = 0; n < 500; n += 1) {
+    const clash = await tx.product.findFirst({
+      where: {
+        slug: s,
+        ...(excludeProductId ? { id: { not: excludeProductId } } : {}),
+      },
+    });
+    if (!clash) return s;
+    s = `${base}-${n + 2}`;
+  }
+  throw new Error('No se pudo generar slug único para producto');
+}
 
 const includeImages = {
   images: {
@@ -88,9 +110,27 @@ export class PrismaProductDatasource implements ProductDatasource {
           description: dto.description,
           stock: dto.stock,
           categoryId: dto.categoryId,
+          brand: dto.brand,
+          metaTitle: dto.metaTitle,
+          metaDescription: dto.metaDescription,
           ...(dto.investmentCost !== undefined && { investmentCost: dto.investmentCost }),
           ...(dto.weightKg != null && { weightKg: dto.weightKg }),
         },
+      });
+
+      let resolvedSlug: string;
+      if (dto.slug) {
+        const taken = await tx.product.findFirst({ where: { slug: dto.slug } });
+        if (taken) throw CustomError.conflict('Slug de producto ya en uso');
+        resolvedSlug = dto.slug;
+      } else {
+        const base = `${slugify(dto.name)}-${p.id.replace(/-/g, '').slice(0, 8)}`;
+        resolvedSlug = await ensureUniqueProductSlug(tx, base, p.id);
+      }
+
+      await tx.product.update({
+        where: { id: p.id },
+        data: { slug: resolvedSlug },
       });
 
       await tx.productVariant.create({
@@ -103,6 +143,7 @@ export class PrismaProductDatasource implements ProductDatasource {
           currencyCode: p.currencyCode,
           isDefault: true,
           isActive: p.isActive,
+          slug: resolvedSlug,
         },
       });
 
@@ -117,6 +158,25 @@ export class PrismaProductDatasource implements ProductDatasource {
 
   async update(id: string, dto: UpdateProductDto): Promise<ProductEntity> {
     const product = await prisma.$transaction(async (tx) => {
+      const current = await tx.product.findUnique({ where: { id } });
+      if (!current) throw CustomError.notFound(`Product with id ${id} not found`);
+
+      if (dto.slug !== undefined && current.slug && dto.slug !== current.slug) {
+        await tx.productSlugHistory.create({
+          data: {
+            oldSlug: current.slug,
+            productId: id,
+          },
+        });
+      }
+
+      if (dto.slug !== undefined) {
+        const taken = await tx.product.findFirst({
+          where: { slug: dto.slug, id: { not: id } },
+        });
+        if (taken) throw CustomError.conflict('Slug de producto ya en uso');
+      }
+
       const updated = await tx.product.update({
         where: { id },
         data: {
@@ -125,6 +185,10 @@ export class PrismaProductDatasource implements ProductDatasource {
           ...(dto.categoryId !== undefined && { categoryId: dto.categoryId }),
           ...(dto.investmentCost !== undefined && { investmentCost: dto.investmentCost }),
           ...(dto.weightKg !== undefined && { weightKg: dto.weightKg }),
+          ...(dto.slug !== undefined && { slug: dto.slug }),
+          ...(dto.brand !== undefined && { brand: dto.brand }),
+          ...(dto.metaTitle !== undefined && { metaTitle: dto.metaTitle }),
+          ...(dto.metaDescription !== undefined && { metaDescription: dto.metaDescription }),
         },
       });
 
@@ -143,6 +207,13 @@ export class PrismaProductDatasource implements ProductDatasource {
             },
           });
         }
+      }
+
+      if (dto.slug !== undefined) {
+        await tx.productVariant.updateMany({
+          where: { productId: id, isDefault: true },
+          data: { slug: dto.slug },
+        });
       }
 
       return tx.product.findUniqueOrThrow({

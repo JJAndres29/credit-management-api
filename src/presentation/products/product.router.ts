@@ -20,7 +20,10 @@ import { RateLimitMiddleware } from '../middlewares/rate-limit.middleware';
 import { JwtAdapter } from '../../infrastructure/services';
 import { AuthRepositoryImpl } from '../../infrastructure/repositories';
 import { PrismaAuthDatasource } from '../../infrastructure/datasources';
+import { PrismaStorefrontCatalogDatasource } from '../../infrastructure/datasources/prisma-storefront-catalog.datasource';
 import { Role } from '../../domain/entities';
+import { envs } from '../../config/envs';
+import { GetProductBySlugUseCase } from '../../domain/use-cases/seo';
 
 export class ProductRouter {
   static get routes(): Router {
@@ -29,6 +32,12 @@ export class ProductRouter {
     const repository = new ProductRepositoryImpl(new PrismaProductDatasource());
     const categoryRepository = new CategoryRepositoryImpl(new PrismaCategoryDatasource());
     const cloudinary = new CloudinaryAdapter();
+    const storefrontCatalog = new PrismaStorefrontCatalogDatasource();
+    const productSeoConfig = {
+      publicOrigin: envs.publicSiteUrl,
+      productPathPrefix: envs.seoProductPathPrefix,
+      categoryPathPrefix: envs.seoCategoryPathPrefix,
+    };
 
     const controller = new ProductController(
       new GetProductsUseCase(repository),
@@ -43,6 +52,8 @@ export class ProductRouter {
       new AssignProductAttributesUseCase(repository, categoryRepository),
       new ReplaceProductAttributesUseCase(repository, categoryRepository),
       new RemoveProductAttributeUseCase(repository),
+      new GetProductBySlugUseCase(storefrontCatalog),
+      productSeoConfig,
     );
 
     const middleware = new AuthMiddleware(
@@ -50,7 +61,13 @@ export class ProductRouter {
       new AuthRepositoryImpl(new PrismaAuthDatasource()),
     );
 
-    // Público
+    // Público (rutas estáticas antes de /:id)
+    router.get(
+      '/by-slug/:slug',
+      RateLimitMiddleware.publicProductsReadLimiter,
+      cachePublic({ maxAgeSeconds: 120 }),
+      controller.getBySlug,
+    );
     router.get('/', RateLimitMiddleware.publicProductsReadLimiter, cachePublic({ maxAgeSeconds: 120 }), controller.getAll);
     router.get('/:id', RateLimitMiddleware.publicProductsReadLimiter, cachePublic({ maxAgeSeconds: 120 }), controller.getById);
 

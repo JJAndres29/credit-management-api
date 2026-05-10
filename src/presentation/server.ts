@@ -31,6 +31,7 @@ import type pino from 'pino';
 import { FeatureFlagKey, FeatureFlagPort } from '../domain/services';
 import { PostgresFeatureFlagAdapter } from '../infrastructure/services';
 import { FeatureFlagMiddleware } from './middlewares';
+import { SeoRouter } from './seo/seo.router';
 
 interface ServerOptions {
   port: number;
@@ -102,6 +103,8 @@ export class Server {
     this.app.use(express.urlencoded({ extended: true, limit: '10kb' }));
 
     this.app.use('/health', HealthRouter.routes(this.logger));
+
+    this.app.use(SeoRouter.routes);
 
     this.app.use('/api/auth', AuthRouter.routes);
     this.app.use('/api/admin/feature-flags', FeatureFlagRouter.routes);
