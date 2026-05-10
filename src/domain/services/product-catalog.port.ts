@@ -6,6 +6,8 @@ export type ProductForOrder = {
   isActive: boolean;
   /** P2: default SKU row for dual-write inventory */
   defaultVariantId: string | null;
+  /** For scoped coupons (P3) */
+  categoryId: string | null;
   /** IVA % stored on product, if any */
   productIvaRate: number | null;
   /** IVA % from category, if any */

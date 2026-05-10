@@ -10,6 +10,7 @@ import {
   LoginCustomerDto,
   ChangePasswordDto,
   ForgotPasswordDto,
+  CreateCustomerAddressDto,
 } from '../../domain/dtos/customer-auth';
 import { PaginationDto } from '../../domain/dtos/shared';
 import {
@@ -25,6 +26,9 @@ import {
   ChangeCustomerPasswordUseCase,
   ForgotCustomerPasswordUseCase,
   ResetCustomerPasswordUseCase,
+  ListCustomerAddressesUseCase,
+  CreateCustomerAddressUseCase,
+  SetDefaultCustomerAddressUseCase,
 } from '../../domain/use-cases/customer-auth';
 import { CustomerEntity } from '../../domain/entities';
 
@@ -44,6 +48,9 @@ export class CustomerAuthController {
     private readonly changeCustomerPasswordUseCase: ChangeCustomerPasswordUseCase,
     private readonly forgotCustomerPasswordUseCase: ForgotCustomerPasswordUseCase,
     private readonly resetCustomerPasswordUseCase: ResetCustomerPasswordUseCase,
+    private readonly listCustomerAddressesUseCase: ListCustomerAddressesUseCase,
+    private readonly createCustomerAddressUseCase: CreateCustomerAddressUseCase,
+    private readonly setDefaultCustomerAddressUseCase: SetDefaultCustomerAddressUseCase,
   ) {}
 
   // ─── Public ────────────────────────────────────────────────────────────────
@@ -117,6 +124,29 @@ export class CustomerAuthController {
     if (error) { res.status(400).json({ error }); return; }
     try {
       res.json(await this.updateCustomerProfileUseCase.execute(req.customer!.id, dto!));
+    } catch (err) { this.handleError(err, res); }
+  };
+
+  listAddresses = async (req: CustomerRequest, res: Response): Promise<void> => {
+    try {
+      const addresses = await this.listCustomerAddressesUseCase.execute(req.customer!.id);
+      res.json({ addresses });
+    } catch (err) { this.handleError(err, res); }
+  };
+
+  createAddress = async (req: CustomerRequest, res: Response): Promise<void> => {
+    const [error, dto] = CreateCustomerAddressDto.create(req.body as Record<string, unknown>);
+    if (error) { res.status(400).json({ error }); return; }
+    try {
+      const row = await this.createCustomerAddressUseCase.execute(req.customer!.id, dto!);
+      res.status(201).json(row);
+    } catch (err) { this.handleError(err, res); }
+  };
+
+  setDefaultAddress = async (req: CustomerRequest, res: Response): Promise<void> => {
+    try {
+      await this.setDefaultCustomerAddressUseCase.execute(req.customer!.id, req.params.addressId);
+      res.json({ message: 'Dirección predeterminada actualizada' });
     } catch (err) { this.handleError(err, res); }
   };
 

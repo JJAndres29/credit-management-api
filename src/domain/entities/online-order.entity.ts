@@ -88,6 +88,11 @@ export class OnlineOrderEntity {
     public readonly shippingAmount: number | null = null,
     public readonly discountAmount: number | null = null,
     public readonly currencyCode: string = 'COP',
+    public readonly riskScore: number | null = null,
+    public readonly riskTier: string | null = null,
+    public readonly couponCodeSnapshot: string | null = null,
+    public readonly customerAddressId: string | null = null,
+    public readonly shippingZoneCode: string | null = null,
   ) {}
 
   toJSON() {
@@ -107,6 +112,11 @@ export class OnlineOrderEntity {
       shippingAmount: this.shippingAmount,
       discountAmount: this.discountAmount,
       currencyCode: this.currencyCode,
+      riskScore: this.riskScore,
+      riskTier: this.riskTier,
+      couponCodeSnapshot: this.couponCodeSnapshot,
+      customerAddressId: this.customerAddressId,
+      shippingZoneCode: this.shippingZoneCode,
       paymentMethod: this.paymentMethod,
       paymentGatewayReference: this.paymentGatewayReference,
       paymentUrl: this.paymentUrl,
@@ -127,8 +137,9 @@ export class OnlineOrderEntity {
       shippingAddress, status, totalAmount, paymentMethod,
       paymentGatewayReference, paymentUrl,
       expiresAt, paidAt, stockRestoredAt, ipAddress, userAgent, deviceFingerprintHash,
-      createdAt, items, customer,
+      createdAt,       items, customer,
       subtotalAmount, taxAmount, shippingAmount, discountAmount, currencyCode,
+      riskScore, riskTier, couponCodeSnapshot, customerAddressId, shippingZoneCode,
     } = object;
 
     if (!id) throw new Error('OnlineOrder id is required');
@@ -168,6 +179,11 @@ export class OnlineOrderEntity {
       shippingAmount != null ? Number(shippingAmount) : null,
       discountAmount != null ? Number(discountAmount) : null,
       (currencyCode as string | undefined) ?? 'COP',
+      riskScore != null ? Number(riskScore) : null,
+      (riskTier as string | null | undefined) ?? null,
+      (couponCodeSnapshot as string | null | undefined) ?? null,
+      (customerAddressId as string | null | undefined) ?? null,
+      (shippingZoneCode as string | null | undefined) ?? null,
     );
   }
 }

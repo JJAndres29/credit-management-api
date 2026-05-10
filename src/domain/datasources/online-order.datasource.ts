@@ -10,6 +10,11 @@ export type OnlineOrderItemCreateData = {
   productNameSnapshot: string;
 };
 
+export type CouponConsumeData = {
+  couponId: string;
+  discountApplied: number;
+};
+
 export type OnlineOrderCreateData = {
   customerId: string | null;
   guestName: string | null;
@@ -30,6 +35,13 @@ export type OnlineOrderCreateData = {
   ipAddress?: string | null;
   userAgent?: string | null;
   deviceFingerprintHash?: string | null;
+  /** P3 */
+  shippingZoneCode?: string | null;
+  riskScore?: number | null;
+  riskTier?: string | null;
+  couponCodeSnapshot?: string | null;
+  customerAddressId?: string | null;
+  couponConsume?: CouponConsumeData | null;
 };
 
 export type OnlineOrderFilters = {

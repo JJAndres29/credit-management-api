@@ -12,6 +12,7 @@ export class ProductCatalogAdapter implements ProductCatalogPort {
       select: {
         id: true,
         name: true,
+        categoryId: true,
         retailPrice: true,
         stock: true,
         isActive: true,
@@ -29,6 +30,7 @@ export class ProductCatalogAdapter implements ProductCatalogPort {
     return {
       id: product.id,
       name: product.name,
+      categoryId: product.categoryId ?? null,
       retailPrice: product.retailPrice != null ? Number(product.retailPrice) : null,
       stock: product.stock,
       isActive: product.isActive,

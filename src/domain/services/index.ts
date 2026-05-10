@@ -24,3 +24,4 @@ export type {
   ElectronicInvoiceDispatchResult,
 } from './electronic-invoice-provider.port';
 export { DEFAULT_IVA_PERCENT, resolveIvaPercent, splitGrossLineIntoNetAndTax } from './tax';
+export type { CustomerRiskProfilePort } from './customer-risk-profile.port';

@@ -70,6 +70,34 @@ export class PrismaOnlineOrderDatasource implements OnlineOrderDatasource {
         }
       }
 
+      if (data.couponConsume) {
+        const couponRow = await tx.coupon.findUnique({
+          where: { id: data.couponConsume.couponId },
+        });
+        if (!couponRow || !couponRow.isActive) {
+          throw CustomError.conflict('Cupón inválido');
+        }
+        if (data.customerId && couponRow.perCustomerLimit != null) {
+          const usedByCustomer = await tx.couponRedemption.count({
+            where: { couponId: couponRow.id, customerId: data.customerId },
+          });
+          if (usedByCustomer >= couponRow.perCustomerLimit) {
+            throw CustomError.conflict('Ya usaste este cupón el máximo de veces permitido');
+          }
+        }
+        const bumped = await tx.$queryRaw<{ id: string }[]>(Prisma.sql`
+          UPDATE "Coupon"
+          SET "usedCount" = "usedCount" + 1
+          WHERE "id" = ${data.couponConsume.couponId}
+            AND "isActive" = true
+            AND ("maxUses" IS NULL OR "usedCount" < "maxUses")
+          RETURNING "id"
+        `);
+        if (!bumped.length) {
+          throw CustomError.conflict('El cupón ya no está disponible');
+        }
+      }
+
       const created = await tx.onlineOrder.create({
         data: {
           customerId: data.customerId,
@@ -88,6 +116,11 @@ export class PrismaOnlineOrderDatasource implements OnlineOrderDatasource {
           ipAddress: data.ipAddress ?? undefined,
           userAgent: data.userAgent ?? undefined,
           deviceFingerprintHash: data.deviceFingerprintHash ?? undefined,
+          shippingZoneCode: data.shippingZoneCode ?? undefined,
+          riskScore: data.riskScore ?? undefined,
+          riskTier: data.riskTier ?? undefined,
+          couponCodeSnapshot: data.couponCodeSnapshot ?? undefined,
+          customerAddressId: data.customerAddressId ?? undefined,
           items: {
             create: data.items.map((item) => ({
               productId: item.productId,
@@ -117,6 +150,17 @@ export class PrismaOnlineOrderDatasource implements OnlineOrderDatasource {
             movementType: 'SALE_ONLINE_RESERVE',
             quantityDelta: -item.quantity,
             refOrderId: created.id,
+          },
+        });
+      }
+
+      if (data.couponConsume) {
+        await tx.couponRedemption.create({
+          data: {
+            couponId: data.couponConsume.couponId,
+            orderId: created.id,
+            customerId: data.customerId,
+            discountApplied: data.couponConsume.discountApplied,
           },
         });
       }

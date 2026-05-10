@@ -1,4 +1,5 @@
 export { CreateOnlineOrderUseCase } from './create-online-order.use-case';
+export { EvaluateOrderRiskUseCase } from './evaluate-order-risk.use-case';
 export type { CreateOnlineOrderResult, CreateOnlineOrderRequestMeta } from './create-online-order.use-case';
 export { GetOnlineOrderByIdUseCase } from './get-online-order-by-id.use-case';
 export { GetOnlineOrdersUseCase } from './get-online-orders.use-case';

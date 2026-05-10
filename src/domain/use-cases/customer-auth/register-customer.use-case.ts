@@ -3,11 +3,13 @@ import { RegisterCustomerDto } from '../../dtos/customer-auth';
 import { CustomError } from '../../errors';
 import { CustomerRepository } from '../../repositories';
 import { CustomerJwtService } from '../../services';
+import { MergeCartOnLoginUseCase } from '../cart/merge-cart-on-login.use-case';
 
 export class RegisterCustomerUseCase {
   constructor(
     private readonly customerRepository: CustomerRepository,
     private readonly jwtService: CustomerJwtService,
+    private readonly mergeCart?: MergeCartOnLoginUseCase,
   ) {}
 
   async execute(dto: RegisterCustomerDto) {
@@ -28,6 +30,8 @@ export class RegisterCustomerUseCase {
     });
 
     const token = await this.jwtService.generateToken({ id: customer.id });
+
+    await this.mergeCart?.execute(dto.mergeCartSessionToken, customer.id);
 
     return { token, customer: customer.toJSON() };
   }

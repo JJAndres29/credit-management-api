@@ -7,8 +7,14 @@ import { CreateOnlineOrderUseCase } from '../../domain/use-cases/online-orders/c
 import { GetOnlineOrderByIdUseCase } from '../../domain/use-cases/online-orders/get-online-order-by-id.use-case';
 import { GetOnlineOrdersUseCase } from '../../domain/use-cases/online-orders/get-online-orders.use-case';
 import { UpdateOnlineOrderStatusUseCase } from '../../domain/use-cases/online-orders/update-online-order-status.use-case';
+import { ClearCheckoutCartUseCase } from '../../domain/use-cases/cart';
 
 type MaybeCustomerRequest = Request & { customer?: CustomerEntity };
+
+function checkoutCartSession(req: Request): string | null {
+  const raw = req.get('x-cart-session');
+  return raw?.trim() && raw.trim().length >= 8 ? raw.trim() : null;
+}
 
 export class OnlineOrderController {
   constructor(
@@ -16,6 +22,7 @@ export class OnlineOrderController {
     private readonly getOnlineOrderByIdUseCase: GetOnlineOrderByIdUseCase,
     private readonly getOnlineOrdersUseCase: GetOnlineOrdersUseCase,
     private readonly updateOnlineOrderStatusUseCase: UpdateOnlineOrderStatusUseCase,
+    private readonly clearCheckoutCartUseCase?: ClearCheckoutCartUseCase,
   ) {}
 
   create = async (req: MaybeCustomerRequest, res: Response): Promise<void> => {
@@ -35,6 +42,7 @@ export class OnlineOrderController {
         ipAddress: typeof req.ip === 'string' ? req.ip : null,
         userAgent: req.get('user-agent') ?? null,
       });
+      await this.clearCheckoutCartUseCase?.execute(customerId, checkoutCartSession(req));
       res.status(201).json(result);
     } catch (err) {
       this.handleError(err, res);

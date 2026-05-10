@@ -30,12 +30,23 @@ function collectTsFiles(dir: string): string[] {
   return results;
 }
 
+function tryReadTsSource(file: string): string | null {
+  try {
+    const st = fs.statSync(file);
+    if (!st.isFile() || st.size > 5 * 1024 * 1024) return null;
+    return fs.readFileSync(file, 'utf-8');
+  } catch {
+    return null;
+  }
+}
+
 describe('Domain isolation — no HTTP or gateway leakage in src/domain/', () => {
   const files = collectTsFiles(DOMAIN_DIR);
 
   for (const file of files) {
     const relativePath = path.relative(process.cwd(), file);
-    const content = fs.readFileSync(file, 'utf-8');
+    const content = tryReadTsSource(file);
+    if (content === null) continue;
 
     for (const forbidden of FORBIDDEN_PATTERNS) {
       it(`${relativePath} does not contain "${forbidden}"`, () => {

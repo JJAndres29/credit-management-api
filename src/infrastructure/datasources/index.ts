@@ -9,3 +9,7 @@ export { PrismaDashboardDatasource } from './prisma-dashboard.datasource';
 export { PrismaCustomerDatasource } from './prisma-customer.datasource';
 export { PrismaCategoryDatasource } from './prisma-category.datasource';
 export { PrismaOnlineOrderDatasource } from './prisma-online-order.datasource';
+export { PrismaCartDatasource } from './prisma-cart.datasource';
+export { PrismaCustomerAddressDatasource } from './prisma-customer-address.datasource';
+export { PrismaShippingZoneDatasource } from './prisma-shipping-zone.datasource';
+export { PrismaCouponAdminDatasource } from './prisma-coupon-admin.datasource';

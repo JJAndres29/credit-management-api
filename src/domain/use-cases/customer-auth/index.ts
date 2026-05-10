@@ -10,3 +10,6 @@ export { ChangeCustomerPasswordUseCase } from './change-customer-password.use-ca
 export { ForgotCustomerPasswordUseCase } from './forgot-customer-password.use-case';
 export { ResetCustomerPasswordUseCase } from './reset-customer-password.use-case';
 export { UpdateCustomerProfileUseCase } from './update-customer-profile.use-case';
+export { ListCustomerAddressesUseCase } from './list-customer-addresses.use-case';
+export { CreateCustomerAddressUseCase } from './create-customer-address.use-case';
+export { SetDefaultCustomerAddressUseCase } from './set-default-customer-address.use-case';
