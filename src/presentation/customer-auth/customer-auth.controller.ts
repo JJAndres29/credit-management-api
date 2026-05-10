@@ -11,6 +11,7 @@ import {
   ChangePasswordDto,
   ForgotPasswordDto,
   CreateCustomerAddressDto,
+  UpdateCustomerAddressDto,
 } from '../../domain/dtos/customer-auth';
 import { PaginationDto } from '../../domain/dtos/shared';
 import {
@@ -29,6 +30,8 @@ import {
   ListCustomerAddressesUseCase,
   CreateCustomerAddressUseCase,
   SetDefaultCustomerAddressUseCase,
+  UpdateCustomerAddressUseCase,
+  DeleteCustomerAddressUseCase,
 } from '../../domain/use-cases/customer-auth';
 import { CustomerEntity } from '../../domain/entities';
 
@@ -51,6 +54,8 @@ export class CustomerAuthController {
     private readonly listCustomerAddressesUseCase: ListCustomerAddressesUseCase,
     private readonly createCustomerAddressUseCase: CreateCustomerAddressUseCase,
     private readonly setDefaultCustomerAddressUseCase: SetDefaultCustomerAddressUseCase,
+    private readonly updateCustomerAddressUseCase: UpdateCustomerAddressUseCase,
+    private readonly deleteCustomerAddressUseCase: DeleteCustomerAddressUseCase,
   ) {}
 
   // ─── Public ────────────────────────────────────────────────────────────────
@@ -147,6 +152,26 @@ export class CustomerAuthController {
     try {
       await this.setDefaultCustomerAddressUseCase.execute(req.customer!.id, req.params.addressId);
       res.json({ message: 'Dirección predeterminada actualizada' });
+    } catch (err) { this.handleError(err, res); }
+  };
+
+  updateAddress = async (req: CustomerRequest, res: Response): Promise<void> => {
+    const [error, dto] = UpdateCustomerAddressDto.create(req.body as Record<string, unknown>);
+    if (error) { res.status(400).json({ error }); return; }
+    try {
+      const row = await this.updateCustomerAddressUseCase.execute(
+        req.customer!.id,
+        req.params.addressId,
+        dto!,
+      );
+      res.json(row);
+    } catch (err) { this.handleError(err, res); }
+  };
+
+  deleteAddress = async (req: CustomerRequest, res: Response): Promise<void> => {
+    try {
+      await this.deleteCustomerAddressUseCase.execute(req.customer!.id, req.params.addressId);
+      res.json({ message: 'Dirección eliminada' });
     } catch (err) { this.handleError(err, res); }
   };
 

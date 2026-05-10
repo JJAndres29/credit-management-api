@@ -8,3 +8,4 @@ export { ChangePasswordDto } from './change-password.dto';
 export { ForgotPasswordDto } from './forgot-password.dto';
 export { UpdateCustomerProfileDto } from './update-customer-profile.dto';
 export { CreateCustomerAddressDto } from './create-customer-address.dto';
+export { UpdateCustomerAddressDto } from './update-customer-address.dto';

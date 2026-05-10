@@ -13,3 +13,5 @@ export { UpdateCustomerProfileUseCase } from './update-customer-profile.use-case
 export { ListCustomerAddressesUseCase } from './list-customer-addresses.use-case';
 export { CreateCustomerAddressUseCase } from './create-customer-address.use-case';
 export { SetDefaultCustomerAddressUseCase } from './set-default-customer-address.use-case';
+export { UpdateCustomerAddressUseCase } from './update-customer-address.use-case';
+export { DeleteCustomerAddressUseCase } from './delete-customer-address.use-case';
