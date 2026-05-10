@@ -81,15 +81,34 @@ export class PrismaProductDatasource implements ProductDatasource {
   }
 
   async create(dto: CreateProductDto): Promise<ProductEntity> {
-    const product = await prisma.product.create({
-      data: {
-        name: dto.name,
-        description: dto.description,
-        stock: dto.stock,
-        categoryId: dto.categoryId,
-        ...(dto.investmentCost !== undefined && { investmentCost: dto.investmentCost }),
-      },
-      include: includeImages,
+    const product = await prisma.$transaction(async (tx) => {
+      const p = await tx.product.create({
+        data: {
+          name: dto.name,
+          description: dto.description,
+          stock: dto.stock,
+          categoryId: dto.categoryId,
+          ...(dto.investmentCost !== undefined && { investmentCost: dto.investmentCost }),
+        },
+      });
+
+      await tx.productVariant.create({
+        data: {
+          productId: p.id,
+          label: 'Default',
+          stock: p.stock,
+          retailPrice: p.retailPrice,
+          investmentCost: p.investmentCost,
+          currencyCode: p.currencyCode,
+          isDefault: true,
+          isActive: p.isActive,
+        },
+      });
+
+      return tx.product.findUniqueOrThrow({
+        where: { id: p.id },
+        include: includeImages,
+      });
     });
 
     return ProductEntity.fromObject(product as unknown as Record<string, unknown>);
@@ -134,10 +153,21 @@ export class PrismaProductDatasource implements ProductDatasource {
   }
 
   async adjustStock(id: string, quantity: number): Promise<ProductEntity> {
-    const product = await prisma.product.update({
-      where: { id },
-      data: { stock: { increment: quantity } },
-      include: includeImages,
+    const product = await prisma.$transaction(async (tx) => {
+      const p = await tx.product.update({
+        where: { id },
+        data: { stock: { increment: quantity } },
+      });
+
+      await tx.productVariant.updateMany({
+        where: { productId: id, isDefault: true },
+        data: { stock: { increment: quantity } },
+      });
+
+      return tx.product.findUniqueOrThrow({
+        where: { id: p.id },
+        include: includeImages,
+      });
     });
 
     return ProductEntity.fromObject(product as unknown as Record<string, unknown>);

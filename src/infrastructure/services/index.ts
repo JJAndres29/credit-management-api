@@ -8,6 +8,7 @@ export { CustomerJwtAdapter } from './customer-jwt.adapter';
 export { ClientLookupAdapter } from './client-lookup.adapter';
 export { CustomerLinkAdapter } from './customer-link.adapter';
 export { ProductCatalogAdapter } from './product-catalog.adapter';
+export { NoopElectronicInvoiceProviderAdapter } from './noop-electronic-invoice-provider.adapter';
 export { MercadoPagoGatewayAdapter } from './mercadopago-gateway.adapter';
 export { PrismaMonthlySummaryAdapter } from './prisma-monthly-summary.adapter';
 export { PostgresFeatureFlagAdapter } from './postgres-feature-flag.adapter';

@@ -35,6 +35,8 @@ export class SaleItemEntity {
      * Null en ventas cargadas desde caché o en tests que construyen la entidad directamente.
      */
     public readonly productName: string | null = null,
+    /** P2: SKU snapshot — null en filas históricas pre-variante */
+    public readonly variantId: string | null = null,
   ) {}
 }
 
@@ -72,13 +74,14 @@ export class SaleEntity {
      * paidInstallments = (totalPaid - initialPayment) / installmentAmount
      */
     public readonly initialPayment: number | null = null,
+    public readonly currencyCode: string = 'COP',
   ) {}
 
   static fromObject(object: Record<string, unknown>): SaleEntity {
     const {
       id, saleNumber, clientId, type, status, total, createdAt, items,
       installmentsCount, frequency, installmentAmount,
-      collectionDay, collectionDay2, initialPayment,
+      collectionDay, collectionDay2, initialPayment, currencyCode,
     } = object;
 
     if (!id) throw new Error('Sale id is required');
@@ -104,6 +107,7 @@ export class SaleEntity {
             Number(item.subtotal),
             (item.appliedRule as string | null) ?? null,
             productName,
+            (item.variantId as string | null | undefined) ?? null,
           );
         })
       : [];
@@ -123,6 +127,7 @@ export class SaleEntity {
       collectionDay != null ? Number(collectionDay) : null,
       collectionDay2 != null ? Number(collectionDay2) : null,
       initialPayment != null ? Number(initialPayment) : null,
+      (currencyCode as string | undefined) ?? 'COP',
     );
   }
 }

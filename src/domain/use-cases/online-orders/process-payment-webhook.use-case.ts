@@ -83,7 +83,9 @@ export class ProcessPaymentWebhookUseCase {
     let allRestored = true;
     for (const item of order.items) {
       try {
-        await this.productCatalogPort.incrementStock(item.productId, item.quantity);
+        await this.productCatalogPort.incrementStock(item.productId, item.quantity, {
+          orderId: order.id,
+        });
       } catch (err) {
         allRestored = false;
         this.logger?.error('[ProcessWebhook] Fallo incrementStock', err, {

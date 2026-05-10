@@ -1,9 +1,38 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { SaleDatasource, SaleCreateData, SaleUpdateData, SaleDeleteData } from '../../domain/datasources/sale.datasource';
 import { SaleEntity, SaleType, SaleStatus } from '../../domain/entities';
 import { FilterSalesDto } from '../../domain/dtos/sales';
 import { PaginationDto } from '../../domain/dtos/shared';
 import { PaginatedResult } from '../../domain/types/paginated.type';
+
+async function ensureDefaultProductVariant(
+  tx: Prisma.TransactionClient,
+  productId: string,
+): Promise<string> {
+  const existing = await tx.productVariant.findFirst({
+    where: { productId, isDefault: true },
+    select: { id: true },
+  });
+  if (existing) return existing.id;
+
+  const p = await tx.product.findUnique({ where: { id: productId } });
+  if (!p) throw new Error(`Product ${productId} no encontrado al crear variante default`);
+
+  const v = await tx.productVariant.create({
+    data: {
+      productId,
+      label: 'Default',
+      stock: p.stock,
+      retailPrice: p.retailPrice,
+      investmentCost: p.investmentCost,
+      currencyCode: p.currencyCode,
+      isDefault: true,
+      isActive: p.isActive,
+    },
+  });
+  return v.id;
+}
 
 // Inclusión de ítems con nombre de producto en todas las consultas de venta
 const SALE_WITH_ITEMS = {
@@ -100,37 +129,55 @@ export class PrismaSaleDatasource implements SaleDatasource {
      * Esto garantiza consistencia entre venta, stock e ítems.
      */
     const sale = await prisma.$transaction(async (tx) => {
-      // 0. Crear productos nuevos (inline) y asignar sus IDs a los ítems correspondientes.
-      //    Todo ocurre dentro de la transacción, por lo que si falla la venta se revierte
-      //    también la creación del producto.
       for (const item of data.items) {
         if (item.newProduct) {
           const created = await tx.product.create({
             data: { name: item.newProduct.name, stock: item.newProduct.stock },
           });
           item.productId = created.id;
+          await tx.productVariant.create({
+            data: {
+              productId: created.id,
+              label: 'Default',
+              stock: item.newProduct.stock,
+              isDefault: true,
+              isActive: true,
+              currencyCode: created.currencyCode,
+            },
+          });
         }
       }
 
-      // 1. Descontar stock de cada producto (opcional para ventas originadas desde ecommerce)
+      for (const item of data.items) {
+        item.variantId = item.variantId ?? (await ensureDefaultProductVariant(tx, item.productId));
+      }
+
       if (!data.skipStockDecrement) {
         for (const item of data.items) {
           await tx.product.update({
             where: { id: item.productId },
             data: { stock: { decrement: item.quantity } },
           });
+          const vdec = await tx.productVariant.updateMany({
+            where: {
+              id: item.variantId!,
+              productId: item.productId,
+              stock: { gte: item.quantity },
+            },
+            data: { stock: { decrement: item.quantity } },
+          });
+          if (vdec.count === 0) {
+            throw new Error(`Stock insuficiente en variante para producto ${item.productId}`);
+          }
         }
       }
 
-      // 2. Si es venta a crédito, incrementar el balance del cliente y registrar en auditoría
       if (!isCashSale) {
         await tx.client.update({
           where: { id: data.clientId },
           data: { balance: { increment: data.total } },
         });
 
-        // Escribir el log dentro de la misma transacción garantiza que si algo falla
-        // (ej. creación de la venta), el registro de auditoría también se revierte.
         if (data.auditLog) {
           await tx.auditLog.create({
             data: {
@@ -145,30 +192,28 @@ export class PrismaSaleDatasource implements SaleDatasource {
         }
       }
 
-      // 3. Crear la venta con sus ítems (y campos de cuotas si aplica)
+      const currencyCode = data.currencyCode ?? 'COP';
+
       const created = await tx.sale.create({
         data: {
           clientId: data.clientId,
           type: data.type,
-          // Venta en efectivo queda PAID de inmediato; crédito queda PENDING
           status: isCashSale ? SaleStatus.PAID : SaleStatus.PENDING,
           total: data.total,
-          // Campos de cuotas — se omiten del INSERT cuando no aplican (undefined → Prisma los ignora)
+          currencyCode,
           ...(data.installmentsCount !== undefined && {
             installmentsCount: data.installmentsCount,
             frequency: data.frequency,
             installmentAmount: data.installmentAmount,
           }),
-          // Días de cobro — opcionales, solo presentes cuando el vendedor los define
           ...(data.collectionDay !== undefined && { collectionDay: data.collectionDay }),
           ...(data.collectionDay2 !== undefined && { collectionDay2: data.collectionDay2 }),
-          // Cuota inicial — null cuando no se dio cuota inicial
           ...(data.initialPayment !== undefined && { initialPayment: data.initialPayment }),
-          // Fecha real de la venta — si no se provee, Prisma usa now()
           ...(data.createdAt !== undefined && { createdAt: data.createdAt }),
           items: {
             create: data.items.map((item) => ({
               productId: item.productId,
+              variantId: item.variantId!,
               quantity: item.quantity,
               basePrice: item.basePrice,
               unitPrice: item.unitPrice,
@@ -180,6 +225,38 @@ export class PrismaSaleDatasource implements SaleDatasource {
         include: SALE_WITH_ITEMS,
       });
 
+      if (!data.skipStockDecrement) {
+        for (const item of data.items) {
+          await tx.stockMovement.create({
+            data: {
+              productId: item.productId,
+              variantId: item.variantId!,
+              movementType: 'SALE_PHYSICAL_DECREMENT',
+              quantityDelta: -item.quantity,
+              refSaleId: created.id,
+            },
+          });
+        }
+      }
+
+      if (!isCashSale) {
+        const c = await tx.client.findUnique({
+          where: { id: data.clientId },
+          select: { balance: true },
+        });
+        await tx.ledgerEntry.create({
+          data: {
+            clientId: data.clientId,
+            saleId: created.id,
+            kind: 'CREDIT_SALE_OPENED',
+            delta: data.total,
+            balanceAfter: c!.balance,
+            currencyCode,
+            description: 'Cargo por venta a crédito',
+          },
+        });
+      }
+
       return created;
     });
 
@@ -190,15 +267,42 @@ export class PrismaSaleDatasource implements SaleDatasource {
     const isCreditSale = data.type === SaleType.CREDIT;
 
     const deleted = await prisma.$transaction(async (tx) => {
-      // 1. Restaurar stock de cada producto vendido
+      const sale = await tx.sale.findUnique({
+        where: { id },
+        include: SALE_WITH_ITEMS,
+      });
+      if (!sale) throw new Error(`Venta ${id} no encontrada para eliminar`);
+
       for (const item of data.items) {
         await tx.product.update({
           where: { id: item.productId },
           data: { stock: { increment: item.quantity } },
         });
+        const vid =
+          item.variantId ??
+          (
+            await tx.productVariant.findFirst({
+              where: { productId: item.productId, isDefault: true },
+              select: { id: true },
+            })
+          )?.id;
+        if (vid) {
+          await tx.productVariant.update({
+            where: { id: vid },
+            data: { stock: { increment: item.quantity } },
+          });
+        }
+        await tx.stockMovement.create({
+          data: {
+            productId: item.productId,
+            variantId: vid ?? null,
+            movementType: 'SALE_PHYSICAL_RESTORE',
+            quantityDelta: item.quantity,
+            refSaleId: id,
+          },
+        });
       }
 
-      // 2. Si era venta a crédito: revertir el incremento de balance y registrar en auditoría
       if (isCreditSale) {
         await tx.client.update({
           where: { id: data.clientId },
@@ -217,14 +321,23 @@ export class PrismaSaleDatasource implements SaleDatasource {
             },
           });
         }
-      }
 
-      // 3. Eliminar ítems de la venta y luego la venta (orden requerido por FK)
-      //    Se devuelve la venta con sus ítems antes de borrar para retornarla al caller.
-      const sale = await tx.sale.findUnique({
-        where: { id },
-        include: SALE_WITH_ITEMS,
-      });
+        const c = await tx.client.findUnique({
+          where: { id: data.clientId },
+          select: { balance: true },
+        });
+        await tx.ledgerEntry.create({
+          data: {
+            clientId: data.clientId,
+            saleId: id,
+            kind: 'CREDIT_SALE_REVERSED',
+            delta: -data.total,
+            balanceAfter: c!.balance,
+            currencyCode: sale?.currencyCode ?? 'COP',
+            description: 'Reversión por eliminación de venta a crédito',
+          },
+        });
+      }
 
       await tx.saleItem.deleteMany({ where: { saleId: id } });
       await tx.sale.delete({ where: { id } });

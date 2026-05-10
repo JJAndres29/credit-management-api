@@ -8,10 +8,11 @@ export class PaymentEntity {
     public readonly note: string | null,
     public readonly createdAt: Date,
     public readonly clientDocumentNumber: string | null = null,
+    public readonly currencyCode: string = 'COP',
   ) {}
 
   static fromObject(object: Record<string, unknown>): PaymentEntity {
-    const { id, clientId, saleId, amount, note, createdAt, client, sale } = object;
+    const { id, clientId, saleId, amount, note, createdAt, client, sale, currencyCode } = object;
 
     if (!id) throw new Error('Payment id is required');
     if (!clientId) throw new Error('Payment clientId is required');
@@ -36,6 +37,7 @@ export class PaymentEntity {
       (note as string | null) ?? null,
       (createdAt as Date) ?? new Date(),
       clientDocumentNumber,
+      (currencyCode as string | undefined) ?? 'COP',
     );
   }
 }

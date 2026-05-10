@@ -37,6 +37,8 @@ export interface SaleCreateData {
     appliedRule: string | null;
     /** Presente solo cuando el vendedor crea el producto inline al registrar la venta. */
     newProduct?: { name: string; stock: number };
+    /** P2: opcional; el datasource completa con variante default si falta */
+    variantId?: string;
   }[];
   auditLog?: AuditLogData;
   /** Número de cuotas pactadas. Solo presente si la venta tiene plan de cuotas. */
@@ -62,6 +64,7 @@ export interface SaleCreateData {
    * Permite registrar ventas de días anteriores o corregir la fecha por error de digitación.
    */
   createdAt?: Date;
+  currencyCode?: string;
 }
 
 export interface SaleUpdateData {
@@ -87,8 +90,8 @@ export interface SaleUpdateData {
  * `auditLog` solo se incluye en ventas CREDIT (las únicas que modificaron el balance del cliente).
  */
 export interface SaleDeleteData {
-  /** Ítems de la venta — para restaurar el stock de cada producto. */
-  items: { productId: string; quantity: number }[];
+  /** Ítems de la venta — para restaurar el stock de cada producto y variante default. */
+  items: { productId: string; quantity: number; variantId?: string | null }[];
   /** clientId — para decrementar el balance si es venta CREDIT. */
   clientId: string;
   /** Total de la venta — monto a revertir en el balance del cliente (solo CREDIT). */

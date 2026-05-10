@@ -47,6 +47,7 @@ export class DeleteSaleUseCase {
     const items = (sale.items ?? []).map((item) => ({
       productId: item.productId,
       quantity: item.quantity,
+      variantId: item.variantId,
     }));
 
     return this.saleRepository.delete(saleId, {

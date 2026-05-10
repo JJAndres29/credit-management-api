@@ -73,7 +73,9 @@ export class UpdateOnlineOrderStatusUseCase {
     let allOk = true;
     for (const item of order.items) {
       try {
-        await this.productCatalogPort!.incrementStock(item.productId, item.quantity);
+        await this.productCatalogPort!.incrementStock(item.productId, item.quantity, {
+          orderId: order.id,
+        });
       } catch (err) {
         allOk = false;
         this.logger?.error('[UpdateOnlineOrderStatus] Fallo incrementStock', err, {
@@ -102,6 +104,7 @@ export class UpdateOnlineOrderStatusUseCase {
         clientId,
         type: SaleType.CASH,
         total: order.totalAmount,
+        currencyCode: order.currencyCode,
         items: order.items.map((item) => ({
           productId: item.productId,
           quantity: item.quantity,

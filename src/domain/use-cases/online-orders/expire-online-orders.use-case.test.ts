@@ -94,9 +94,9 @@ describe('ExpireOnlineOrdersUseCase', () => {
     const result = await useCase.execute();
 
     expect(result).toEqual({ scanned: 2, expired: 2, skipped: 0, errors: 0 });
-    expect(mockCatalog.incrementStock).toHaveBeenCalledWith('p1', 2);
-    expect(mockCatalog.incrementStock).toHaveBeenCalledWith('p2', 5);
-    expect(mockCatalog.incrementStock).toHaveBeenCalledWith('p3', 1);
+    expect(mockCatalog.incrementStock).toHaveBeenCalledWith('p1', 2, { orderId: 'o1' });
+    expect(mockCatalog.incrementStock).toHaveBeenCalledWith('p2', 5, { orderId: 'o2' });
+    expect(mockCatalog.incrementStock).toHaveBeenCalledWith('p3', 1, { orderId: 'o2' });
     expect(mockRepo.markStockRestored).toHaveBeenCalledWith('o1');
     expect(mockRepo.markStockRestored).toHaveBeenCalledWith('o2');
   });
@@ -143,7 +143,7 @@ describe('ExpireOnlineOrdersUseCase', () => {
     expect(result.scanned).toBe(2);
     expect(result.expired).toBe(1);
     expect(result.errors).toBe(1);
-    expect(mockCatalog.incrementStock).toHaveBeenCalledWith('p2', 1);
+    expect(mockCatalog.incrementStock).toHaveBeenCalledWith('p2', 1, { orderId: 'o2' });
     expect(mockCatalog.incrementStock).toHaveBeenCalledTimes(1);
   });
 

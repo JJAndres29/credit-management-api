@@ -4,6 +4,7 @@ import { OnlineOrderEntity } from '../entities/online-order.entity';
 
 export type OnlineOrderItemCreateData = {
   productId: string;
+  variantId: string;
   quantity: number;
   unitPrice: number;
   productNameSnapshot: string;
@@ -16,6 +17,12 @@ export type OnlineOrderCreateData = {
   guestEmail: string | null;
   shippingAddress: string;
   totalAmount: number;
+  /** Net of IVA (tax-exclusive subtotal) — null for legacy callers */
+  subtotalAmount: number | null;
+  taxAmount: number | null;
+  shippingAmount: number | null;
+  discountAmount: number | null;
+  currencyCode: string;
   paymentMethod: string;
   expiresAt: Date;
   items: OnlineOrderItemCreateData[];

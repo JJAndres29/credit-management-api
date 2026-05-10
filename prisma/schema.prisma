@@ -35,6 +35,44 @@ enum DocumentType {
   CE  // Cédula de extranjería
 }
 
+// --- P2: core commerce / accounting (expand-only; dual-write with legacy fields) ---
+
+enum LedgerEntryKind {
+  CREDIT_SALE_OPENED
+  PAYMENT_RECEIVED
+  PAYMENT_ADJUSTED
+  PAYMENT_REMOVED
+  CREDIT_SALE_REVERSED
+  MANUAL_ADJUSTMENT
+}
+
+enum StockMovementType {
+  SALE_PHYSICAL_DECREMENT
+  SALE_PHYSICAL_RESTORE
+  SALE_ONLINE_RESERVE
+  SALE_ONLINE_RELEASE
+  ADJUSTMENT
+}
+
+enum AssetType {
+  IMAGE
+  VIDEO
+}
+
+enum ElectronicInvoiceType {
+  INVOICE
+  CREDIT_NOTE
+  DEBIT_NOTE
+}
+
+enum ElectronicInvoiceStatus {
+  DRAFT
+  SENT
+  ACCEPTED
+  REJECTED
+  DELIVERED
+}
+
 model User {
   id        String   @id @default(uuid())
   name      String
@@ -68,6 +106,8 @@ model Client {
   auditLogs         AuditLog[]
   notificationLogs  NotificationLog[]
   customer          Customer?
+  ledgerEntries     LedgerEntry[]
+  fiscalData        CustomerFiscalData?
 }
 
 model Product {
@@ -79,6 +119,10 @@ model Product {
   investmentCost Decimal? @db.Decimal(10, 2)
   isActive       Boolean  @default(true)
   categoryId     String?
+  /// ISO 4217; dual-write with ProductVariant for future multi-SKU storefront
+  currencyCode   String   @default("COP")
+  /// IVA % override (e.g. 19, 5, 0). Null → inherit Category.ivaRate or platform default in app code
+  ivaRate        Decimal? @db.Decimal(5, 2)
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -87,11 +131,16 @@ model Product {
   saleItems        SaleItem[]
   attributes       ProductAttribute[]
   onlineOrderItems OnlineOrderItem[]
+  variants         ProductVariant[]
+  assets           ProductAsset[]
+  stockMovements   StockMovement[]
 }
 
 model Category {
   id        String   @id @default(uuid())
   name      String   @unique
+  /// Default IVA % for products in this category (Colombia: 19 / 5 / 0). Null → app default (19).
+  ivaRate   Decimal? @db.Decimal(5, 2)
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -145,6 +194,65 @@ model ProductImage {
   product Product @relation(fields: [productId], references: [id])
 }
 
+/// P2: SKU-level inventory (dual-write with Product.stock until reads switch to variant-only)
+model ProductVariant {
+  id             String   @id @default(uuid())
+  productId      String
+  sku            String?  @unique
+  slug           String?  @unique
+  label          String?
+  stock          Int      @default(0)
+  retailPrice    Decimal? @db.Decimal(10, 2)
+  investmentCost Decimal? @db.Decimal(10, 2)
+  currencyCode   String   @default("COP")
+  isDefault      Boolean  @default(false)
+  isActive       Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  product          Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  saleItems        SaleItem[]
+  onlineOrderItems OnlineOrderItem[]
+  stockMovements   StockMovement[]
+  assets           ProductAsset[]
+
+  @@index([productId, isDefault])
+}
+
+/// P2: richer media metadata (multi-size URLs can be added without breaking existing ProductImage)
+model ProductAsset {
+  id                 String    @id @default(uuid())
+  productId          String
+  variantId          String?
+  type               AssetType @default(IMAGE)
+  position           Int       @default(0)
+  altText            String?
+  urlOriginal        String
+  cloudinaryPublicId String
+  createdAt          DateTime  @default(now())
+
+  product Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+}
+
+model StockMovement {
+  id            String            @id @default(uuid())
+  productId     String
+  variantId     String?
+  movementType  StockMovementType
+  quantityDelta Int
+  refSaleId     String?
+  refOrderId    String?
+  note          String?
+  createdAt     DateTime          @default(now())
+
+  product Product         @relation(fields: [productId], references: [id], onDelete: Cascade)
+  variant ProductVariant? @relation(fields: [variantId], references: [id], onDelete: SetNull)
+
+  @@index([productId, createdAt])
+  @@index([variantId, createdAt])
+}
+
 model Sale {
   id                String                @id @default(uuid())
   saleNumber        Int                   @unique @default(autoincrement())
@@ -152,6 +260,7 @@ model Sale {
   type              SaleType
   status            SaleStatus            @default(PENDING)
   total             Decimal               @db.Decimal(10, 2)
+  currencyCode      String                @default("COP")
   installmentsCount Int?                  // Null para ventas sin plan de cuotas
   frequency         InstallmentFrequency? // MONTHLY | BIWEEKLY — null si no es venta en cuotas
   installmentAmount Decimal?              @db.Decimal(10, 2) // (total - initialPayment) / installmentsCount
@@ -160,9 +269,11 @@ model Sale {
   collectionDay2    Int?                  // Segundo día de cobro para planes BIWEEKLY. Ej: 15 → cobra el 15 y el collectionDay
   createdAt         DateTime              @default(now())
 
-  client   Client     @relation(fields: [clientId], references: [id])
-  items    SaleItem[]
-  payments Payment[]
+  client         Client         @relation(fields: [clientId], references: [id])
+  items               SaleItem[]
+  payments            Payment[]
+  ledgerEntries       LedgerEntry[]
+  electronicInvoices  ElectronicInvoice[]
 
   // Partial composite index on (type, status, collectionDay) WHERE installmentsCount IS NOT NULL.
   // Prisma DSL does not support partial indexes — managed by raw migration
@@ -173,26 +284,33 @@ model SaleItem {
   id          String   @id @default(uuid())
   saleId      String
   productId   String
+  /// P2 dual-write: default variant for this product at sale time (nullable for pre-P2 rows)
+  variantId   String?
   quantity    Int
   basePrice   Decimal? @db.Decimal(10, 2) // Precio base del producto al momento de la venta (snapshot)
   unitPrice   Decimal  @db.Decimal(10, 2) // Precio final aplicado (puede incluir recargo de crédito)
   subtotal    Decimal  @db.Decimal(10, 2)
   appliedRule String?                     // Regla de pricing aplicada: "CASH_BASE" | "CREDIT_SURCHARGE_15PCT" | etc.
 
-  sale    Sale    @relation(fields: [saleId], references: [id])
-  product Product @relation(fields: [productId], references: [id])
+  sale    Sale           @relation(fields: [saleId], references: [id])
+  product Product        @relation(fields: [productId], references: [id])
+  variant ProductVariant? @relation(fields: [variantId], references: [id])
+
+  @@index([variantId])
 }
 
 model Payment {
-  id        String   @id @default(uuid())
-  clientId  String
-  saleId    String?
-  amount    Decimal  @db.Decimal(10, 2)
-  note      String?
-  createdAt DateTime @default(now())
+  id           String   @id @default(uuid())
+  clientId     String
+  saleId       String?
+  amount       Decimal  @db.Decimal(10, 2)
+  currencyCode String   @default("COP")
+  note         String?
+  createdAt    DateTime @default(now())
 
-  client Client @relation(fields: [clientId], references: [id])
-  sale   Sale?  @relation(fields: [saleId], references: [id])
+  client        Client        @relation(fields: [clientId], references: [id])
+  sale          Sale?         @relation(fields: [saleId], references: [id])
+  ledgerEntries LedgerEntry[]
 
   // Composite index: accelerates bulk-load of payments by saleId (used by dashboard & GetCollectionsUseCase).
   // Created by migration 20260506000000_add_active_credit_sales_index.
@@ -239,8 +357,9 @@ model Customer {
   createdAt          DateTime @default(now())
   updatedAt          DateTime @updatedAt
 
-  client             Client?       @relation(fields: [clientId], references: [id])
+  client             Client?              @relation(fields: [clientId], references: [id])
   onlineOrders       OnlineOrder[]
+  fiscalData         CustomerFiscalData?
 }
 
 enum OrderStatus {
@@ -248,6 +367,11 @@ enum OrderStatus {
   PAID
   EXPIRED
   CANCELLED
+  PROCESSING
+  SHIPPED
+  DELIVERED
+  RETURNED
+  REFUNDED
 }
 
 enum OrderPaymentMethod {
@@ -264,7 +388,14 @@ model OnlineOrder {
   guestEmail              String?
   shippingAddress         String
   status                  OrderStatus        @default(PENDING_PAYMENT)
+  /// Gross total charged (tax-inclusive line totals); legacy rows backfilled from totalAmount
   totalAmount             Decimal            @db.Decimal(10, 2)
+  /// Net of tax (derived); nullable for legacy rows
+  subtotalAmount          Decimal?           @db.Decimal(10, 2)
+  taxAmount               Decimal?           @db.Decimal(10, 2)
+  shippingAmount          Decimal?           @db.Decimal(10, 2)
+  discountAmount          Decimal?           @db.Decimal(10, 2)
+  currencyCode            String             @default("COP")
   paymentMethod           OrderPaymentMethod
   paymentGatewayReference String?            @unique
   paymentUrl              String?
@@ -277,8 +408,11 @@ model OnlineOrder {
   deviceFingerprintHash   String?
   createdAt               DateTime           @default(now())
 
-  customer Customer?        @relation(fields: [customerId], references: [id], onDelete: SetNull)
-  items    OnlineOrderItem[]
+  customer      Customer?       @relation(fields: [customerId], references: [id], onDelete: SetNull)
+  items         OnlineOrderItem[]
+  events        OrderEvent[]
+  ledgerEntries LedgerEntry[]
+  invoices      ElectronicInvoice[]
 
   @@index([status, expiresAt], map: "OnlineOrder_pending_expired_idx")
 }
@@ -319,10 +453,152 @@ model OnlineOrderItem {
   id                  String  @id @default(uuid())
   orderId             String
   productId           String
+  variantId           String?
   quantity            Int
   unitPrice           Decimal @db.Decimal(10, 2)
   productNameSnapshot String
 
-  order   OnlineOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
-  product Product     @relation(fields: [productId], references: [id])
+  order   OnlineOrder    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product Product        @relation(fields: [productId], references: [id])
+  variant ProductVariant? @relation(fields: [variantId], references: [id])
+
+  @@index([variantId])
+}
+
+/// P2: append-only style audit of order status transitions (operational, not financial)
+model OrderEvent {
+  id         String       @id @default(uuid())
+  orderId    String
+  fromStatus OrderStatus?
+  toStatus   OrderStatus
+  actor      String?
+  metadata   Json?
+  createdAt  DateTime     @default(now())
+
+  order OnlineOrder @relation(fields: [orderId], references: [id], onDelete: Cascade)
+
+  @@index([orderId, createdAt])
+}
+
+/// P2: financial ledger (append-only; Client.balance remains materialized until a later contract phase)
+model LedgerEntry {
+  id             String          @id @default(uuid())
+  clientId       String
+  saleId         String?
+  paymentId      String?
+  onlineOrderId  String?
+  kind           LedgerEntryKind
+  /// Signed: positive increases amount owed, negative decreases (payment)
+  delta          Decimal         @db.Decimal(15, 2)
+  balanceAfter   Decimal         @db.Decimal(15, 2)
+  currencyCode   String          @default("COP")
+  description    String          @db.VarChar(500)
+  createdAt      DateTime        @default(now())
+
+  client Client      @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  sale   Sale?       @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  payment Payment?   @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+  order   OnlineOrder? @relation(fields: [onlineOrderId], references: [id], onDelete: SetNull)
+
+  @@index([clientId, createdAt])
+  @@index([saleId])
+  @@index([paymentId])
+}
+
+/// P2: DIAN numbering container (integration P6 — schema only here)
+model DianResolution {
+  id                 String   @id @default(uuid())
+  prefix             String
+  rangeFrom          Int
+  rangeTo            Int
+  validFrom          DateTime
+  validUntil         DateTime
+  resolutionNumber   String
+  technicalKey       String?
+  isActive           Boolean  @default(true)
+  currentConsecutive Int      @default(0)
+  createdAt          DateTime @default(now())
+  updatedAt          DateTime @updatedAt
+
+  invoices ElectronicInvoice[]
+}
+
+model ElectronicInvoice {
+  id                 String                 @id @default(uuid())
+  saleId             String?                @unique
+  onlineOrderId      String?                @unique
+  resolutionId       String?
+  prefix             String?
+  consecutive        Int?
+  cufe               String?                @unique
+  issueDate          DateTime?
+  type               ElectronicInvoiceType  @default(INVOICE)
+  customerNit        String?
+  customerDocumentType String?
+  customerLegalName  String?
+  customerEmail      String?
+  customerAddress    String?
+  subtotal           Decimal?               @db.Decimal(15, 2)
+  totalIva           Decimal?               @db.Decimal(15, 2)
+  totalRetention     Decimal?               @db.Decimal(15, 2)
+  total              Decimal?               @db.Decimal(15, 2)
+  status             ElectronicInvoiceStatus @default(DRAFT)
+  providerResponse   Json?
+  providerTrackId    String?
+  pdfUrl             String?
+  xmlUrl             String?
+  sentToCustomerAt   DateTime?
+  createdAt          DateTime               @default(now())
+  updatedAt          DateTime               @updatedAt
+
+  sale        Sale?          @relation(fields: [saleId], references: [id], onDelete: SetNull)
+  onlineOrder OnlineOrder?   @relation(fields: [onlineOrderId], references: [id], onDelete: SetNull)
+  resolution  DianResolution? @relation(fields: [resolutionId], references: [id], onDelete: SetNull)
+  items       ElectronicInvoiceItem[]
+  auditTrail  InvoiceAuditLog[]
+}
+
+model ElectronicInvoiceItem {
+  id          String   @id @default(uuid())
+  invoiceId   String
+  description String
+  quantity    Int
+  unitPrice   Decimal  @db.Decimal(15, 2)
+  ivaRate     Decimal? @db.Decimal(5, 2)
+  ivaAmount   Decimal? @db.Decimal(15, 2)
+  subtotal    Decimal  @db.Decimal(15, 2)
+  total       Decimal  @db.Decimal(15, 2)
+
+  invoice ElectronicInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+model InvoiceAuditLog {
+  id         String                  @id @default(uuid())
+  invoiceId  String
+  fromStatus ElectronicInvoiceStatus?
+  toStatus   ElectronicInvoiceStatus
+  detail     String?
+  createdAt  DateTime                @default(now())
+
+  invoice ElectronicInvoice @relation(fields: [invoiceId], references: [id], onDelete: Cascade)
+}
+
+/// Fiscal profile for B2C (Customer) or B2B staff Client — at most one row per side
+model CustomerFiscalData {
+  id             String       @id @default(uuid())
+  customerId     String?      @unique
+  clientId       String?      @unique
+  documentType   String
+  documentNumber String
+  legalName      String
+  dvCode         String?
+  regimeType     String?
+  taxAddress     String?
+  taxCity        String?
+  taxDepartment  String?
+  createdAt      DateTime     @default(now())
+  updatedAt      DateTime     @updatedAt
+
+  customer Customer? @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  client   Client?   @relation(fields: [clientId], references: [id], onDelete: Cascade)
 }

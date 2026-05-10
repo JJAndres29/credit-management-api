@@ -108,6 +108,7 @@ export class PrismaPaymentDatasource implements PaymentDatasource {
           saleId: data.saleId ?? null,
           amount: data.amount,
           note: data.note ?? null,
+          currencyCode: data.currencyCode ?? 'COP',
           // Fecha real del pago — si no se provee, Prisma usa now()
           ...(data.createdAt !== undefined && { createdAt: data.createdAt }),
         },
@@ -117,6 +118,11 @@ export class PrismaPaymentDatasource implements PaymentDatasource {
       await tx.client.update({
         where: { id: data.clientId },
         data: { balance: { decrement: data.amount } },
+      });
+
+      const clientAfter = await tx.client.findUnique({
+        where: { id: data.clientId },
+        select: { balance: true },
       });
 
       // 3. Registrar en auditoría dentro de la misma transacción.
@@ -129,6 +135,19 @@ export class PrismaPaymentDatasource implements PaymentDatasource {
           before: data.auditLog.before,
           after: data.auditLog.after,
           ip: data.auditLog.ip,
+        },
+      });
+
+      await tx.ledgerEntry.create({
+        data: {
+          clientId: data.clientId,
+          paymentId: created.id,
+          saleId: data.saleId ?? undefined,
+          kind: 'PAYMENT_RECEIVED',
+          delta: -data.amount,
+          balanceAfter: clientAfter!.balance,
+          currencyCode: data.currencyCode ?? 'COP',
+          description: 'Abono a cartera',
         },
       });
 
@@ -202,6 +221,24 @@ export class PrismaPaymentDatasource implements PaymentDatasource {
           },
         });
 
+        const clientAfterAdj = await tx.client.findUnique({
+          where: { id: existing.clientId },
+          select: { balance: true },
+        });
+
+        await tx.ledgerEntry.create({
+          data: {
+            clientId: existing.clientId,
+            paymentId: id,
+            saleId: existing.saleId ?? undefined,
+            kind: 'PAYMENT_ADJUSTED',
+            delta,
+            balanceAfter: clientAfterAdj!.balance,
+            currencyCode: existing.currencyCode,
+            description: 'Ajuste de monto de pago',
+          },
+        });
+
         // Recalcular estado de la venta si el pago está asociado a una
         if (existing.saleId && data.saleTotal !== undefined) {
           const aggregate = await tx.payment.aggregate({
@@ -235,13 +272,15 @@ export class PrismaPaymentDatasource implements PaymentDatasource {
       const existing = await tx.payment.findUnique({ where: { id } });
       if (!existing) throw new Error(`Pago ${id} no encontrado en la transacción`);
 
-      // Eliminar el pago
-      const deleted = await tx.payment.delete({ where: { id } });
-
       // Revertir el balance del cliente (el pago ya no existe, vuelve a deber ese monto)
       await tx.client.update({
         where: { id: existing.clientId },
         data: { balance: { increment: Number(existing.amount) } },
+      });
+
+      const clientAfterDel = await tx.client.findUnique({
+        where: { id: existing.clientId },
+        select: { balance: true },
       });
 
       // Registrar en auditoría
@@ -255,6 +294,22 @@ export class PrismaPaymentDatasource implements PaymentDatasource {
           ip: data.auditLog.ip,
         },
       });
+
+      await tx.ledgerEntry.create({
+        data: {
+          clientId: existing.clientId,
+          paymentId: id,
+          saleId: existing.saleId ?? undefined,
+          kind: 'PAYMENT_REMOVED',
+          delta: Number(existing.amount),
+          balanceAfter: clientAfterDel!.balance,
+          currencyCode: existing.currencyCode,
+          description: 'Eliminación de abono',
+        },
+      });
+
+      // Eliminar el pago
+      const deleted = await tx.payment.delete({ where: { id } });
 
       // Recalcular estado de la venta si el pago estaba asociado a una
       if (existing.saleId && data.saleTotal !== undefined) {

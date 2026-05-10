@@ -174,8 +174,12 @@ describe('ProcessPaymentWebhookUseCase', () => {
 
     expect(result).toBe('cancelled');
     expect(mockRepo.markAsCancelled).toHaveBeenCalledWith('order-uuid-1', { provider: 'mercadopago', eventId: 'ev-1' });
-    expect(mockCatalog.incrementStock).toHaveBeenCalledWith('prod-A', 3);
-    expect(mockCatalog.incrementStock).toHaveBeenCalledWith('prod-B', 1);
+    expect(mockCatalog.incrementStock).toHaveBeenCalledWith('prod-A', 3, {
+      orderId: 'order-uuid-1',
+    });
+    expect(mockCatalog.incrementStock).toHaveBeenCalledWith('prod-B', 1, {
+      orderId: 'order-uuid-1',
+    });
     expect(mockCatalog.incrementStock).toHaveBeenCalledTimes(2);
     expect(mockRepo.markStockRestored).toHaveBeenCalledWith('order-uuid-1');
   });
