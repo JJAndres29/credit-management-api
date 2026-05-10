@@ -37,6 +37,7 @@ export interface PaymentCreateData {
   auditLog: AuditLogData;
   /** Fecha real en que se realizó el pago. Si no se provee, Prisma usa now(). */
   createdAt?: Date;
+  currencyCode?: string;
 }
 
 /**

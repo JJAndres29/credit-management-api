@@ -16,3 +16,11 @@ export { MonthlySummaryPort } from './monthly-summary.port';
 export type { MonthlySummaryResult } from './monthly-summary.port';
 export { FeatureFlagKey } from './feature-flag.port';
 export type { FeatureFlag, FeatureFlagPort, UpdateFeatureFlagData } from './feature-flag.port';
+export {
+  ElectronicInvoiceProviderPort,
+} from './electronic-invoice-provider.port';
+export type {
+  ElectronicInvoiceDispatchPayload,
+  ElectronicInvoiceDispatchResult,
+} from './electronic-invoice-provider.port';
+export { DEFAULT_IVA_PERCENT, resolveIvaPercent, splitGrossLineIntoNetAndTax } from './tax';

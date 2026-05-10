@@ -5,6 +5,7 @@ import { OnlineOrderRepository } from '../../repositories/online-order.repositor
 import { ProductCatalogPort } from '../../services/product-catalog.port';
 import { IPaymentGateway } from '../../services/payment-gateway.port';
 import { FeatureFlagKey, FeatureFlagPort } from '../../services';
+import { resolveIvaPercent, splitGrossLineIntoNetAndTax } from '../../services/tax';
 
 const EXPIRY_MINUTES: Record<OrderPaymentMethod, number> = {
   [OrderPaymentMethod.ONLINE_GATEWAY]: 30,
@@ -57,10 +58,14 @@ export class CreateOnlineOrderUseCase {
 
     const enriched: Array<{
       productId: string;
+      variantId: string;
       quantity: number;
       unitPrice: number;
       productNameSnapshot: string;
     }> = [];
+
+    let subtotalNet = 0;
+    let taxTotal = 0;
 
     for (const item of dto.items) {
       const product = await this.productCatalogPort.getForOrder(item.productId);
@@ -76,9 +81,21 @@ export class CreateOnlineOrderUseCase {
           `El producto "${product.name}" no tiene precio de venta en línea configurado`,
         );
       }
+      if (!product.defaultVariantId) {
+        throw CustomError.internalServer(
+          `Producto "${product.name}" sin variante por defecto — ejecute migración P2 o recree el producto`,
+        );
+      }
+
+      const ivaPercent = resolveIvaPercent(product.productIvaRate, product.categoryIvaRate);
+      const grossLine = Math.round(product.retailPrice * item.quantity * 100) / 100;
+      const { net, tax } = splitGrossLineIntoNetAndTax(grossLine, ivaPercent);
+      subtotalNet = Math.round((subtotalNet + net) * 100) / 100;
+      taxTotal = Math.round((taxTotal + tax) * 100) / 100;
 
       enriched.push({
         productId: item.productId,
+        variantId: product.defaultVariantId,
         quantity: item.quantity,
         unitPrice: product.retailPrice,
         productNameSnapshot: product.name,
@@ -100,6 +117,11 @@ export class CreateOnlineOrderUseCase {
       guestEmail: dto.guestEmail,
       shippingAddress: dto.shippingAddress,
       totalAmount,
+      subtotalAmount: subtotalNet,
+      taxAmount: taxTotal,
+      shippingAmount: 0,
+      discountAmount: 0,
+      currencyCode: 'COP',
       paymentMethod: dto.paymentMethod,
       expiresAt,
       items: enriched,

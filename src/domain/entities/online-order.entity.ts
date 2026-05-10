@@ -3,6 +3,11 @@ export enum OrderStatus {
   PAID = 'PAID',
   EXPIRED = 'EXPIRED',
   CANCELLED = 'CANCELLED',
+  PROCESSING = 'PROCESSING',
+  SHIPPED = 'SHIPPED',
+  DELIVERED = 'DELIVERED',
+  RETURNED = 'RETURNED',
+  REFUNDED = 'REFUNDED',
 }
 
 export enum OrderPaymentMethod {
@@ -18,6 +23,7 @@ export class OnlineOrderItemEntity {
     public readonly quantity: number,
     public readonly unitPrice: number,
     public readonly productNameSnapshot: string,
+    public readonly variantId: string | null = null,
   ) {}
 
   toJSON() {
@@ -25,6 +31,7 @@ export class OnlineOrderItemEntity {
       id: this.id,
       orderId: this.orderId,
       productId: this.productId,
+      variantId: this.variantId,
       quantity: this.quantity,
       unitPrice: this.unitPrice,
       productNameSnapshot: this.productNameSnapshot,
@@ -32,7 +39,7 @@ export class OnlineOrderItemEntity {
   }
 
   static fromObject(object: Record<string, unknown>): OnlineOrderItemEntity {
-    const { id, orderId, productId, quantity, unitPrice, productNameSnapshot } = object;
+    const { id, orderId, productId, quantity, unitPrice, productNameSnapshot, variantId } = object;
     if (!id) throw new Error('OnlineOrderItem id is required');
     return new OnlineOrderItemEntity(
       id as string,
@@ -41,6 +48,7 @@ export class OnlineOrderItemEntity {
       Number(quantity),
       Number(unitPrice),
       productNameSnapshot as string,
+      (variantId as string | null | undefined) ?? null,
     );
   }
 }
@@ -75,6 +83,11 @@ export class OnlineOrderEntity {
     public readonly ipAddress: string | null = null,
     public readonly userAgent: string | null = null,
     public readonly deviceFingerprintHash: string | null = null,
+    public readonly subtotalAmount: number | null = null,
+    public readonly taxAmount: number | null = null,
+    public readonly shippingAmount: number | null = null,
+    public readonly discountAmount: number | null = null,
+    public readonly currencyCode: string = 'COP',
   ) {}
 
   toJSON() {
@@ -89,6 +102,11 @@ export class OnlineOrderEntity {
       shippingAddress: this.shippingAddress,
       status: this.status,
       totalAmount: this.totalAmount,
+      subtotalAmount: this.subtotalAmount,
+      taxAmount: this.taxAmount,
+      shippingAmount: this.shippingAmount,
+      discountAmount: this.discountAmount,
+      currencyCode: this.currencyCode,
       paymentMethod: this.paymentMethod,
       paymentGatewayReference: this.paymentGatewayReference,
       paymentUrl: this.paymentUrl,
@@ -110,6 +128,7 @@ export class OnlineOrderEntity {
       paymentGatewayReference, paymentUrl,
       expiresAt, paidAt, stockRestoredAt, ipAddress, userAgent, deviceFingerprintHash,
       createdAt, items, customer,
+      subtotalAmount, taxAmount, shippingAmount, discountAmount, currencyCode,
     } = object;
 
     if (!id) throw new Error('OnlineOrder id is required');
@@ -144,6 +163,11 @@ export class OnlineOrderEntity {
       (ipAddress as string | null | undefined) ?? null,
       (userAgent as string | null | undefined) ?? null,
       (deviceFingerprintHash as string | null | undefined) ?? null,
+      subtotalAmount != null ? Number(subtotalAmount) : null,
+      taxAmount != null ? Number(taxAmount) : null,
+      shippingAmount != null ? Number(shippingAmount) : null,
+      discountAmount != null ? Number(discountAmount) : null,
+      (currencyCode as string | undefined) ?? 'COP',
     );
   }
 }

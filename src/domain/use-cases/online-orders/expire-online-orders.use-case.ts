@@ -46,7 +46,9 @@ export class ExpireOnlineOrdersUseCase {
         let allRestored = true;
         for (const item of transitioned.items) {
           try {
-            await this.productCatalogPort.incrementStock(item.productId, item.quantity);
+            await this.productCatalogPort.incrementStock(item.productId, item.quantity, {
+              orderId: transitioned.id,
+            });
           } catch (err) {
             allRestored = false;
             errors++;

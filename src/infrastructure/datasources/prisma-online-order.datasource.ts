@@ -54,9 +54,23 @@ export class PrismaOnlineOrderDatasource implements OnlineOrderDatasource {
             `Stock insuficiente para el producto "${item.productNameSnapshot}"`,
           );
         }
+
+        const decV = await tx.productVariant.updateMany({
+          where: {
+            id: item.variantId,
+            productId: item.productId,
+            stock: { gte: item.quantity },
+          },
+          data: { stock: { decrement: item.quantity } },
+        });
+        if (decV.count === 0) {
+          throw CustomError.conflict(
+            `Stock insuficiente en variante para "${item.productNameSnapshot}"`,
+          );
+        }
       }
 
-      return tx.onlineOrder.create({
+      const created = await tx.onlineOrder.create({
         data: {
           customerId: data.customerId,
           guestName: data.guestName,
@@ -64,6 +78,11 @@ export class PrismaOnlineOrderDatasource implements OnlineOrderDatasource {
           guestEmail: data.guestEmail,
           shippingAddress: data.shippingAddress,
           totalAmount: data.totalAmount,
+          ...(data.subtotalAmount != null && { subtotalAmount: data.subtotalAmount }),
+          ...(data.taxAmount != null && { taxAmount: data.taxAmount }),
+          ...(data.shippingAmount != null && { shippingAmount: data.shippingAmount }),
+          ...(data.discountAmount != null && { discountAmount: data.discountAmount }),
+          currencyCode: data.currencyCode,
           paymentMethod: data.paymentMethod as never,
           expiresAt: data.expiresAt,
           ipAddress: data.ipAddress ?? undefined,
@@ -72,6 +91,7 @@ export class PrismaOnlineOrderDatasource implements OnlineOrderDatasource {
           items: {
             create: data.items.map((item) => ({
               productId: item.productId,
+              variantId: item.variantId,
               quantity: item.quantity,
               unitPrice: item.unitPrice,
               productNameSnapshot: item.productNameSnapshot,
@@ -80,6 +100,28 @@ export class PrismaOnlineOrderDatasource implements OnlineOrderDatasource {
         },
         include: includeItems,
       });
+
+      await tx.orderEvent.create({
+        data: {
+          orderId: created.id,
+          toStatus: 'PENDING_PAYMENT',
+          actor: 'checkout',
+        },
+      });
+
+      for (const item of data.items) {
+        await tx.stockMovement.create({
+          data: {
+            productId: item.productId,
+            variantId: item.variantId,
+            movementType: 'SALE_ONLINE_RESERVE',
+            quantityDelta: -item.quantity,
+            refOrderId: created.id,
+          },
+        });
+      }
+
+      return created;
     });
 
     return mapToEntity(order as unknown as Record<string, unknown>);
@@ -150,19 +192,51 @@ export class PrismaOnlineOrderDatasource implements OnlineOrderDatasource {
   }
 
   async markAsPaid(id: string, _webhookData: WebhookData): Promise<OnlineOrderEntity> {
-    const order = await prisma.onlineOrder.update({
-      where: { id },
-      data: { status: 'PAID', paidAt: new Date() },
-      include: includeItems,
+    const order = await prisma.$transaction(async (tx) => {
+      const cur = await tx.onlineOrder.findUnique({ where: { id } });
+      if (!cur) throw new Error(`OnlineOrder ${id} no encontrada`);
+
+      const updated = await tx.onlineOrder.update({
+        where: { id },
+        data: { status: 'PAID', paidAt: new Date() },
+        include: includeItems,
+      });
+
+      await tx.orderEvent.create({
+        data: {
+          orderId: id,
+          fromStatus: cur.status,
+          toStatus: 'PAID',
+          actor: 'payment_webhook',
+        },
+      });
+
+      return updated;
     });
     return mapToEntity(order as unknown as Record<string, unknown>);
   }
 
   async markAsCancelled(id: string, _webhookData: WebhookData): Promise<OnlineOrderEntity> {
-    const order = await prisma.onlineOrder.update({
-      where: { id },
-      data: { status: 'CANCELLED' },
-      include: includeItems,
+    const order = await prisma.$transaction(async (tx) => {
+      const cur = await tx.onlineOrder.findUnique({ where: { id } });
+      if (!cur) throw new Error(`OnlineOrder ${id} no encontrada`);
+
+      const updated = await tx.onlineOrder.update({
+        where: { id },
+        data: { status: 'CANCELLED' },
+        include: includeItems,
+      });
+
+      await tx.orderEvent.create({
+        data: {
+          orderId: id,
+          fromStatus: cur.status,
+          toStatus: 'CANCELLED',
+          actor: 'payment_webhook',
+        },
+      });
+
+      return updated;
     });
     return mapToEntity(order as unknown as Record<string, unknown>);
   }
@@ -195,10 +269,26 @@ export class PrismaOnlineOrderDatasource implements OnlineOrderDatasource {
   }
 
   async updateStatus(id: string, status: string): Promise<OnlineOrderEntity> {
-    const order = await prisma.onlineOrder.update({
-      where: { id },
-      data: { status: status as never },
-      include: includeItems,
+    const order = await prisma.$transaction(async (tx) => {
+      const cur = await tx.onlineOrder.findUnique({ where: { id } });
+      if (!cur) throw new Error(`OnlineOrder ${id} no encontrada`);
+
+      const updated = await tx.onlineOrder.update({
+        where: { id },
+        data: { status: status as never },
+        include: includeItems,
+      });
+
+      await tx.orderEvent.create({
+        data: {
+          orderId: id,
+          fromStatus: cur.status,
+          toStatus: status as never,
+          actor: 'staff_api',
+        },
+      });
+
+      return updated;
     });
     return mapToEntity(order as unknown as Record<string, unknown>);
   }
@@ -207,18 +297,31 @@ export class PrismaOnlineOrderDatasource implements OnlineOrderDatasource {
     id: string,
     newStatus: 'CANCELLED' | 'EXPIRED',
   ): Promise<OnlineOrderEntity | null> {
-    // updateMany with a status guard is the atomic operation that prevents
-    // a race with the webhook handler (which would mark as PAID).
-    const result = await prisma.onlineOrder.updateMany({
-      where: { id, status: 'PENDING_PAYMENT' },
-      data: { status: newStatus as never },
-    });
-    if (result.count === 0) return null;
+    const order = await prisma.$transaction(async (tx) => {
+      const result = await tx.onlineOrder.updateMany({
+        where: { id, status: 'PENDING_PAYMENT' },
+        data: { status: newStatus as never },
+      });
+      if (result.count === 0) return null;
 
-    const order = await prisma.onlineOrder.findUnique({
-      where: { id },
-      include: includeItems,
+      const o = await tx.onlineOrder.findUnique({
+        where: { id },
+        include: includeItems,
+      });
+      if (!o) return null;
+
+      await tx.orderEvent.create({
+        data: {
+          orderId: id,
+          fromStatus: 'PENDING_PAYMENT',
+          toStatus: newStatus as never,
+          actor: 'expiry_or_admin',
+        },
+      });
+
+      return o;
     });
+
     if (!order) return null;
     return mapToEntity(order as unknown as Record<string, unknown>);
   }

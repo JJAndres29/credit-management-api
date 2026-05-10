@@ -102,8 +102,12 @@ describe('UpdateOnlineOrderStatusUseCase — stock restoration', () => {
     const result = await useCase.execute('order-uuid-1', dto('CANCELLED'));
 
     expect(mockRepo.tryCancelOrExpirePending).toHaveBeenCalledWith('order-uuid-1', 'CANCELLED');
-    expect(mockCatalog.incrementStock).toHaveBeenCalledWith('prod-A', 3);
-    expect(mockCatalog.incrementStock).toHaveBeenCalledWith('prod-B', 1);
+    expect(mockCatalog.incrementStock).toHaveBeenCalledWith('prod-A', 3, {
+      orderId: 'order-uuid-1',
+    });
+    expect(mockCatalog.incrementStock).toHaveBeenCalledWith('prod-B', 1, {
+      orderId: 'order-uuid-1',
+    });
     expect(mockCatalog.incrementStock).toHaveBeenCalledTimes(2);
     expect(mockRepo.markStockRestored).toHaveBeenCalledWith('order-uuid-1');
     expect(result.status).toBe(OrderStatus.CANCELLED);
