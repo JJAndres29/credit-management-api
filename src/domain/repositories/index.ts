@@ -9,3 +9,4 @@ export { DashboardRepository } from './dashboard.repository';
 export { CustomerRepository } from './customer.repository';
 export { CategoryRepository } from './category.repository';
 export { OnlineOrderRepository } from './online-order.repository';
+export type { MarketingToolsRepository } from './marketing.repository';

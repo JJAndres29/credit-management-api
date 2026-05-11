@@ -14,3 +14,6 @@ export { PrismaCustomerAddressDatasource } from './prisma-customer-address.datas
 export { PrismaShippingZoneDatasource } from './prisma-shipping-zone.datasource';
 export { PrismaCouponAdminDatasource } from './prisma-coupon-admin.datasource';
 export { PrismaStorefrontCatalogDatasource } from './prisma-storefront-catalog.datasource';
+export { PrismaAnalyticsReadModelDatasource } from './prisma-analytics-read-model.datasource';
+export { PrismaBusinessMetricsSnapshotDatasource } from './prisma-business-metrics-snapshot.datasource';
+export { PrismaMarketingToolsDatasource } from './prisma-marketing-tools.datasource';

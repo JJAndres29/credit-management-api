@@ -1,6 +1,6 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma';
-import { ProductDatasource } from '../../domain/datasources';
+import { ProductDatasource, QuickCreateProductData } from '../../domain/datasources';
 import { ProductEntity } from '../../domain/entities';
 import { CreateProductDto, UpdateProductDto, FilterProductsDto } from '../../domain/dtos/products';
 import { CustomError } from '../../domain/errors';
@@ -342,5 +342,113 @@ export class PrismaProductDatasource implements ProductDatasource {
     });
 
     return ProductEntity.fromObject(product as unknown as Record<string, unknown>);
+  }
+
+  async quickCreate(data: QuickCreateProductData): Promise<ProductEntity> {
+    const product = await prisma.$transaction(async (tx) => {
+      const cn = data.categoryName.trim();
+      let cat = await tx.category.findFirst({
+        where: { name: { equals: cn, mode: 'insensitive' } },
+      });
+      if (!cat) {
+        const base = slugify(cn);
+        let slug = base;
+        for (let n = 0; n < 500; n += 1) {
+          const clash = await tx.category.findFirst({ where: { slug } });
+          if (!clash) break;
+          slug = `${base}-${n + 2}`;
+        }
+        cat = await tx.category.create({
+          data: { name: cn, slug },
+        });
+      }
+
+      const valueIds: string[] = [];
+      for (const attr of data.attributes) {
+        const an = attr.name.trim();
+        const av = attr.value.trim();
+        let catAttr = await tx.categoryAttribute.findFirst({
+          where: { categoryId: cat.id, name: { equals: an, mode: 'insensitive' } },
+        });
+        if (!catAttr) {
+          catAttr = await tx.categoryAttribute.create({
+            data: { categoryId: cat.id, name: an },
+          });
+        }
+        let val = await tx.attributeValue.findFirst({
+          where: {
+            attributeId: catAttr.id,
+            value: { equals: av, mode: 'insensitive' },
+          },
+        });
+        if (!val) {
+          val = await tx.attributeValue.create({
+            data: { attributeId: catAttr.id, value: av },
+          });
+        }
+        valueIds.push(val.id);
+      }
+
+      const p = await tx.product.create({
+        data: {
+          name: data.name.trim(),
+          description: data.description.trim(),
+          stock: data.stock,
+          categoryId: cat.id,
+          retailPrice: data.retailPrice,
+          investmentCost: data.investmentCost,
+          ...(data.weightKg != null && { weightKg: data.weightKg }),
+          ...(data.brand != null && data.brand !== '' && { brand: data.brand }),
+        },
+      });
+
+      const baseSlug = `${slugify(data.name)}-${p.id.replace(/-/g, '').slice(0, 8)}`;
+      const resolvedSlug = await ensureUniqueProductSlug(tx, baseSlug, p.id);
+      await tx.product.update({
+        where: { id: p.id },
+        data: { slug: resolvedSlug },
+      });
+
+      await tx.productVariant.create({
+        data: {
+          productId: p.id,
+          label: 'Default',
+          stock: p.stock,
+          retailPrice: data.retailPrice,
+          investmentCost: data.investmentCost,
+          currencyCode: p.currencyCode,
+          isDefault: true,
+          isActive: p.isActive,
+          slug: resolvedSlug,
+        },
+      });
+
+      if (valueIds.length > 0) {
+        await tx.productAttribute.createMany({
+          data: valueIds.map((valueId) => ({ productId: p.id, valueId })),
+          skipDuplicates: true,
+        });
+      }
+
+      return tx.product.findUniqueOrThrow({
+        where: { id: p.id },
+        include: includeImages,
+      });
+    });
+
+    return ProductEntity.fromObject(product as unknown as Record<string, unknown>);
+  }
+
+  async bulkSetActive(productIds: string[], isActive: boolean): Promise<number> {
+    if (productIds.length === 0) return 0;
+    const res = await prisma.product.updateMany({
+      where: { id: { in: productIds } },
+      data: { isActive },
+    });
+    await prisma.productVariant.updateMany({
+      where: { productId: { in: productIds } },
+      data: { isActive },
+    });
+    return res.count;
   }
 }

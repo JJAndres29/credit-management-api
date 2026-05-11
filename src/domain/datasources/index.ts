@@ -1,6 +1,7 @@
 export { AuthDatasource } from './auth.datasource';
 export { ClientDatasource } from './client.datasource';
 export { ProductDatasource } from './product.datasource';
+export type { QuickCreateProductData, QuickCreateAttributeSpec } from './product.datasource';
 export { UserDatasource } from './user.datasource';
 export { SaleDatasource } from './sale.datasource';
 export type { SaleCreateData } from './sale.datasource';
@@ -16,3 +17,10 @@ export { CategoryDatasource } from './category.datasource';
 export type { CategoryCreateData, CategoryUpdateData } from './category.datasource';
 export { OnlineOrderDatasource } from './online-order.datasource';
 export type { OnlineOrderCreateData, OnlineOrderFilters, OnlineOrderItemCreateData } from './online-order.datasource';
+export type {
+  MarketingToolsDatasource,
+  DiscountCampaignCreateData,
+  PriceExperimentCreateData,
+  DiscountCampaignRow,
+  PriceExperimentRow,
+} from './marketing.datasource';

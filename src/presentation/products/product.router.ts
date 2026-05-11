@@ -4,6 +4,7 @@ import {
   GetProductsUseCase,
   GetProductByIdUseCase,
   CreateProductUseCase,
+  QuickCreateProductUseCase,
   UpdateProductUseCase,
   AdjustStockUseCase,
   UpdateRetailPriceUseCase,
@@ -43,6 +44,7 @@ export class ProductRouter {
       new GetProductsUseCase(repository),
       new GetProductByIdUseCase(repository),
       new CreateProductUseCase(repository, categoryRepository),
+      new QuickCreateProductUseCase(repository),
       new UpdateProductUseCase(repository, categoryRepository),
       new AdjustStockUseCase(repository),
       new UpdateRetailPriceUseCase(repository),
@@ -72,6 +74,7 @@ export class ProductRouter {
     router.get('/:id', RateLimitMiddleware.publicProductsReadLimiter, cachePublic({ maxAgeSeconds: 120 }), controller.getById);
 
     // Staff JWT + ADMIN
+    router.post('/quick-create', middleware.validateJwt, checkRole(Role.ADMIN), controller.quickCreate);
     router.post('/:id/attributes', middleware.validateJwt, checkRole(Role.ADMIN), controller.assignAttributes);
     router.put('/:id/attributes', middleware.validateJwt, checkRole(Role.ADMIN), controller.replaceAttributes);
     router.delete('/:id/attributes/:valueId', middleware.validateJwt, checkRole(Role.ADMIN), controller.deleteAttribute);

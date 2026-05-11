@@ -32,6 +32,9 @@ import { FeatureFlagKey, FeatureFlagPort } from '../domain/services';
 import { PostgresFeatureFlagAdapter } from '../infrastructure/services';
 import { FeatureFlagMiddleware } from './middlewares';
 import { SeoRouter } from './seo/seo.router';
+import { AdminAnalyticsRouter } from './admin/analytics.router';
+import { AdminMarketingRouter } from './admin/marketing.router';
+import { AdminProductsBulkRouter } from './admin/products-bulk.router';
 
 interface ServerOptions {
   port: number;
@@ -110,6 +113,9 @@ export class Server {
     this.app.use('/api/admin/feature-flags', FeatureFlagRouter.routes);
     this.app.use('/api/admin/coupons', CouponAdminRouter.routes);
     this.app.use('/api/admin/dead-letters', DeadLetterRouter.routes);
+    this.app.use('/api/admin/analytics', AdminAnalyticsRouter.routes);
+    this.app.use('/api/admin/marketing', AdminMarketingRouter.routes);
+    this.app.use('/api/admin/products', AdminProductsBulkRouter.routes);
     this.app.use(
       '/api/clients',
       FeatureFlagMiddleware.requireEnabled(this.featureFlags, FeatureFlagKey.CREDIT_MODULE_ENABLED, {
