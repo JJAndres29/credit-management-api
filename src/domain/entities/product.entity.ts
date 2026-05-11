@@ -1,4 +1,5 @@
 import { ProductImageEntity } from './product-image.entity';
+import { ProductVariantEntity } from './product-variant.entity';
 
 export interface ProductSelectedAttribute {
   attribute: string;
@@ -33,6 +34,7 @@ export class ProductEntity {
     public readonly metaTitle: string | null = null,
     public readonly metaDescription: string | null = null,
     public readonly categorySlug: string | null = null,
+    public readonly variants: ProductVariantEntity[] = [],
   ) {}
 
   toJSON() {
@@ -49,6 +51,7 @@ export class ProductEntity {
       categoryName: this.categoryName,
       categorySlug: this.categorySlug,
       attributes: this.attributes.map((a) => ({ attribute: a.attribute, value: a.value })),
+      variants: this.variants.map((v) => v.toJSON()),
       isActive: this.isActive,
       slug: this.slug,
       brand: this.brand,
@@ -72,6 +75,7 @@ export class ProductEntity {
       categoryId,
       category,
       attributes,
+      variants,
       isActive,
       createdAt,
       updatedAt,
@@ -112,6 +116,10 @@ export class ProductEntity {
           .filter((entry): entry is ProductSelectedAttribute => entry !== null)
       : [];
 
+    const parsedVariants: ProductVariantEntity[] = Array.isArray(variants)
+      ? variants.map((v) => ProductVariantEntity.fromObject(v as Record<string, unknown>))
+      : [];
+
     return new ProductEntity(
       id as string,
       name as string,
@@ -132,6 +140,7 @@ export class ProductEntity {
       (metaTitle as string | null | undefined) ?? null,
       (metaDescription as string | null | undefined) ?? null,
       categorySlug,
+      parsedVariants,
     );
   }
 }

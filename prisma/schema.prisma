@@ -235,8 +235,9 @@ model AttributeValue {
   value       String
   createdAt   DateTime @default(now())
 
-  attribute    CategoryAttribute @relation(fields: [attributeId], references: [id], onDelete: Cascade)
+  attribute    CategoryAttribute      @relation(fields: [attributeId], references: [id], onDelete: Cascade)
   productLinks ProductAttribute[]
+  variantLinks VariantAttributeValue[]
 
   @@unique([attributeId, value])
 }
@@ -276,17 +277,36 @@ model ProductVariant {
   currencyCode   String   @default("COP")
   isDefault      Boolean  @default(false)
   isActive       Boolean  @default(true)
+  /// SHA-256 hash of sorted AttributeValue IDs; enforces unique attribute combinations per product.
+  /// NULL for default variants (PostgreSQL treats each NULL as distinct in unique indexes).
+  attributeHash  String?
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
-  product          Product           @relation(fields: [productId], references: [id], onDelete: Cascade)
+  product          Product                @relation(fields: [productId], references: [id], onDelete: Cascade)
   saleItems        SaleItem[]
   onlineOrderItems OnlineOrderItem[]
   stockMovements   StockMovement[]
   assets           ProductAsset[]
   cartItems        CartItem[]
+  attributeValues  VariantAttributeValue[]
 
+  @@unique([productId, attributeHash])
   @@index([productId, isDefault])
+}
+
+/// Junction table: links each ProductVariant to the specific AttributeValues that define it.
+/// E.g. variant "Rojo + Doble" has two rows: one for Color=Rojo, one for Tamaño=Doble.
+model VariantAttributeValue {
+  id        String @id @default(uuid())
+  variantId String
+  valueId   String
+
+  variant ProductVariant @relation(fields: [variantId], references: [id], onDelete: Cascade)
+  value   AttributeValue @relation(fields: [valueId], references: [id], onDelete: Cascade)
+
+  @@unique([variantId, valueId])
+  @@index([valueId])
 }
 
 /// P2: richer media metadata (multi-size URLs can be added without breaking existing ProductImage)

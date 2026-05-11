@@ -43,6 +43,7 @@ export class CreateSaleUseCase {
       subtotal: number;
       appliedRule: null;
       newProduct?: { name: string; stock: number };
+      variantId?: string;
     }[] = [];
 
     for (const item of dto.items) {
@@ -81,10 +82,11 @@ export class CreateSaleUseCase {
         enrichedItems.push({
           productId: item.productId!,
           quantity: item.quantity,
-          basePrice: unitPrice,   // precio registrado al momento de la venta
+          basePrice: unitPrice,
           unitPrice,
           subtotal,
           appliedRule: null,
+          variantId: item.variantId,
         });
       }
     }
