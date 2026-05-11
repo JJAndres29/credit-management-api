@@ -4,3 +4,4 @@ export { AdjustStockDto } from './adjust-stock.dto';
 export { FilterProductsDto } from './filter-products.dto';
 export { UpdateRetailPriceDto } from './update-retail-price.dto';
 export { QuickCreateProductDto } from './quick-create-product.dto';
+export { QuickCreateWithVariantsDto } from './quick-create-with-variants.dto';

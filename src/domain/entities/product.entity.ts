@@ -1,3 +1,4 @@
+import { ProductAssetEntity } from './product-asset.entity';
 import { ProductImageEntity } from './product-image.entity';
 import { ProductVariantEntity } from './product-variant.entity';
 
@@ -35,6 +36,7 @@ export class ProductEntity {
     public readonly metaDescription: string | null = null,
     public readonly categorySlug: string | null = null,
     public readonly variants: ProductVariantEntity[] = [],
+    public readonly assets: ProductAssetEntity[] = [],
   ) {}
 
   toJSON() {
@@ -52,6 +54,7 @@ export class ProductEntity {
       categorySlug: this.categorySlug,
       attributes: this.attributes.map((a) => ({ attribute: a.attribute, value: a.value })),
       variants: this.variants.map((v) => v.toJSON()),
+      assets: this.assets.map((a) => a.toJSON()),
       isActive: this.isActive,
       slug: this.slug,
       brand: this.brand,
@@ -76,6 +79,7 @@ export class ProductEntity {
       category,
       attributes,
       variants,
+      assets,
       isActive,
       createdAt,
       updatedAt,
@@ -120,6 +124,10 @@ export class ProductEntity {
       ? variants.map((v) => ProductVariantEntity.fromObject(v as Record<string, unknown>))
       : [];
 
+    const parsedAssets: ProductAssetEntity[] = Array.isArray(assets)
+      ? assets.map((a) => ProductAssetEntity.fromObject(a as Record<string, unknown>))
+      : [];
+
     return new ProductEntity(
       id as string,
       name as string,
@@ -141,6 +149,7 @@ export class ProductEntity {
       (metaDescription as string | null | undefined) ?? null,
       categorySlug,
       parsedVariants,
+      parsedAssets,
     );
   }
 }
