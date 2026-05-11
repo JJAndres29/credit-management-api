@@ -7,3 +7,5 @@ export { UpdateRetailPriceUseCase } from './update-retail-price.use-case';
 export { DeleteProductUseCase } from './delete-product.use-case';
 export { UploadProductImagesUseCase } from './upload-product-images.use-case';
 export { DeleteProductImageUseCase } from './delete-product-image.use-case';
+export { QuickCreateProductUseCase } from './quick-create-product.use-case';
+export { BulkSetProductsActiveUseCase } from './bulk-set-products-active.use-case';

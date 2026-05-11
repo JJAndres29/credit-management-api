@@ -84,4 +84,9 @@ export const envs = {
   /** Path prefix for product URLs in sitemap / JSON-LD (default: this API’s public slug route). */
   seoProductPathPrefix: process.env.SEO_PRODUCT_PATH_PREFIX ?? '/api/products/by-slug',
   seoCategoryPathPrefix: process.env.SEO_CATEGORY_PATH_PREFIX ?? '/api/categories/by-slug',
+  /** P5 — comma-separated recipients for `BUSINESS_ALERT_TRIGGERED` emails (optional). */
+  businessAlertEmails: (process.env.BUSINESS_ALERT_EMAILS ?? '')
+    .split(',')
+    .map((s) => s.trim())
+    .filter(Boolean),
 };

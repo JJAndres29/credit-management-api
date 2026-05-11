@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { CustomError } from '../../domain/errors';
-import { CreateProductDto, UpdateProductDto, AdjustStockDto, FilterProductsDto, UpdateRetailPriceDto } from '../../domain/dtos/products';
+import { CreateProductDto, UpdateProductDto, AdjustStockDto, FilterProductsDto, UpdateRetailPriceDto, QuickCreateProductDto } from '../../domain/dtos/products';
 import { AssignProductAttributesDto, ReplaceProductAttributesDto } from '../../domain/dtos/categories';
 import { PaginationDto } from '../../domain/dtos/shared';
 import { GetProductsUseCase } from '../../domain/use-cases/products/get-products.use-case';
@@ -17,12 +17,14 @@ import { RemoveProductAttributeUseCase } from '../../domain/use-cases/categories
 import { ReplaceProductAttributesUseCase } from '../../domain/use-cases/categories/replace-product-attributes.use-case';
 import type { GetProductBySlugConfig } from '../../domain/use-cases/seo';
 import { GetProductBySlugUseCase } from '../../domain/use-cases/seo';
+import { QuickCreateProductUseCase } from '../../domain/use-cases/products';
 
 export class ProductController {
   constructor(
     private readonly getProductsUseCase: GetProductsUseCase,
     private readonly getProductByIdUseCase: GetProductByIdUseCase,
     private readonly createProductUseCase: CreateProductUseCase,
+    private readonly quickCreateProductUseCase: QuickCreateProductUseCase,
     private readonly updateProductUseCase: UpdateProductUseCase,
     private readonly adjustStockUseCase: AdjustStockUseCase,
     private readonly updateRetailPriceUseCase: UpdateRetailPriceUseCase,
@@ -92,6 +94,20 @@ export class ProductController {
 
     try {
       const product = await this.createProductUseCase.execute(dto!);
+      res.status(201).json(product);
+    } catch (err) {
+      this.handleError(err, res);
+    }
+  };
+
+  quickCreate = async (req: Request, res: Response): Promise<void> => {
+    const [error, dto] = QuickCreateProductDto.create(req.body as Record<string, unknown>);
+    if (error) {
+      res.status(400).json({ error });
+      return;
+    }
+    try {
+      const product = await this.quickCreateProductUseCase.execute(dto!);
       res.status(201).json(product);
     } catch (err) {
       this.handleError(err, res);

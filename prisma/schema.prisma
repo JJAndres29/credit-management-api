@@ -144,6 +144,7 @@ model Product {
   cartItems        CartItem[]
   scopedCoupons    Coupon[]
   slugHistory      ProductSlugHistory[]
+  priceExperiments PriceExperiment[]
 }
 
 /// Old product slugs → current slug (HTTP 301). Populated when admin changes `Product.slug`.
@@ -173,6 +174,47 @@ model Category {
   products   Product[]
   attributes CategoryAttribute[]
   coupons    Coupon[]
+  discountCampaigns DiscountCampaign[]
+}
+
+/// P5 — batch %-off window over a category (complements row-level `Coupon`)
+model DiscountCampaign {
+  id          String   @id @default(uuid())
+  name        String   @db.VarChar(120)
+  categoryId  String?
+  /// Percent off the category MSRP band (e.g. 15.00 = 15%). Application at checkout is future work.
+  percentOff  Decimal  @db.Decimal(5, 2)
+  startsAt    DateTime
+  endsAt      DateTime
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  category Category? @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+
+  @@index([categoryId])
+  @@index([startsAt, endsAt])
+}
+
+model PriceExperiment {
+  id              String                         @id @default(uuid())
+  productId       String
+  name            String                         @db.VarChar(120)
+  /// Optional cohort key for future assignment (e.g. cookie / customer bucket)
+  cohortKey       String?                        @db.VarChar(80)
+  priceA          Decimal                        @db.Decimal(10, 2)
+  priceB          Decimal                        @db.Decimal(10, 2)
+  startAt         DateTime
+  endAt           DateTime
+  winnerCriteria  PriceExperimentWinnerCriteria  @default(REVENUE)
+  isActive        Boolean                        @default(true)
+  createdAt       DateTime                       @default(now())
+  updatedAt       DateTime                       @updatedAt
+
+  product Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@index([productId])
+  @@index([startAt, endAt])
 }
 
 model CategoryAttribute {
@@ -420,6 +462,12 @@ enum CouponScope {
   ORDER
   CATEGORY
   PRODUCT
+}
+
+/// P5 — A/B price tests (assignment/splitting is a future concern; this stores the experiment definition)
+enum PriceExperimentWinnerCriteria {
+  REVENUE
+  CONVERSION_RATE
 }
 
 model Cart {

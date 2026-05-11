@@ -33,3 +33,13 @@ export type {
   SitemapUrlEntry,
   StorefrontCategoryRef,
 } from './storefront-catalog-read.port';
+export type {
+  AnalyticsReadModelPort,
+  DailySalesSummaryRow,
+  ProductProfitabilityRow,
+  DeadStockRow,
+  InventoryTurnoverRow,
+  CustomerCohortRow,
+  CustomerValueRow,
+} from './analytics-read-model.port';
+export type { BusinessMetricsSnapshotPort, BusinessMetricsSnapshot } from './business-metrics-snapshot.port';
