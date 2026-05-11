@@ -24,3 +24,4 @@ export type {
   DiscountCampaignRow,
   PriceExperimentRow,
 } from './marketing.datasource';
+export type { VariantDatasource, VariantCreateData, VariantUpdateData } from './variant.datasource';

@@ -12,6 +12,12 @@ export interface CreateSaleItemDto {
   productId?: string;
   /** Producto nuevo a crear inline. Requerido si no se provee `productId`. */
   newProduct?: NewProductInline;
+  /**
+   * ID de la variante específica a vender. Opcional — si no se envía, el backend
+   * resuelve a la variante default o única del producto. Cuando un producto tiene
+   * múltiples variantes "reales", se recomienda enviar variantId explícitamente.
+   */
+  variantId?: string;
   quantity: number;
   /** Precio unitario del producto fijado al momento de la venta. Debe ser mayor a 0. */
   unitPrice: number;
@@ -243,6 +249,9 @@ export class CreateSaleDto {
             productId: i.productId ? (i.productId as string).trim() : undefined,
             newProduct: np
               ? { name: (np.name as string).trim(), stock: np.stock as number }
+              : undefined,
+            variantId: i.variantId && typeof i.variantId === 'string'
+              ? (i.variantId as string).trim()
               : undefined,
             quantity: i.quantity as number,
             unitPrice: i.unitPrice as number,

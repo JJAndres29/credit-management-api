@@ -25,6 +25,7 @@ import { PrismaStorefrontCatalogDatasource } from '../../infrastructure/datasour
 import { Role } from '../../domain/entities';
 import { envs } from '../../config/envs';
 import { GetProductBySlugUseCase } from '../../domain/use-cases/seo';
+import { VariantRouter } from '../variants/variant.router';
 
 export class ProductRouter {
   static get routes(): Router {
@@ -72,6 +73,9 @@ export class ProductRouter {
     );
     router.get('/', RateLimitMiddleware.publicProductsReadLimiter, cachePublic({ maxAgeSeconds: 120 }), controller.getAll);
     router.get('/:id', RateLimitMiddleware.publicProductsReadLimiter, cachePublic({ maxAgeSeconds: 120 }), controller.getById);
+
+    // Variant sub-routes (nested under /:productId/variants)
+    router.use('/:productId/variants', VariantRouter.routes);
 
     // Staff JWT + ADMIN
     router.post('/quick-create', middleware.validateJwt, checkRole(Role.ADMIN), controller.quickCreate);

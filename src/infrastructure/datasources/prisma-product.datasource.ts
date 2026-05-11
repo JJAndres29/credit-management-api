@@ -42,6 +42,20 @@ const includeImages = {
       },
     },
   },
+  variants: {
+    orderBy: [{ isDefault: 'desc' as const }, { createdAt: 'asc' as const }],
+    include: {
+      attributeValues: {
+        include: {
+          value: {
+            include: {
+              attribute: true,
+            },
+          },
+        },
+      },
+    },
+  },
 };
 
 function buildWhere(filters: FilterProductsDto) {

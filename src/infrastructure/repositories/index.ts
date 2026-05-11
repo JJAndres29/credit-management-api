@@ -12,3 +12,4 @@ export { OnlineOrderRepositoryImpl } from './online-order.repository.impl';
 export { CartRepositoryImpl } from './cart.repository.impl';
 export { CustomerAddressRepositoryImpl } from './customer-address.repository.impl';
 export { MarketingToolsRepositoryImpl } from './marketing.repository.impl';
+export { VariantRepositoryImpl } from './variant.repository.impl';

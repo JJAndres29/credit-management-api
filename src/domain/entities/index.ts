@@ -1,7 +1,10 @@
 export { UserEntity, Role } from './user.entity';
 export { ClientEntity } from './client.entity';
 export { ProductEntity } from './product.entity';
+export type { ProductSelectedAttribute, ProductAttributeValue } from './product.entity';
 export { ProductImageEntity } from './product-image.entity';
+export { ProductVariantEntity } from './product-variant.entity';
+export type { VariantAttributeValuePair } from './product-variant.entity';
 export { CategoryEntity } from './category.entity';
 export { CategoryAttributeEntity } from './category-attribute.entity';
 export { AttributeValueEntity } from './attribute-value.entity';
