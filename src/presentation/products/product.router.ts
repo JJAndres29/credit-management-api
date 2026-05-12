@@ -81,14 +81,22 @@ export class ProductRouter {
       controller.getBySlug,
     );
     router.get('/', RateLimitMiddleware.publicProductsReadLimiter, cachePublic({ maxAgeSeconds: 120 }), controller.getAll);
+
+    // Staff JWT + ADMIN — literales antes de /:id y de /:productId/variants (orden seguro en Express)
+    router.post('/quick-create', middleware.validateJwt, checkRole(Role.ADMIN), controller.quickCreate);
+    router.post(
+      '/quick-create-with-variants',
+      middleware.validateJwt,
+      checkRole(Role.ADMIN),
+      controller.quickCreateWithVariants,
+    );
+
     router.get('/:id', RateLimitMiddleware.publicProductsReadLimiter, cachePublic({ maxAgeSeconds: 120 }), controller.getById);
 
     // Variant sub-routes (nested under /:productId/variants)
     router.use('/:productId/variants', VariantRouter.routes);
 
-    // Staff JWT + ADMIN
-    router.post('/quick-create', middleware.validateJwt, checkRole(Role.ADMIN), controller.quickCreate);
-    router.post('/quick-create-with-variants', middleware.validateJwt, checkRole(Role.ADMIN), controller.quickCreateWithVariants);
+    // Staff JWT + ADMIN (resto)
     router.post('/:id/attributes', middleware.validateJwt, checkRole(Role.ADMIN), controller.assignAttributes);
     router.put('/:id/attributes', middleware.validateJwt, checkRole(Role.ADMIN), controller.replaceAttributes);
     router.delete('/:id/attributes/:valueId', middleware.validateJwt, checkRole(Role.ADMIN), controller.deleteAttribute);
