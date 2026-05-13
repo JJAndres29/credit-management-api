@@ -1,7 +1,7 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import { createHash } from 'crypto';
-import { AssetCreateData, ProductDatasource, QuickCreateProductData, QuickCreateWithVariantsData } from '../../domain/datasources';
+import { AssetCreateData, ProductDatasource, QuickCreateProductData, QuickCreateWithVariantsData, AssetReuseForVariantData } from '../../domain/datasources';
 import { ProductAssetEntity, ProductEntity } from '../../domain/entities';
 import { CreateProductDto, UpdateProductDto, FilterProductsDto } from '../../domain/dtos/products';
 import { CustomError } from '../../domain/errors';
@@ -608,6 +608,71 @@ export class PrismaProductDatasource implements ProductDatasource {
 
     const product = await prisma.product.findUniqueOrThrow({
       where: { id: data.productId },
+      include: includeImages,
+    });
+
+    return ProductEntity.fromObject(product as unknown as Record<string, unknown>);
+  }
+
+  async countAssetsByCloudinaryPublicId(cloudinaryPublicId: string): Promise<number> {
+    return prisma.productAsset.count({ where: { cloudinaryPublicId } });
+  }
+
+  async reuseGeneralAssetsForVariant(data: AssetReuseForVariantData): Promise<ProductEntity> {
+    const { productId, variantId, sourceAssetIds } = data;
+
+    const rows = await prisma.productAsset.findMany({
+      where: {
+        id: { in: sourceAssetIds },
+        productId,
+        variantId: null,
+      },
+    });
+
+    const byId = new Map(rows.map((r) => [r.id, r]));
+    const ordered: typeof rows = [];
+    for (const id of sourceAssetIds) {
+      const r = byId.get(id);
+      if (!r) {
+        throw CustomError.badRequest(
+          `El asset ${id} no existe o no es una imagen general (sin variante) de este producto`,
+        );
+      }
+      ordered.push(r);
+    }
+
+    const existingForVariant = await prisma.productAsset.findMany({
+      where: { productId, variantId },
+      select: { cloudinaryPublicId: true },
+    });
+    const already = new Set(existingForVariant.map((e) => e.cloudinaryPublicId));
+
+    const toCreate = ordered.filter((r) => !already.has(r.cloudinaryPublicId));
+
+    if (toCreate.length === 0) {
+      const unchanged = await prisma.product.findUniqueOrThrow({
+        where: { id: productId },
+        include: includeImages,
+      });
+      return ProductEntity.fromObject(unchanged as unknown as Record<string, unknown>);
+    }
+
+    const currentCount = await prisma.productAsset.count({ where: { productId } });
+
+    await prisma.productAsset.createMany({
+      data: toCreate.map((s, index) => ({
+        productId,
+        variantId,
+        urlOriginal: s.urlOriginal,
+        cloudinaryPublicId: s.cloudinaryPublicId,
+        type: s.type,
+        altText: s.altText,
+        position: currentCount + index,
+      })),
+    });
+
+    const product = await prisma.product.findUniqueOrThrow({
+      where: { id: productId },
       include: includeImages,
     });
 

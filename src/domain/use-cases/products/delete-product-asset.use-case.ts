@@ -22,7 +22,12 @@ export class DeleteProductAssetUseCase {
       throw CustomError.badRequest('El asset no pertenece a este producto');
     }
 
-    await this.fileStorageService.deleteFile(asset.cloudinaryPublicId);
+    const refCount = await this.productRepository.countAssetsByCloudinaryPublicId(
+      asset.cloudinaryPublicId,
+    );
+    if (refCount <= 1) {
+      await this.fileStorageService.deleteFile(asset.cloudinaryPublicId);
+    }
 
     return this.productRepository.removeAsset(productId, assetId);
   }

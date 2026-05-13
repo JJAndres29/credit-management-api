@@ -6,6 +6,8 @@
 
 import { UploadProductAssetsUseCase } from './upload-product-assets.use-case';
 import { DeleteProductAssetUseCase } from './delete-product-asset.use-case';
+import { ReuseProductAssetsForVariantUseCase } from './reuse-product-assets-for-variant.use-case';
+import { ReuseProductAssetsDto } from '../../dtos/products/reuse-product-assets.dto';
 import { ProductRepository } from '../../repositories';
 import type { VariantRepository } from '../../repositories/variant.repository';
 import { FileStorageService } from '../../services/file-storage.service';
@@ -92,6 +94,8 @@ const mockProductRepo = {
   addAssets: jest.fn(),
   findAssetById: jest.fn(),
   removeAsset: jest.fn(),
+  reuseGeneralAssetsForVariant: jest.fn(),
+  countAssetsByCloudinaryPublicId: jest.fn(),
   bulkSetActive: jest.fn(),
 } as jest.Mocked<ProductRepository>;
 
@@ -254,14 +258,30 @@ describe('DeleteProductAssetUseCase', () => {
     const asset = makeAsset({ id: 'asset-1', productId: 'prod-1' });
     mockProductRepo.findById.mockResolvedValue(product);
     mockProductRepo.findAssetById.mockResolvedValue(asset);
+    mockProductRepo.countAssetsByCloudinaryPublicId.mockResolvedValue(1);
     mockFileStorage.deleteFile.mockResolvedValue(true);
     mockProductRepo.removeAsset.mockResolvedValue(product);
 
     const result = await useCase.execute('prod-1', 'asset-1');
 
+    expect(mockProductRepo.countAssetsByCloudinaryPublicId).toHaveBeenCalledWith('products/test');
     expect(mockFileStorage.deleteFile).toHaveBeenCalledWith('products/test');
     expect(mockProductRepo.removeAsset).toHaveBeenCalledWith('prod-1', 'asset-1');
     expect(result).toBe(product);
+  });
+
+  it('no llama a Cloudinary destroy si otra fila reutiliza el mismo publicId', async () => {
+    const product = makeProduct();
+    const asset = makeAsset({ id: 'asset-1', productId: 'prod-1' });
+    mockProductRepo.findById.mockResolvedValue(product);
+    mockProductRepo.findAssetById.mockResolvedValue(asset);
+    mockProductRepo.countAssetsByCloudinaryPublicId.mockResolvedValue(2);
+    mockProductRepo.removeAsset.mockResolvedValue(product);
+
+    await useCase.execute('prod-1', 'asset-1');
+
+    expect(mockFileStorage.deleteFile).not.toHaveBeenCalled();
+    expect(mockProductRepo.removeAsset).toHaveBeenCalledWith('prod-1', 'asset-1');
   });
 
   it('lanza 404 si el producto no existe', async () => {
@@ -294,5 +314,47 @@ describe('DeleteProductAssetUseCase', () => {
       expect.objectContaining({ statusCode: 400 }),
     );
     expect(mockFileStorage.deleteFile).not.toHaveBeenCalled();
+  });
+});
+
+// ─── ReuseProductAssetsForVariantUseCase ────────────────────────────────────
+
+describe('ReuseProductAssetsForVariantUseCase', () => {
+  let useCase: ReuseProductAssetsForVariantUseCase;
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    useCase = new ReuseProductAssetsForVariantUseCase(mockProductRepo, mockVariantRepo);
+  });
+
+  it('delega en reuseGeneralAssetsForVariant con ids de assets generales', async () => {
+    const product = makeProduct();
+    const variant = makeVariant({ id: 'var-1', productId: 'prod-1' });
+    mockProductRepo.findById.mockResolvedValue(product);
+    mockVariantRepo.findById.mockResolvedValue(variant);
+    mockProductRepo.reuseGeneralAssetsForVariant.mockResolvedValue(product);
+
+    const [, dto] = ReuseProductAssetsDto.create({
+      variantId: 'var-1',
+      assetIds: ['a1', 'a2'],
+    });
+    const result = await useCase.execute('prod-1', dto!);
+
+    expect(mockProductRepo.reuseGeneralAssetsForVariant).toHaveBeenCalledWith({
+      productId: 'prod-1',
+      variantId: 'var-1',
+      sourceAssetIds: ['a1', 'a2'],
+    });
+    expect(result).toBe(product);
+  });
+});
+
+describe('ReuseProductAssetsDto', () => {
+  it('rechaza duplicados en assetIds', () => {
+    const [err] = ReuseProductAssetsDto.create({
+      variantId: 'v1',
+      assetIds: ['x', 'x'],
+    });
+    expect(err).toContain('duplicados');
   });
 });

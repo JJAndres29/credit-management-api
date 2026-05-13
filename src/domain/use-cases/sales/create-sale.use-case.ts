@@ -73,10 +73,33 @@ export class CreateSaleUseCase {
           throw CustomError.badRequest(`El producto "${product.name}" no está disponible`);
         }
 
-        if (product.stock < item.quantity) {
-          throw CustomError.badRequest(
-            `Stock insuficiente para "${product.name}": disponible ${product.stock}, solicitado ${item.quantity}`,
-          );
+        const variants = product.variants;
+        if (item.variantId) {
+          const chosen = variants.find((v) => v.id === item.variantId);
+          if (!chosen) {
+            throw CustomError.badRequest(
+              `La variante no pertenece al producto "${product.name}"`,
+            );
+          }
+          if (chosen.stock < item.quantity) {
+            throw CustomError.badRequest(
+              `Stock insuficiente para la variante de "${product.name}": disponible ${chosen.stock}, solicitado ${item.quantity}`,
+            );
+          }
+        } else {
+          const fallback = variants.find((v) => v.isDefault) ?? variants[0];
+          if (fallback) {
+            if (fallback.stock < item.quantity) {
+              const label = fallback.label ? ` (${fallback.label})` : '';
+              throw CustomError.badRequest(
+                `Stock insuficiente para "${product.name}"${label}: disponible ${fallback.stock}, solicitado ${item.quantity}`,
+              );
+            }
+          } else if (product.stock < item.quantity) {
+            throw CustomError.badRequest(
+              `Stock insuficiente para "${product.name}": disponible ${product.stock}, solicitado ${item.quantity}`,
+            );
+          }
         }
 
         enrichedItems.push({

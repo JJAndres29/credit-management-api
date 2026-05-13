@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { CustomError } from '../../domain/errors';
-import { CreateProductDto, UpdateProductDto, AdjustStockDto, FilterProductsDto, UpdateRetailPriceDto, QuickCreateProductDto, QuickCreateWithVariantsDto } from '../../domain/dtos/products';
+import { CreateProductDto, UpdateProductDto, AdjustStockDto, FilterProductsDto, UpdateRetailPriceDto, QuickCreateProductDto, QuickCreateWithVariantsDto, ReuseProductAssetsDto } from '../../domain/dtos/products';
 import { AssignProductAttributesDto, ReplaceProductAttributesDto } from '../../domain/dtos/categories';
 import { PaginationDto } from '../../domain/dtos/shared';
 import { GetProductsUseCase } from '../../domain/use-cases/products/get-products.use-case';
@@ -20,6 +20,7 @@ import { GetProductBySlugUseCase } from '../../domain/use-cases/seo';
 import { QuickCreateProductUseCase, QuickCreateWithVariantsUseCase } from '../../domain/use-cases/products';
 import { UploadProductAssetsUseCase } from '../../domain/use-cases/products/upload-product-assets.use-case';
 import { DeleteProductAssetUseCase } from '../../domain/use-cases/products/delete-product-asset.use-case';
+import { ReuseProductAssetsForVariantUseCase } from '../../domain/use-cases/products/reuse-product-assets-for-variant.use-case';
 
 export class ProductController {
   constructor(
@@ -40,6 +41,7 @@ export class ProductController {
     private readonly quickCreateWithVariantsUseCase: QuickCreateWithVariantsUseCase,
     private readonly uploadProductAssetsUseCase: UploadProductAssetsUseCase,
     private readonly deleteProductAssetUseCase: DeleteProductAssetUseCase,
+    private readonly reuseProductAssetsForVariantUseCase: ReuseProductAssetsForVariantUseCase,
     private readonly productSeoConfig: GetProductBySlugConfig,
   ) {}
 
@@ -234,6 +236,21 @@ export class ProductController {
         files,
         variantId?.trim() || undefined,
       );
+      res.status(201).json(product);
+    } catch (err) {
+      this.handleError(err, res);
+    }
+  };
+
+  reuseAssetsForVariant = async (req: Request, res: Response): Promise<void> => {
+    const [error, dto] = ReuseProductAssetsDto.create(req.body as Record<string, unknown>);
+    if (error) {
+      res.status(400).json({ error });
+      return;
+    }
+
+    try {
+      const product = await this.reuseProductAssetsForVariantUseCase.execute(req.params.id, dto!);
       res.status(201).json(product);
     } catch (err) {
       this.handleError(err, res);

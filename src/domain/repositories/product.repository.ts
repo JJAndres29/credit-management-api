@@ -1,6 +1,6 @@
 import { ProductAssetEntity, ProductEntity } from '../entities';
 import { CreateProductDto, UpdateProductDto, FilterProductsDto } from '../dtos/products';
-import type { AssetCreateData, QuickCreateProductData, QuickCreateWithVariantsData } from '../datasources/product.datasource';
+import type { AssetCreateData, QuickCreateProductData, QuickCreateWithVariantsData, AssetReuseForVariantData } from '../datasources/product.datasource';
 import { UploadResult } from '../services/file-storage.service';
 import { PaginationDto } from '../dtos/shared';
 import { PaginatedResult } from '../types/paginated.type';
@@ -24,8 +24,10 @@ export interface ProductRepository {
   quickCreateWithVariants(data: QuickCreateWithVariantsData): Promise<ProductEntity>;
 
   addAssets(data: AssetCreateData): Promise<ProductEntity>;
+  reuseGeneralAssetsForVariant(data: AssetReuseForVariantData): Promise<ProductEntity>;
   findAssetById(assetId: string): Promise<ProductAssetEntity | null>;
   removeAsset(productId: string, assetId: string): Promise<ProductEntity>;
+  countAssetsByCloudinaryPublicId(cloudinaryPublicId: string): Promise<number>;
 
   bulkSetActive(productIds: string[], isActive: boolean): Promise<number>;
 }

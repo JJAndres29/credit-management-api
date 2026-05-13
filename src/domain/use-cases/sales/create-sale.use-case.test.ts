@@ -16,6 +16,7 @@ import { SaleRepository } from '../../repositories';
 import { EventEmitterPort, CREDIT_SALE_CREATED } from '../../events';
 import { ClientEntity } from '../../entities/client.entity';
 import { ProductEntity } from '../../entities/product.entity';
+import { ProductVariantEntity } from '../../entities/product-variant.entity';
 import { SaleEntity, SaleItemEntity, SaleType, SaleStatus } from '../../entities/sale.entity';
 import { AuditAction } from '../../entities/audit-log.entity';
 
@@ -44,11 +45,40 @@ function makeClient(overrides: Partial<{
   );
 }
 
+function makeVariant(overrides: Partial<{
+  id: string;
+  productId: string;
+  stock: number;
+  isDefault: boolean;
+  label: string | null;
+}> = {}): ProductVariantEntity {
+  const id = overrides.id ?? 'var-1';
+  const productId = overrides.productId ?? 'prod-1';
+  return new ProductVariantEntity(
+    id,
+    productId,
+    null,
+    null,
+    overrides.label ?? 'Default',
+    overrides.stock ?? 10,
+    null,
+    null,
+    'COP',
+    overrides.isDefault ?? true,
+    true,
+    [],
+    new Date(),
+    new Date(),
+  );
+}
+
 function makeProduct(overrides: Partial<{
   id: string;
   stock: number;
   isActive: boolean;
+  variants: ProductVariantEntity[];
 }> = {}): ProductEntity {
+  const variants = overrides.variants ?? [];
   return new ProductEntity(
     overrides.id ?? 'prod-1',
     'Producto Test',
@@ -64,6 +94,13 @@ function makeProduct(overrides: Partial<{
     overrides.isActive ?? true,
     new Date(),
     new Date(),
+    null,
+    null,
+    null,
+    null,
+    null,
+    variants,
+    [],
   );
 }
 
@@ -122,6 +159,8 @@ const mockProductRepo = {
   addAssets: jest.fn(),
   findAssetById: jest.fn(),
   removeAsset: jest.fn(),
+  reuseGeneralAssetsForVariant: jest.fn(),
+  countAssetsByCloudinaryPublicId: jest.fn(),
   bulkSetActive: jest.fn(),
 } as jest.Mocked<ProductRepository>;
 
@@ -220,6 +259,68 @@ describe('CreateSaleUseCase', () => {
         statusCode: 400,
       });
     });
+
+    it('valida stock de la variante por defecto cuando el producto trae variantes', async () => {
+      mockClientRepo.findById.mockResolvedValue(makeClient());
+      mockProductRepo.findById.mockResolvedValue(
+        makeProduct({
+          stock: 100,
+          variants: [makeVariant({ id: 'v-def', stock: 1, isDefault: true })],
+        }),
+      );
+
+      await expect(useCase.execute(makeDto(SaleType.CASH), 'user-1', '127.0.0.1')).rejects.toMatchObject({
+        statusCode: 400,
+        message: expect.stringContaining('Stock insuficiente'),
+      });
+    });
+
+    it('lanza 400 si variantId no pertenece al producto', async () => {
+      mockClientRepo.findById.mockResolvedValue(makeClient());
+      mockProductRepo.findById.mockResolvedValue(
+        makeProduct({
+          stock: 100,
+          variants: [makeVariant({ id: 'v-a', stock: 50, isDefault: true })],
+        }),
+      );
+
+      const [err, dto] = CreateSaleDto.create({
+        clientId: 'client-1',
+        type: SaleType.CASH,
+        items: [{ productId: 'prod-1', variantId: 'otro-id', quantity: 1, unitPrice: 10 }],
+      });
+      expect(err).toBeUndefined();
+
+      await expect(useCase.execute(dto!, 'user-1', '127.0.0.1')).rejects.toMatchObject({
+        statusCode: 400,
+        message: expect.stringContaining('no pertenece'),
+      });
+    });
+
+    it('valida stock de la variante indicada en variantId', async () => {
+      mockClientRepo.findById.mockResolvedValue(makeClient());
+      mockProductRepo.findById.mockResolvedValue(
+        makeProduct({
+          stock: 100,
+          variants: [
+            makeVariant({ id: 'v-a', stock: 50, isDefault: true, label: 'A' }),
+            makeVariant({ id: 'v-b', stock: 1, isDefault: false, label: 'B' }),
+          ],
+        }),
+      );
+
+      const [err, dto] = CreateSaleDto.create({
+        clientId: 'client-1',
+        type: SaleType.CASH,
+        items: [{ productId: 'prod-1', variantId: 'v-b', quantity: 2, unitPrice: 10 }],
+      });
+      expect(err).toBeUndefined();
+
+      await expect(useCase.execute(dto!, 'user-1', '127.0.0.1')).rejects.toMatchObject({
+        statusCode: 400,
+        message: expect.stringContaining('variante'),
+      });
+    });
   });
 
   describe('cuando el crédito es insuficiente (CREDIT)', () => {
@@ -307,6 +408,32 @@ describe('CreateSaleUseCase', () => {
           items: expect.arrayContaining([
             expect.objectContaining({ unitPrice: 150, subtotal: 300 }),
           ]),
+        }),
+      );
+    });
+
+    it('propaga variantId al repositorio cuando viene en el DTO', async () => {
+      mockProductRepo.findById.mockResolvedValue(
+        makeProduct({
+          stock: 100,
+          variants: [
+            makeVariant({ id: 'v-a', stock: 50, isDefault: true }),
+            makeVariant({ id: 'v-b', stock: 20, isDefault: false }),
+          ],
+        }),
+      );
+      const [err, dto] = CreateSaleDto.create({
+        clientId: 'client-1',
+        type: SaleType.CASH,
+        items: [{ productId: 'prod-1', variantId: 'v-b', quantity: 2, unitPrice: 10 }],
+      });
+      expect(err).toBeUndefined();
+
+      await useCase.execute(dto!, 'user-1', '127.0.0.1');
+
+      expect(mockSaleRepo.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          items: [expect.objectContaining({ variantId: 'v-b', productId: 'prod-1' })],
         }),
       );
     });
