@@ -34,6 +34,7 @@ describe('Category management use cases', () => {
     mockCategoryRepo.create.mockResolvedValue({ id: 'cat-1', name: 'Sabanas' } as never);
     mockCategoryRepo.findById.mockResolvedValue({ id: 'cat-1', name: 'Sabanas' } as never);
     mockCategoryRepo.createAttribute.mockResolvedValue({ id: 'attr-1', categoryId: 'cat-1', name: 'Color' } as never);
+    mockCategoryRepo.findAttributeById.mockResolvedValue({ id: 'attr-1', categoryId: 'cat-1', name: 'Color' } as never);
     mockCategoryRepo.createValue.mockResolvedValue({ id: 'val-1', attributeId: 'attr-1', value: 'Rojo' } as never);
 
     const createCategory = new CreateCategoryUseCase(mockCategoryRepo);
@@ -48,5 +49,21 @@ describe('Category management use cases', () => {
     expect(category.id).toBe('cat-1');
     expect(attribute.name).toBe('Color');
     expect(value.value).toBe('Rojo');
+  });
+});
+
+describe('CreateAttributeValueUseCase', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('no llama createValue si el atributo no existe', async () => {
+    mockCategoryRepo.findAttributeById.mockResolvedValue(null);
+    const createValue = new CreateAttributeValueUseCase(mockCategoryRepo);
+
+    await expect(createValue.execute('attr-x', 'Verde')).rejects.toMatchObject({
+      statusCode: 404,
+    });
+    expect(mockCategoryRepo.createValue).not.toHaveBeenCalled();
   });
 });

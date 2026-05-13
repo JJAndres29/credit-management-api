@@ -19,6 +19,7 @@ export class UpdateVariantUseCase {
       retailPrice: dto.retailPrice,
       investmentCost: dto.investmentCost,
       isActive: dto.isActive,
+      attributeValueIds: dto.attributeValueIds,
     });
   }
 }

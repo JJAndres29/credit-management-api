@@ -6,10 +6,11 @@ export class UpdateVariantDto {
     public readonly retailPrice?: number | null,
     public readonly investmentCost?: number | null,
     public readonly isActive?: boolean,
+    public readonly attributeValueIds?: string[],
   ) {}
 
   static create(object: Record<string, unknown>): [string?, UpdateVariantDto?] {
-    const { sku, label, stock, retailPrice, investmentCost, isActive } = object;
+    const { sku, label, stock, retailPrice, investmentCost, isActive, attributeValueIds } = object;
 
     const hasAtLeastOne =
       sku !== undefined ||
@@ -17,10 +18,34 @@ export class UpdateVariantDto {
       stock !== undefined ||
       retailPrice !== undefined ||
       investmentCost !== undefined ||
-      isActive !== undefined;
+      isActive !== undefined ||
+      attributeValueIds !== undefined;
 
     if (!hasAtLeastOne) {
       return ['Debe proporcionar al menos un campo para actualizar'];
+    }
+
+    let parsedAttributeValueIds: string[] | undefined;
+    if (attributeValueIds !== undefined) {
+      if (!Array.isArray(attributeValueIds)) {
+        return ['attributeValueIds debe ser un arreglo de strings'];
+      }
+      if (attributeValueIds.length === 0) {
+        return ['attributeValueIds debe tener al menos un ID'];
+      }
+      const seen = new Set<string>();
+      for (let i = 0; i < attributeValueIds.length; i += 1) {
+        const raw = attributeValueIds[i];
+        if (typeof raw !== 'string' || raw.trim().length === 0) {
+          return [`attributeValueIds[${i}] debe ser un string no vacío`];
+        }
+        const tid = raw.trim();
+        if (seen.has(tid)) {
+          return ['attributeValueIds contiene IDs duplicados'];
+        }
+        seen.add(tid);
+      }
+      parsedAttributeValueIds = (attributeValueIds as string[]).map((x) => x.trim());
     }
 
     let parsedSku: string | null | undefined;
@@ -94,6 +119,7 @@ export class UpdateVariantDto {
         parsedRetailPrice,
         parsedInvestmentCost,
         parsedIsActive,
+        parsedAttributeValueIds,
       ),
     ];
   }

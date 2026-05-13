@@ -1,3 +1,4 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma';
 import type {
   CategoryCreateData,
@@ -122,8 +123,20 @@ export class PrismaCategoryDatasource implements CategoryDatasource {
   }
 
   async createValue(attributeId: string, value: string): Promise<AttributeValueEntity> {
-    const created = await prisma.attributeValue.create({ data: { attributeId, value } });
-    return AttributeValueEntity.fromObject(created as unknown as Record<string, unknown>);
+    try {
+      const created = await prisma.attributeValue.create({ data: { attributeId, value } });
+      return AttributeValueEntity.fromObject(created as unknown as Record<string, unknown>);
+    } catch (err) {
+      if (err instanceof Prisma.PrismaClientKnownRequestError) {
+        if (err.code === 'P2002') {
+          throw CustomError.conflict('Ya existe un valor igual para este atributo');
+        }
+        if (err.code === 'P2003') {
+          throw CustomError.notFound('Atributo no encontrado');
+        }
+      }
+      throw err;
+    }
   }
 
   async findValueById(id: string): Promise<AttributeValueEntity | null> {

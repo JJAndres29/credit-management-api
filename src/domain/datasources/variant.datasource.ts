@@ -18,6 +18,11 @@ export interface VariantUpdateData {
   retailPrice?: number | null;
   investmentCost?: number | null;
   isActive?: boolean;
+  /**
+   * When set, replaces the variant's defining attribute combination (merged with product-level ProductAttribute).
+   * Same rules as create: one value per CategoryAttribute; must not collide with another variant's hash.
+   */
+  attributeValueIds?: string[];
 }
 
 export interface VariantDatasource {
