@@ -174,11 +174,12 @@ export class PrismaVariantDatasource implements VariantDatasource {
     }
 
     if (data.attributeValueIds !== undefined) {
+      const attributeValueIds = data.attributeValueIds;
       const updated = await prisma.$transaction(async (tx) => {
         const current = await tx.productVariant.findUnique({ where: { id } });
         if (!current) throw CustomError.notFound(`Variante ${id} no encontrada`);
 
-        const mergedValueIds = await buildMergedVariantValueIds(tx, current.productId, data.attributeValueIds);
+        const mergedValueIds = await buildMergedVariantValueIds(tx, current.productId, attributeValueIds);
         const hash = computeAttributeHash(mergedValueIds);
 
         const dup = await tx.productVariant.findFirst({
