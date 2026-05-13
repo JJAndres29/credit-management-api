@@ -5,6 +5,7 @@ import {
   GetProductByIdUseCase,
   CreateProductUseCase,
   QuickCreateProductUseCase,
+  QuickCreateWithVariantsUseCase,
   UpdateProductUseCase,
   AdjustStockUseCase,
   UpdateRetailPriceUseCase,
@@ -12,9 +13,13 @@ import {
   UploadProductImagesUseCase,
   DeleteProductImageUseCase,
 } from '../../domain/use-cases/products';
+import { UploadProductAssetsUseCase } from '../../domain/use-cases/products/upload-product-assets.use-case';
+import { DeleteProductAssetUseCase } from '../../domain/use-cases/products/delete-product-asset.use-case';
 import { AssignProductAttributesUseCase, RemoveProductAttributeUseCase, ReplaceProductAttributesUseCase } from '../../domain/use-cases/categories';
 import { CategoryRepositoryImpl, ProductRepositoryImpl } from '../../infrastructure/repositories';
+import { VariantRepositoryImpl } from '../../infrastructure/repositories/variant.repository.impl';
 import { PrismaCategoryDatasource, PrismaProductDatasource } from '../../infrastructure/datasources';
+import { PrismaVariantDatasource } from '../../infrastructure/datasources/prisma-variant.datasource';
 import { CloudinaryAdapter } from '../../infrastructure/services';
 import { AuthMiddleware, cachePublic, checkRole, uploadImages, validateImageMagicBytes } from '../middlewares';
 import { RateLimitMiddleware } from '../middlewares/rate-limit.middleware';
@@ -33,6 +38,7 @@ export class ProductRouter {
 
     const repository = new ProductRepositoryImpl(new PrismaProductDatasource());
     const categoryRepository = new CategoryRepositoryImpl(new PrismaCategoryDatasource());
+    const variantRepository = new VariantRepositoryImpl(new PrismaVariantDatasource());
     const cloudinary = new CloudinaryAdapter();
     const storefrontCatalog = new PrismaStorefrontCatalogDatasource();
     const productSeoConfig = {
@@ -56,6 +62,9 @@ export class ProductRouter {
       new ReplaceProductAttributesUseCase(repository, categoryRepository),
       new RemoveProductAttributeUseCase(repository),
       new GetProductBySlugUseCase(storefrontCatalog),
+      new QuickCreateWithVariantsUseCase(repository),
+      new UploadProductAssetsUseCase(repository, variantRepository, cloudinary),
+      new DeleteProductAssetUseCase(repository, cloudinary),
       productSeoConfig,
     );
 
@@ -72,13 +81,22 @@ export class ProductRouter {
       controller.getBySlug,
     );
     router.get('/', RateLimitMiddleware.publicProductsReadLimiter, cachePublic({ maxAgeSeconds: 120 }), controller.getAll);
+
+    // Staff JWT + ADMIN — literales antes de /:id y de /:productId/variants (orden seguro en Express)
+    router.post('/quick-create', middleware.validateJwt, checkRole(Role.ADMIN), controller.quickCreate);
+    router.post(
+      '/quick-create-with-variants',
+      middleware.validateJwt,
+      checkRole(Role.ADMIN),
+      controller.quickCreateWithVariants,
+    );
+
     router.get('/:id', RateLimitMiddleware.publicProductsReadLimiter, cachePublic({ maxAgeSeconds: 120 }), controller.getById);
 
     // Variant sub-routes (nested under /:productId/variants)
     router.use('/:productId/variants', VariantRouter.routes);
 
-    // Staff JWT + ADMIN
-    router.post('/quick-create', middleware.validateJwt, checkRole(Role.ADMIN), controller.quickCreate);
+    // Staff JWT + ADMIN (resto)
     router.post('/:id/attributes', middleware.validateJwt, checkRole(Role.ADMIN), controller.assignAttributes);
     router.put('/:id/attributes', middleware.validateJwt, checkRole(Role.ADMIN), controller.replaceAttributes);
     router.delete('/:id/attributes/:valueId', middleware.validateJwt, checkRole(Role.ADMIN), controller.deleteAttribute);
@@ -88,6 +106,8 @@ export class ProductRouter {
     router.patch('/:id/retail-price', middleware.validateJwt, checkRole(Role.ADMIN), controller.updateRetailPrice);
     router.post('/:id/images', middleware.validateJwt, checkRole(Role.ADMIN), uploadImages, validateImageMagicBytes, controller.uploadImages);
     router.delete('/:id/images/:imageId', middleware.validateJwt, checkRole(Role.ADMIN), controller.deleteImage);
+    router.post('/:id/assets', middleware.validateJwt, checkRole(Role.ADMIN), uploadImages, validateImageMagicBytes, controller.uploadAssets);
+    router.delete('/:id/assets/:assetId', middleware.validateJwt, checkRole(Role.ADMIN), controller.deleteAsset);
     router.delete('/:id', middleware.validateJwt, checkRole(Role.ADMIN), controller.delete);
 
     return router;

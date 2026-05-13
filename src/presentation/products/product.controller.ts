@@ -1,6 +1,6 @@
 import { Request, Response } from 'express';
 import { CustomError } from '../../domain/errors';
-import { CreateProductDto, UpdateProductDto, AdjustStockDto, FilterProductsDto, UpdateRetailPriceDto, QuickCreateProductDto } from '../../domain/dtos/products';
+import { CreateProductDto, UpdateProductDto, AdjustStockDto, FilterProductsDto, UpdateRetailPriceDto, QuickCreateProductDto, QuickCreateWithVariantsDto } from '../../domain/dtos/products';
 import { AssignProductAttributesDto, ReplaceProductAttributesDto } from '../../domain/dtos/categories';
 import { PaginationDto } from '../../domain/dtos/shared';
 import { GetProductsUseCase } from '../../domain/use-cases/products/get-products.use-case';
@@ -17,7 +17,9 @@ import { RemoveProductAttributeUseCase } from '../../domain/use-cases/categories
 import { ReplaceProductAttributesUseCase } from '../../domain/use-cases/categories/replace-product-attributes.use-case';
 import type { GetProductBySlugConfig } from '../../domain/use-cases/seo';
 import { GetProductBySlugUseCase } from '../../domain/use-cases/seo';
-import { QuickCreateProductUseCase } from '../../domain/use-cases/products';
+import { QuickCreateProductUseCase, QuickCreateWithVariantsUseCase } from '../../domain/use-cases/products';
+import { UploadProductAssetsUseCase } from '../../domain/use-cases/products/upload-product-assets.use-case';
+import { DeleteProductAssetUseCase } from '../../domain/use-cases/products/delete-product-asset.use-case';
 
 export class ProductController {
   constructor(
@@ -35,6 +37,9 @@ export class ProductController {
     private readonly replaceProductAttributesUseCase: ReplaceProductAttributesUseCase,
     private readonly removeProductAttributeUseCase: RemoveProductAttributeUseCase,
     private readonly getProductBySlugUseCase: GetProductBySlugUseCase,
+    private readonly quickCreateWithVariantsUseCase: QuickCreateWithVariantsUseCase,
+    private readonly uploadProductAssetsUseCase: UploadProductAssetsUseCase,
+    private readonly deleteProductAssetUseCase: DeleteProductAssetUseCase,
     private readonly productSeoConfig: GetProductBySlugConfig,
   ) {}
 
@@ -108,6 +113,20 @@ export class ProductController {
     }
     try {
       const product = await this.quickCreateProductUseCase.execute(dto!);
+      res.status(201).json(product);
+    } catch (err) {
+      this.handleError(err, res);
+    }
+  };
+
+  quickCreateWithVariants = async (req: Request, res: Response): Promise<void> => {
+    const [error, dto] = QuickCreateWithVariantsDto.create(req.body as Record<string, unknown>);
+    if (error) {
+      res.status(400).json({ error });
+      return;
+    }
+    try {
+      const product = await this.quickCreateWithVariantsUseCase.execute(dto!);
       res.status(201).json(product);
     } catch (err) {
       this.handleError(err, res);
@@ -192,6 +211,40 @@ export class ProductController {
       const product = await this.deleteProductImageUseCase.execute(
         req.params.id,
         req.params.imageId,
+      );
+      res.json(product);
+    } catch (err) {
+      this.handleError(err, res);
+    }
+  };
+
+  uploadAssets = async (req: Request, res: Response): Promise<void> => {
+    const files = req.files as Express.Multer.File[];
+
+    if (!files || files.length === 0) {
+      res.status(400).json({ error: 'Debe enviar al menos una imagen' });
+      return;
+    }
+
+    const variantId = req.body?.variantId as string | undefined;
+
+    try {
+      const product = await this.uploadProductAssetsUseCase.execute(
+        req.params.id,
+        files,
+        variantId?.trim() || undefined,
+      );
+      res.status(201).json(product);
+    } catch (err) {
+      this.handleError(err, res);
+    }
+  };
+
+  deleteAsset = async (req: Request, res: Response): Promise<void> => {
+    try {
+      const product = await this.deleteProductAssetUseCase.execute(
+        req.params.id,
+        req.params.assetId,
       );
       res.json(product);
     } catch (err) {

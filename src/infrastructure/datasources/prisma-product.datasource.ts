@@ -1,7 +1,8 @@
 import type { Prisma } from '@prisma/client';
 import { prisma } from '../../config/prisma';
-import { ProductDatasource, QuickCreateProductData } from '../../domain/datasources';
-import { ProductEntity } from '../../domain/entities';
+import { createHash } from 'crypto';
+import { AssetCreateData, ProductDatasource, QuickCreateProductData, QuickCreateWithVariantsData } from '../../domain/datasources';
+import { ProductAssetEntity, ProductEntity } from '../../domain/entities';
 import { CreateProductDto, UpdateProductDto, FilterProductsDto } from '../../domain/dtos/products';
 import { CustomError } from '../../domain/errors';
 import { UploadResult } from '../../domain/services/file-storage.service';
@@ -55,6 +56,9 @@ const includeImages = {
         },
       },
     },
+  },
+  assets: {
+    orderBy: { position: 'asc' as const },
   },
 };
 
@@ -448,6 +452,171 @@ export class PrismaProductDatasource implements ProductDatasource {
         where: { id: p.id },
         include: includeImages,
       });
+    });
+
+    return ProductEntity.fromObject(product as unknown as Record<string, unknown>);
+  }
+
+  async quickCreateWithVariants(data: QuickCreateWithVariantsData): Promise<ProductEntity> {
+    const product = await prisma.$transaction(async (tx) => {
+      const cn = data.categoryName.trim();
+      let cat = await tx.category.findFirst({
+        where: { name: { equals: cn, mode: 'insensitive' } },
+      });
+      if (!cat) {
+        const base = slugify(cn);
+        let slug = base;
+        for (let n = 0; n < 500; n += 1) {
+          const clash = await tx.category.findFirst({ where: { slug } });
+          if (!clash) break;
+          slug = `${base}-${n + 2}`;
+        }
+        cat = await tx.category.create({ data: { name: cn, slug } });
+      }
+
+      const resolveAttrValue = async (attrName: string, attrValue: string) => {
+        const an = attrName.trim();
+        const av = attrValue.trim();
+        let catAttr = await tx.categoryAttribute.findFirst({
+          where: { categoryId: cat!.id, name: { equals: an, mode: 'insensitive' } },
+        });
+        if (!catAttr) {
+          catAttr = await tx.categoryAttribute.create({
+            data: { categoryId: cat!.id, name: an },
+          });
+        }
+        let val = await tx.attributeValue.findFirst({
+          where: { attributeId: catAttr.id, value: { equals: av, mode: 'insensitive' } },
+        });
+        if (!val) {
+          val = await tx.attributeValue.create({
+            data: { attributeId: catAttr.id, value: av },
+          });
+        }
+        return val.id;
+      };
+
+      const productValueIds: string[] = [];
+      for (const attr of data.attributes) {
+        productValueIds.push(await resolveAttrValue(attr.name, attr.value));
+      }
+
+      const totalStock = data.variants.reduce((sum, v) => sum + v.stock, 0);
+      const firstVariant = data.variants[0];
+
+      const p = await tx.product.create({
+        data: {
+          name: data.name.trim(),
+          description: data.description.trim(),
+          stock: totalStock,
+          categoryId: cat.id,
+          retailPrice: firstVariant.retailPrice,
+          investmentCost: firstVariant.investmentCost,
+          ...(data.weightKg != null && { weightKg: data.weightKg }),
+          ...(data.brand != null && data.brand !== '' && { brand: data.brand }),
+        },
+      });
+
+      const baseSlug = `${slugify(data.name)}-${p.id.replace(/-/g, '').slice(0, 8)}`;
+      const resolvedSlug = await ensureUniqueProductSlug(tx, baseSlug, p.id);
+      await tx.product.update({
+        where: { id: p.id },
+        data: { slug: resolvedSlug },
+      });
+
+      if (productValueIds.length > 0) {
+        await tx.productAttribute.createMany({
+          data: productValueIds.map((valueId) => ({ productId: p.id, valueId })),
+          skipDuplicates: true,
+        });
+      }
+
+      for (let i = 0; i < data.variants.length; i++) {
+        const spec = data.variants[i];
+        const isDefault = i === 0;
+
+        const variantValueIds: string[] = [];
+        for (const attr of spec.attributes) {
+          variantValueIds.push(await resolveAttrValue(attr.name, attr.value));
+        }
+
+        const attributeHash = createHash('sha256')
+          .update([...variantValueIds].sort().join(':'))
+          .digest('hex');
+
+        const existing = await tx.productVariant.findFirst({
+          where: { productId: p.id, attributeHash },
+        });
+        if (existing) {
+          throw CustomError.conflict(
+            `Combinación de atributos duplicada en variants[${i}]`,
+          );
+        }
+
+        await tx.productVariant.create({
+          data: {
+            productId: p.id,
+            sku: spec.sku ?? null,
+            label: spec.label ?? null,
+            stock: spec.stock,
+            retailPrice: spec.retailPrice,
+            investmentCost: spec.investmentCost,
+            currencyCode: p.currencyCode,
+            isDefault,
+            isActive: true,
+            attributeHash,
+            slug: isDefault ? resolvedSlug : null,
+            attributeValues: {
+              create: variantValueIds.map((valueId) => ({ valueId })),
+            },
+          },
+        });
+      }
+
+      return tx.product.findUniqueOrThrow({
+        where: { id: p.id },
+        include: includeImages,
+      });
+    });
+
+    return ProductEntity.fromObject(product as unknown as Record<string, unknown>);
+  }
+
+  async addAssets(data: AssetCreateData): Promise<ProductEntity> {
+    const currentCount = await prisma.productAsset.count({
+      where: { productId: data.productId },
+    });
+
+    await prisma.productAsset.createMany({
+      data: data.uploads.map((upload, index) => ({
+        productId: data.productId,
+        variantId: data.variantId,
+        urlOriginal: upload.url,
+        cloudinaryPublicId: upload.publicId,
+        position: currentCount + index,
+      })),
+    });
+
+    const product = await prisma.product.findUniqueOrThrow({
+      where: { id: data.productId },
+      include: includeImages,
+    });
+
+    return ProductEntity.fromObject(product as unknown as Record<string, unknown>);
+  }
+
+  async findAssetById(assetId: string): Promise<ProductAssetEntity | null> {
+    const asset = await prisma.productAsset.findUnique({ where: { id: assetId } });
+    if (!asset) return null;
+    return ProductAssetEntity.fromObject(asset as unknown as Record<string, unknown>);
+  }
+
+  async removeAsset(productId: string, assetId: string): Promise<ProductEntity> {
+    await prisma.productAsset.delete({ where: { id: assetId } });
+
+    const product = await prisma.product.findUniqueOrThrow({
+      where: { id: productId },
+      include: includeImages,
     });
 
     return ProductEntity.fromObject(product as unknown as Record<string, unknown>);

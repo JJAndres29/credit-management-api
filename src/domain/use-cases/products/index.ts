@@ -8,4 +8,7 @@ export { DeleteProductUseCase } from './delete-product.use-case';
 export { UploadProductImagesUseCase } from './upload-product-images.use-case';
 export { DeleteProductImageUseCase } from './delete-product-image.use-case';
 export { QuickCreateProductUseCase } from './quick-create-product.use-case';
+export { QuickCreateWithVariantsUseCase } from './quick-create-with-variants.use-case';
 export { BulkSetProductsActiveUseCase } from './bulk-set-products-active.use-case';
+export { UploadProductAssetsUseCase } from './upload-product-assets.use-case';
+export { DeleteProductAssetUseCase } from './delete-product-asset.use-case';

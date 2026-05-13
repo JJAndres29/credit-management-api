@@ -1,8 +1,8 @@
-import { ProductDatasource } from '../../domain/datasources';
+import { AssetCreateData, ProductDatasource } from '../../domain/datasources';
 import { ProductRepository } from '../../domain/repositories';
-import { ProductEntity } from '../../domain/entities';
+import { ProductAssetEntity, ProductEntity } from '../../domain/entities';
 import { CreateProductDto, UpdateProductDto, FilterProductsDto } from '../../domain/dtos/products';
-import type { QuickCreateProductData } from '../../domain/datasources/product.datasource';
+import type { QuickCreateProductData, QuickCreateWithVariantsData } from '../../domain/datasources/product.datasource';
 import { UploadResult } from '../../domain/services/file-storage.service';
 import { PaginationDto } from '../../domain/dtos/shared';
 import { PaginatedResult } from '../../domain/types/paginated.type';
@@ -60,6 +60,22 @@ export class ProductRepositoryImpl implements ProductRepository {
 
   quickCreate(data: QuickCreateProductData): Promise<ProductEntity> {
     return this.datasource.quickCreate(data);
+  }
+
+  quickCreateWithVariants(data: QuickCreateWithVariantsData): Promise<ProductEntity> {
+    return this.datasource.quickCreateWithVariants(data);
+  }
+
+  addAssets(data: AssetCreateData): Promise<ProductEntity> {
+    return this.datasource.addAssets(data);
+  }
+
+  findAssetById(assetId: string): Promise<ProductAssetEntity | null> {
+    return this.datasource.findAssetById(assetId);
+  }
+
+  removeAsset(productId: string, assetId: string): Promise<ProductEntity> {
+    return this.datasource.removeAsset(productId, assetId);
   }
 
   bulkSetActive(productIds: string[], isActive: boolean): Promise<number> {

@@ -118,6 +118,10 @@ const mockProductRepo = {
   removeAttribute: jest.fn(),
   updateRetailPrice: jest.fn(),
   quickCreate: jest.fn(),
+  quickCreateWithVariants: jest.fn(),
+  addAssets: jest.fn(),
+  findAssetById: jest.fn(),
+  removeAsset: jest.fn(),
   bulkSetActive: jest.fn(),
 } as jest.Mocked<ProductRepository>;
 
