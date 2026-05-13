@@ -1,4 +1,5 @@
 import express, { Application, NextFunction, Request, RequestHandler, Response } from 'express';
+import multer from 'multer';
 import type { Server as HttpServer } from 'http';
 import { randomUUID } from 'crypto';
 import pinoHttp from 'pino-http';
@@ -223,6 +224,19 @@ export class Server {
   private handleError = (err: unknown, _req: Request, res: Response, _next: NextFunction): void => {
     if (err instanceof CustomError) {
       res.status(err.statusCode).json({ error: err.message });
+      return;
+    }
+
+    if (err instanceof multer.MulterError) {
+      if (err.code === 'LIMIT_FILE_SIZE') {
+        res.status(400).json({ error: 'Cada archivo debe pesar como máximo 5 MB' });
+        return;
+      }
+      if (err.code === 'LIMIT_FILE_COUNT' || err.code === 'LIMIT_UNEXPECTED_FILE') {
+        res.status(400).json({ error: 'Demasiados archivos en la solicitud (máximo 5)' });
+        return;
+      }
+      res.status(400).json({ error: err.message });
       return;
     }
 
