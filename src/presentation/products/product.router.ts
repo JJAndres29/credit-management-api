@@ -15,6 +15,7 @@ import {
 } from '../../domain/use-cases/products';
 import { UploadProductAssetsUseCase } from '../../domain/use-cases/products/upload-product-assets.use-case';
 import { DeleteProductAssetUseCase } from '../../domain/use-cases/products/delete-product-asset.use-case';
+import { ReuseProductAssetsForVariantUseCase } from '../../domain/use-cases/products/reuse-product-assets-for-variant.use-case';
 import { AssignProductAttributesUseCase, RemoveProductAttributeUseCase, ReplaceProductAttributesUseCase } from '../../domain/use-cases/categories';
 import { CategoryRepositoryImpl, ProductRepositoryImpl } from '../../infrastructure/repositories';
 import { VariantRepositoryImpl } from '../../infrastructure/repositories/variant.repository.impl';
@@ -65,6 +66,7 @@ export class ProductRouter {
       new QuickCreateWithVariantsUseCase(repository),
       new UploadProductAssetsUseCase(repository, variantRepository, cloudinary),
       new DeleteProductAssetUseCase(repository, cloudinary),
+      new ReuseProductAssetsForVariantUseCase(repository, variantRepository),
       productSeoConfig,
     );
 
@@ -106,6 +108,7 @@ export class ProductRouter {
     router.patch('/:id/retail-price', middleware.validateJwt, checkRole(Role.ADMIN), controller.updateRetailPrice);
     router.post('/:id/images', middleware.validateJwt, checkRole(Role.ADMIN), uploadImages, validateImageMagicBytes, controller.uploadImages);
     router.delete('/:id/images/:imageId', middleware.validateJwt, checkRole(Role.ADMIN), controller.deleteImage);
+    router.post('/:id/assets/reuse', middleware.validateJwt, checkRole(Role.ADMIN), controller.reuseAssetsForVariant);
     router.post('/:id/assets', middleware.validateJwt, checkRole(Role.ADMIN), uploadImages, validateImageMagicBytes, controller.uploadAssets);
     router.delete('/:id/assets/:assetId', middleware.validateJwt, checkRole(Role.ADMIN), controller.deleteAsset);
     router.delete('/:id', middleware.validateJwt, checkRole(Role.ADMIN), controller.delete);

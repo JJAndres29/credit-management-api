@@ -2,7 +2,7 @@ import { AssetCreateData, ProductDatasource } from '../../domain/datasources';
 import { ProductRepository } from '../../domain/repositories';
 import { ProductAssetEntity, ProductEntity } from '../../domain/entities';
 import { CreateProductDto, UpdateProductDto, FilterProductsDto } from '../../domain/dtos/products';
-import type { QuickCreateProductData, QuickCreateWithVariantsData } from '../../domain/datasources/product.datasource';
+import type { QuickCreateProductData, QuickCreateWithVariantsData, AssetReuseForVariantData } from '../../domain/datasources/product.datasource';
 import { UploadResult } from '../../domain/services/file-storage.service';
 import { PaginationDto } from '../../domain/dtos/shared';
 import { PaginatedResult } from '../../domain/types/paginated.type';
@@ -70,12 +70,20 @@ export class ProductRepositoryImpl implements ProductRepository {
     return this.datasource.addAssets(data);
   }
 
+  reuseGeneralAssetsForVariant(data: AssetReuseForVariantData): Promise<ProductEntity> {
+    return this.datasource.reuseGeneralAssetsForVariant(data);
+  }
+
   findAssetById(assetId: string): Promise<ProductAssetEntity | null> {
     return this.datasource.findAssetById(assetId);
   }
 
   removeAsset(productId: string, assetId: string): Promise<ProductEntity> {
     return this.datasource.removeAsset(productId, assetId);
+  }
+
+  countAssetsByCloudinaryPublicId(cloudinaryPublicId: string): Promise<number> {
+    return this.datasource.countAssetsByCloudinaryPublicId(cloudinaryPublicId);
   }
 
   bulkSetActive(productIds: string[], isActive: boolean): Promise<number> {

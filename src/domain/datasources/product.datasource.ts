@@ -10,6 +10,13 @@ export interface AssetCreateData {
   uploads: UploadResult[];
 }
 
+/** Reutiliza URLs de Cloudinary ya guardadas en assets generales (`variantId` null). */
+export interface AssetReuseForVariantData {
+  productId: string;
+  variantId: string;
+  sourceAssetIds: string[];
+}
+
 export interface QuickCreateAttributeSpec {
   name: string;
   value: string;
@@ -69,8 +76,10 @@ export interface ProductDatasource {
   quickCreateWithVariants(data: QuickCreateWithVariantsData): Promise<ProductEntity>;
 
   addAssets(data: AssetCreateData): Promise<ProductEntity>;
+  reuseGeneralAssetsForVariant(data: AssetReuseForVariantData): Promise<ProductEntity>;
   findAssetById(assetId: string): Promise<ProductAssetEntity | null>;
   removeAsset(productId: string, assetId: string): Promise<ProductEntity>;
+  countAssetsByCloudinaryPublicId(cloudinaryPublicId: string): Promise<number>;
 
   bulkSetActive(productIds: string[], isActive: boolean): Promise<number>;
 }

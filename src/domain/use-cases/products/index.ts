@@ -12,3 +12,4 @@ export { QuickCreateWithVariantsUseCase } from './quick-create-with-variants.use
 export { BulkSetProductsActiveUseCase } from './bulk-set-products-active.use-case';
 export { UploadProductAssetsUseCase } from './upload-product-assets.use-case';
 export { DeleteProductAssetUseCase } from './delete-product-asset.use-case';
+export { ReuseProductAssetsForVariantUseCase } from './reuse-product-assets-for-variant.use-case';
