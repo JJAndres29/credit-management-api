@@ -531,14 +531,23 @@ export class PrismaProductDatasource implements ProductDatasource {
         });
       }
 
+      const productAttrByName = new Map<string, string>();
+      for (let pi = 0; pi < data.attributes.length; pi += 1) {
+        const a = data.attributes[pi];
+        productAttrByName.set(a.name.trim().toLowerCase(), productValueIds[pi]);
+      }
+
       for (let i = 0; i < data.variants.length; i++) {
         const spec = data.variants[i];
         const isDefault = i === 0;
 
-        const variantValueIds: string[] = [];
+        const mergedByAttrName = new Map<string, string>(productAttrByName);
         for (const attr of spec.attributes) {
-          variantValueIds.push(await resolveAttrValue(attr.name, attr.value));
+          const key = attr.name.trim().toLowerCase();
+          const vid = await resolveAttrValue(attr.name, attr.value);
+          mergedByAttrName.set(key, vid);
         }
+        const variantValueIds = [...mergedByAttrName.values()];
 
         const attributeHash = createHash('sha256')
           .update([...variantValueIds].sort().join(':'))

@@ -316,6 +316,19 @@ describe('UpdateVariantUseCase', () => {
       expect.objectContaining({ isActive: false }),
     );
   });
+
+  it('pasa attributeValueIds al repositorio para cambiar la combinación', async () => {
+    mockVariantRepo.findById.mockResolvedValue(makeVariant());
+    mockVariantRepo.update.mockResolvedValue(makeVariant());
+
+    const [, dto] = UpdateVariantDto.create({ attributeValueIds: ['val-color', 'val-size'] });
+    await useCase.execute('var-1', dto!);
+
+    expect(mockVariantRepo.update).toHaveBeenCalledWith(
+      'var-1',
+      expect.objectContaining({ attributeValueIds: ['val-color', 'val-size'] }),
+    );
+  });
 });
 
 // ─── DeleteVariantUseCase ─────────────────────────────────────────────────────
@@ -558,5 +571,26 @@ describe('UpdateVariantDto', () => {
   it('convierte label vacío a null', () => {
     const [, dto] = UpdateVariantDto.create({ label: '   ' });
     expect(dto!.label).toBeNull();
+  });
+
+  it('acepta solo attributeValueIds', () => {
+    const [error, dto] = UpdateVariantDto.create({ attributeValueIds: ['v1', 'v2'] });
+    expect(error).toBeUndefined();
+    expect(dto!.attributeValueIds).toEqual(['v1', 'v2']);
+  });
+
+  it('rechaza attributeValueIds vacío', () => {
+    const [error] = UpdateVariantDto.create({ attributeValueIds: [] });
+    expect(error).toContain('al menos un ID');
+  });
+
+  it('rechaza attributeValueIds duplicados', () => {
+    const [error] = UpdateVariantDto.create({ attributeValueIds: ['x', 'x'] });
+    expect(error).toContain('duplicados');
+  });
+
+  it('rechaza attributeValueIds no arreglo', () => {
+    const [error] = UpdateVariantDto.create({ attributeValueIds: 'v1' as unknown as string[] });
+    expect(error).toContain('arreglo');
   });
 });
