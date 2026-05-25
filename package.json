@@ -1,7 +1,23 @@
 {
   "name": "credit-management-system",
   "version": "1.0.0",
-  "description": "Sistema de gestión de créditos para tienda de ropa de cama",
+  "description": "Sistema de gestión de créditos y e-commerce — Clean Architecture, 2000+ tests, TypeScript",
+  "keywords": [
+    "clean-architecture",
+    "typescript",
+    "nodejs",
+    "express",
+    "prisma",
+    "postgresql",
+    "e-commerce",
+    "credit-management",
+    "domain-driven-design",
+    "jest"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/JJAndres29/credit-management-api.git"
+  },
   "main": "dist/app.js",
   "scripts": {
     "dev": "ts-node-dev --respawn --transpile-only src/app.ts",

@@ -10,9 +10,46 @@
 
 ---
 
+## Why this repository is public
+
+This is a **complete, runnable backend** — not a mockup. Source code, migrations, and **2,056 automated tests** are here so recruiters and tech leads can review real engineering quality: Clean Architecture, bounded contexts, atomic financial transactions, Mercado Pago webhooks, BullMQ workers, and structural coupling guards.
+
+**Clone it, run `npm test`, explore `src/domain/use-cases/`.**
+
+### By the numbers
+
+| Metric | Value |
+|--------|-------|
+| Automated tests | **2,056** (32 suites) |
+| TypeScript source files | **470+** in `src/` |
+| Database models | **30+** (Prisma / PostgreSQL 16) |
+| Bounded contexts | **3** — Staff, Customer (e-commerce), Online Orders |
+| API endpoints | **80+** across staff, storefront, admin & SEO |
+
+### Architecture deep dive
+
+| Document | What you'll find |
+|----------|------------------|
+| [docs/architecture.md](docs/architecture.md) | Layers, bounded contexts, financial write flows, Domain Events |
+| [docs/modules.md](docs/modules.md) | Module map and integration overview |
+| [docs/highlights.md](docs/highlights.md) | Production decisions: idempotency, webhooks, ACL, feature flags |
+| [docs/testing.md](docs/testing.md) | Test strategy and coverage areas |
+| [docs/operation-modes.md](docs/operation-modes.md) | HYBRID vs ECOMMERCE_ONLY deployment modes |
+
+### Pattern samples (`examples/`)
+
+Annotated snippets mirroring patterns in the real codebase — useful for a quick read before diving into `src/`:
+
+- [use-case-with-audit.ts](examples/use-case-with-audit.ts) — atomic ledger + audit log
+- [domain-events.ts](examples/domain-events.ts) — side effects after commit
+- [anti-corruption-layer.ts](examples/anti-corruption-layer.ts) — Customer ↔ Staff isolation
+- [dto-validation.ts](examples/dto-validation.ts) — boundary validation factory
+
+---
 
 ## Table of Contents
 
+- [Why this repository is public](#why-this-repository-is-public)
 - [Overview](#overview)
 - [Architecture](#architecture)
 - [Tech Stack](#tech-stack)
@@ -187,6 +224,8 @@ credit-management-system/
 │   │   └── server.ts              # Express app setup and middleware cascades
 │   └── workers/
 │       └── notification.worker.ts # BullMQ separated Redis email/WhatsApp worker
+├── docs/                          # Architecture deep dives (portfolio-friendly)
+├── examples/                      # Annotated pattern snippets
 ├── Dockerfile                     # Multi-stage production build (Node 20 Alpine)
 ├── docker-compose.yml             # PostgreSQL 16 + Redis containers
 ├── jest.config.js
@@ -520,12 +559,14 @@ Base URL: `http://localhost:3000/api`
 
 ## Testing
 
-Tests are written using **Jest + ts-jest** and located alongside the code they test (`*.test.ts`).
+**2,056 tests** across **32 suites**, written with **Jest + ts-jest** and located alongside the code they test (`*.test.ts`).
 
 ```bash
 npm test              # Run all tests
 npm run test:watch    # Watch mode
 ```
+
+Full strategy: [docs/testing.md](docs/testing.md)
 
 ### Coverage Highlights
 

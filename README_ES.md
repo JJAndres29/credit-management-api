@@ -10,8 +10,46 @@
 
 ---
 
+## Por qué este repositorio es público
+
+Es un backend **completo y ejecutable** — no un mockup. El código fuente, las migraciones y **2.056 tests automatizados** están aquí para que reclutadores y tech leads evalúen calidad real: Clean Architecture, bounded contexts, transacciones financieras atómicas, webhooks de Mercado Pago, workers BullMQ y guards estructurales de acoplamiento.
+
+**Clónalo, corre `npm test`, explora `src/domain/use-cases/`.**
+
+### En cifras
+
+| Métrica | Valor |
+|---------|-------|
+| Tests automatizados | **2.056** (32 suites) |
+| Archivos TypeScript | **470+** en `src/` |
+| Modelos de base de datos | **30+** (Prisma / PostgreSQL 16) |
+| Bounded contexts | **3** — Staff, Customer (e-commerce), Online Orders |
+| Endpoints API | **80+** entre staff, storefront, admin y SEO |
+
+### Profundización de arquitectura
+
+| Documento | Contenido |
+|-----------|-----------|
+| [docs/architecture.md](docs/architecture.md) | Capas, bounded contexts, flujos financieros, Domain Events |
+| [docs/modules.md](docs/modules.md) | Mapa de módulos e integraciones |
+| [docs/highlights.md](docs/highlights.md) | Decisiones de producción: idempotencia, webhooks, ACL, feature flags |
+| [docs/testing.md](docs/testing.md) | Estrategia de tests y áreas de cobertura |
+| [docs/operation-modes.md](docs/operation-modes.md) | Modos HYBRID vs ECOMMERCE_ONLY |
+
+### Muestras de patrones (`examples/`)
+
+Fragmentos anotados que reflejan patrones del código real — lectura rápida antes de entrar a `src/`:
+
+- [use-case-with-audit.ts](examples/use-case-with-audit.ts) — ledger atómico + audit log
+- [domain-events.ts](examples/domain-events.ts) — side effects post-commit
+- [anti-corruption-layer.ts](examples/anti-corruption-layer.ts) — aislamiento Customer ↔ Staff
+- [dto-validation.ts](examples/dto-validation.ts) — factory de validación en el boundary
+
+---
+
 ## Tabla de Contenidos
 
+- [Por qué este repositorio es público](#por-qué-este-repositorio-es-público)
 - [Resumen](#resumen)
 - [Arquitectura](#arquitectura)
 - [Stack Tecnológico](#stack-tecnológico)
@@ -186,6 +224,8 @@ credit-management-system/
 │   │   └── server.ts              # Configuración de Express y cascadas de middlewares
 │   └── workers/
 │       └── notification.worker.ts # Trabajador BullMQ independiente en Redis para correos/WhatsApp
+├── docs/                          # Profundización de arquitectura (portafolio)
+├── examples/                      # Fragmentos de patrones anotados
 ├── Dockerfile                     # Construcción de producción en múltiples etapas (Node 20 Alpine)
 ├── docker-compose.yml             # Contenedores de PostgreSQL 16 + Redis
 ├── jest.config.js
@@ -519,12 +559,14 @@ URL Base: `http://localhost:3000/api`
 
 ## Pruebas (Testing)
 
-Las pruebas están escritas con **Jest + ts-jest** y se ubican junto al archivo que prueban (`*.test.ts`).
+**2.056 tests** en **32 suites**, escritos con **Jest + ts-jest** y ubicados junto al código que prueban (`*.test.ts`).
 
 ```bash
 npm test              # Ejecuta todas las pruebas
 npm run test:watch    # Modo de observación (watch mode)
 ```
+
+Estrategia completa: [docs/testing.md](docs/testing.md)
 
 ### Áreas Destacadas de Cobertura
 

@@ -1,6 +1,6 @@
-# Modos de Operacion
+# Modos de Operación
 
-El backend soporta tres modos con feature flags. Los flags viven en Postgres y se leen con cache en memoria por replica durante 60 segundos.
+El backend soporta tres modos con feature flags. Los flags viven en Postgres y se leen con cache en memoria por replica durante 60 segundos. Los flags viven en Postgres y se leen con cache en memoria por replica durante 60 segundos.
 
 ## HYBRID
 
